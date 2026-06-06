@@ -247,7 +247,7 @@ Initial stack:
 - SQLite database
 - nginx reverse proxy
 - systemd service
-- deployed to `https://vibes.opentangle.com`
+- deployed to a configurable HTTPS relay host
 
 ## Federation / Distributed Future
 
@@ -421,7 +421,7 @@ privacy:
   publish_branch_names: false
   publish_file_names: false
 server:
-  relay_url: https://vibes.opentangle.com
+  relay_url: https://vibes.example.com
 ```
 
 ## Agentic Configuration

@@ -1,20 +1,20 @@
 [Unit]
-Description=Vibes Relay
+Description=${SERVICE_NAME} Relay
 After=network.target
 StartLimitIntervalSec=60
 StartLimitBurst=3
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/var/www/vibes/server
+User=${SERVICE_USER}
+WorkingDirectory=${DEPLOY_PATH}/server
 ExecStart=/usr/bin/node server.mjs
 Restart=on-failure
 RestartSec=5
-Environment=HOST=127.0.0.1
-Environment=PORT=3136
+Environment=HOST=${SERVICE_HOST}
+Environment=PORT=${SERVICE_PORT}
 Environment=NODE_ENV=production
-Environment=VIBES_DB_PATH=/var/www/vibes/data/vibes.sqlite
+Environment=VIBES_DB_PATH=${DEPLOY_PATH}/data/vibes.sqlite
 MemoryMax=512M
 LimitNOFILE=65535
 

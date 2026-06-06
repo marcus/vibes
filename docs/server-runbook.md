@@ -1,15 +1,20 @@
 # Server Runbook
 
-The Vibes relay target is `https://vibes.opentangle.com`.
+The relay deploy target is configured through environment variables. Copy `.env.deploy.example` to `.env.deploy` and edit it for your host.
 
-The production scaffold mirrors the Chirp deployment:
+Required values:
 
-- VPS: `146.190.117.215`
-- deploy path: `/var/www/vibes`
-- systemd service: `vibes.service`
-- local bind: `127.0.0.1:3136`
-- reverse proxy: nginx
-- TLS: certbot
+- `DEPLOY_HOST`: SSH host or IP.
+- `DEPLOY_DOMAIN`: public DNS name for the relay.
+
+Common values:
+
+- `DEPLOY_USER`: SSH user, usually `root`.
+- `DEPLOY_PATH`: remote app directory.
+- `SERVICE_NAME`: systemd service name.
+- `SERVICE_HOST`: local bind address, usually `127.0.0.1`.
+- `SERVICE_PORT`: local relay port.
+- `DEPLOY_URL`: smoke-check URL. Defaults to `https://${DEPLOY_DOMAIN}/healthz`.
 
 ## Local Relay
 
@@ -27,30 +32,46 @@ make deploy
 Useful overrides:
 
 ```bash
-DEPLOY_HOST=146.190.117.215 DEPLOY_PATH=/var/www/vibes make deploy
+DEPLOY_HOST=203.0.113.10 DEPLOY_DOMAIN=vibes.example.com make deploy
 DRY_RUN=1 make deploy
 ```
 
+The deploy script reads `.env.deploy` automatically when present.
+
 ## First-Time Bootstrap
 
-1. Create the `vibes.opentangle.com` DNS record in Cloudflare.
+Load your deploy environment before running the bootstrap commands:
+
+```bash
+set -a
+source .env.deploy
+set +a
+```
+
+1. Create the DNS record for `DEPLOY_DOMAIN`.
 2. Issue a certificate on the VPS:
 
 ```bash
-ssh root@146.190.117.215 \
-  'certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.cloudflare-dns.ini --dns-cloudflare-propagation-seconds 60 -d vibes.opentangle.com'
+ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+  "certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.cloudflare-dns.ini --dns-cloudflare-propagation-seconds 60 -d $DEPLOY_DOMAIN"
 ```
 
-3. Install nginx and systemd units:
+3. Render nginx and systemd config:
 
 ```bash
-scp deploy/nginx-vibes.opentangle.com.conf root@146.190.117.215:/etc/nginx/sites-available/vibes.opentangle.com
-scp deploy/vibes.service root@146.190.117.215:/etc/systemd/system/vibes.service
-ssh root@146.190.117.215 \
-  'ln -sf /etc/nginx/sites-available/vibes.opentangle.com /etc/nginx/sites-enabled/vibes.opentangle.com && systemctl daemon-reload && systemctl enable vibes.service && nginx -t && systemctl reload nginx'
+node scripts/render-deploy-config.mjs
 ```
 
-4. Deploy:
+4. Install nginx and systemd units:
+
+```bash
+scp "deploy/rendered/${APP_NAME}.nginx.conf" "$DEPLOY_USER@$DEPLOY_HOST:/etc/nginx/sites-available/${DEPLOY_DOMAIN}"
+scp "deploy/rendered/${SERVICE_NAME}.service" "$DEPLOY_USER@$DEPLOY_HOST:/etc/systemd/system/${SERVICE_NAME}.service"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+  "ln -sf /etc/nginx/sites-available/${DEPLOY_DOMAIN} /etc/nginx/sites-enabled/${DEPLOY_DOMAIN} && systemctl daemon-reload && systemctl enable ${SERVICE_NAME}.service && nginx -t && systemctl reload nginx"
+```
+
+5. Deploy:
 
 ```bash
 make deploy
@@ -59,10 +80,10 @@ make deploy
 ## Verification
 
 ```bash
-dig +short vibes.opentangle.com
-curl -sSI https://vibes.opentangle.com/healthz
-curl -sS https://vibes.opentangle.com/healthz
-ssh root@146.190.117.215 'systemctl status vibes --no-pager -l'
+dig +short "$DEPLOY_DOMAIN"
+curl -sSI "$DEPLOY_URL"
+curl -sS "$DEPLOY_URL"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "systemctl status ${SERVICE_NAME} --no-pager -l"
 ```
 
 ## API Direction

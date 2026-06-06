@@ -12,7 +12,7 @@ Hackathon scaffold. The repo is ready for client and relay implementation, with 
 
 - `client/`: native SwiftUI macOS app project.
 - `server/`: tiny Node relay service shell.
-- `deploy/`: nginx and systemd templates for `vibes.opentangle.com`.
+- `deploy/`: nginx and systemd templates for a relay host.
 - `scripts/`: local and server deployment helpers.
 - `docs/plans/active/spec-v1.md`: product and implementation plan.
 
@@ -21,7 +21,7 @@ Hackathon scaffold. The repo is ready for client and relay implementation, with 
 - macOS with Xcode 26 or newer.
 - Node.js 20 or newer for the relay.
 - GitHub CLI for repo administration.
-- SSH access to the Open Tangle VPS for deployment.
+- SSH access to a VPS-style host for deployment.
 
 ## Quick Start
 
@@ -52,11 +52,7 @@ make client
 
 ## Relay
 
-The relay is intentionally small. Its first production target is:
-
-```text
-https://vibes.opentangle.com
-```
+The relay is intentionally small. Set `DEPLOY_DOMAIN`, `DEPLOY_HOST`, and related values in `.env.deploy` before deploying to a server.
 
 For v1 it should store user identity, friend invites, friend relationships, and latest status blobs. SQLite is the expected database for the first implementation.
 
@@ -86,12 +82,12 @@ Read [AGENTS.md](AGENTS.md) before starting implementation work. It captures rep
 
 ## Deployment
 
-The deploy scaffold mirrors Chirp's Open Tangle setup:
+The deploy scaffold expects a VPS-style host:
 
 - nginx terminates TLS.
-- systemd runs Node on `127.0.0.1:3136`.
-- app files live under `/var/www/vibes`.
-- certbot manages certificates for `vibes.opentangle.com`.
+- systemd runs Node on `SERVICE_HOST:SERVICE_PORT`.
+- app files live under `DEPLOY_PATH`.
+- certbot manages certificates for `DEPLOY_DOMAIN`.
 
 See [docs/server-runbook.md](docs/server-runbook.md) for bootstrap and deploy details.
 

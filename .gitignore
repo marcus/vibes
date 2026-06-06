@@ -18,6 +18,7 @@ npm-debug.log*
 .env
 .env.*
 !.env.example
+!.env.deploy.example
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
@@ -27,3 +28,4 @@ data/
 tmp/
 dist/
 build/
+deploy/rendered/

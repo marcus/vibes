@@ -1,12 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ENV_FILE="${DEPLOY_ENV_FILE:-.env.deploy}"
+if [[ -f "${ENV_FILE}" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "${ENV_FILE}"
+  set +a
+fi
+
+APP_NAME="${APP_NAME:-vibes}"
 DEPLOY_USER="${DEPLOY_USER:-root}"
-DEPLOY_HOST="${DEPLOY_HOST:-146.190.117.215}"
-DEPLOY_PATH="${DEPLOY_PATH:-/var/www/vibes}"
-DEPLOY_URL="${DEPLOY_URL:-https://vibes.opentangle.com/healthz}"
-SERVICE_NAME="${SERVICE_NAME:-vibes}"
+DEPLOY_HOST="${DEPLOY_HOST:-}"
+DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-}"
+DEPLOY_PATH="${DEPLOY_PATH:-/var/www/${APP_NAME}}"
+SERVICE_NAME="${SERVICE_NAME:-${APP_NAME}}"
+SERVICE_HOST="${SERVICE_HOST:-127.0.0.1}"
+SERVICE_PORT="${SERVICE_PORT:-3136}"
+DEPLOY_URL="${DEPLOY_URL:-}"
+DEPLOY_RESOLVE_IP="${DEPLOY_RESOLVE_IP:-}"
 DRY_RUN="${DRY_RUN:-0}"
+
+if [[ -z "${DEPLOY_HOST}" ]]; then
+  echo "DEPLOY_HOST is required. Copy .env.deploy.example to .env.deploy and set your server host." >&2
+  exit 2
+fi
+
+if [[ -z "${DEPLOY_URL}" ]]; then
+  if [[ -n "${DEPLOY_DOMAIN}" ]]; then
+    DEPLOY_URL="https://${DEPLOY_DOMAIN}/healthz"
+  else
+    DEPLOY_URL="http://${DEPLOY_HOST}:${SERVICE_PORT}/healthz"
+  fi
+fi
 
 RSYNC_FLAGS=(-az --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r)
 if [[ "${DRY_RUN}" == "1" ]]; then
@@ -34,10 +60,14 @@ echo "Checking ${DEPLOY_URL}..."
 SMOKE_FILE="$(mktemp -t vibes-deploy-smoke.XXXXXX)"
 STATUS=""
 CURL_RESOLVE_ARGS=()
-if [[ "${DEPLOY_HOST}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ -z "${DEPLOY_RESOLVE_IP}" && "${DEPLOY_HOST}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  DEPLOY_RESOLVE_IP="${DEPLOY_HOST}"
+fi
+
+if [[ -n "${DEPLOY_RESOLVE_IP}" ]]; then
   DEPLOY_URL_HOST="$(node -e "const url = new URL(process.argv[1]); console.log(url.hostname)" "${DEPLOY_URL}")"
   DEPLOY_URL_PORT="$(node -e "const url = new URL(process.argv[1]); console.log(url.port || (url.protocol === 'https:' ? '443' : '80'))" "${DEPLOY_URL}")"
-  CURL_RESOLVE_ARGS=(--resolve "${DEPLOY_URL_HOST}:${DEPLOY_URL_PORT}:${DEPLOY_HOST}")
+  CURL_RESOLVE_ARGS=(--resolve "${DEPLOY_URL_HOST}:${DEPLOY_URL_PORT}:${DEPLOY_RESOLVE_IP}")
 fi
 
 for attempt in {1..12}; do

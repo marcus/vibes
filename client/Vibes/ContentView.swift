@@ -33,7 +33,7 @@ struct ContentView: View {
       HStack {
         Button("Scan Now") {}
         Spacer()
-        Text("Relay: vibes.opentangle.com")
+        Text("Relay: not configured")
           .foregroundStyle(.secondary)
           .font(.caption)
       }
