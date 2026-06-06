@@ -145,6 +145,8 @@ Track per day:
 - latest activity timestamp
 - optional repo aliases
 
+Use the user's local calendar day for "today" rather than a rolling 24-hour window. The scanner should not count untracked files in v1; use committed changes, working tree diff, and staged diff only.
+
 Use local Git CLI commands rather than GitHub APIs.
 
 Useful commands:
@@ -295,6 +297,8 @@ Each card should include:
 
 Adapters can produce cards locally. The publish layer decides which enabled cards enter the final status blob based on privacy config. The relay should treat cards as JSON and avoid interpreting card-specific details except for basic validation and size limits.
 
+Status payloads should be capped at 32 KB for v1. If a client receives an unknown card type, it should render the card's `summary` when present. If no usable summary exists, hide the card but show a small UI affordance indicating that one unsupported/hidden card exists, so the user can distinguish intentional hiding from a feed error.
+
 ### Relay Data Model
 
 Use SQLite with a deliberately small schema. The relay should be flexible enough to evolve, but the first version needs concrete tables so auth, invites, and feed reads are not improvised.
@@ -358,7 +362,7 @@ Notes:
 - `updated_at` comes from the client payload; `server_received_at` is when the relay accepted it.
 - `client_day` allows local-day stats without making the relay understand user time zones.
 - `payload_json` stores the publishable status blob, not raw scanner output.
-- `friendships` can store reciprocal rows for simpler feed queries, or one canonical row if the implementation prefers that. Pick one and keep it consistent.
+- `friendships` should store reciprocal rows for v1. Feed queries stay simple and direct.
 - `expires_at` on invites is allowed because invite lifetime is different from status lifetime.
 - `invite_url_path` is the public magic-link path, for example `/invite/<code>`.
 
@@ -385,13 +389,14 @@ Recommended v1 flow:
 2. Relay returns a URL like `https://relay.example.com/invite/<code>`.
 3. The raw invite code is shown only in the URL. The relay stores `code_hash`.
 4. Friend opens the link.
-5. The page or app route asks for handle/display name if needed.
-6. Accepting the invite creates or identifies the accepting user, creates their token, and creates a mutual friendship.
-7. The friend copies or imports the resulting relay URL and token into the Mac app. Later this can become a custom URL scheme.
+5. The relay returns a tiny web page that asks for handle/display name if needed.
+6. Accepting the invite can create the accepting user for v1.
+7. Accepting the invite creates the accepting user's token and creates a mutual friendship.
+8. The browser shows the raw token exactly once and also offers a downloadable config JSON snippet. Later this can become a custom URL scheme.
 
 Invites should be single-use by default. They may have `expires_at`, and they can be manually revoked. Accepting an invite should never reveal the creator's token.
 
-For hackathon speed, a minimal HTML response or CLI-assisted accept flow is fine as long as the URL can be shared directly.
+For hackathon speed, a minimal HTML response is enough as long as the URL can be shared directly.
 
 ## Federation / Distributed Future
 
@@ -413,6 +418,8 @@ Users should have a local identity:
 - generated public/private keypair later if useful
 
 Friendship should be mutual.
+
+Handles are globally unique per relay for v1.
 
 Invite flow:
 
@@ -554,6 +561,17 @@ Use a simple JSON config file for v1. Setup agents are expected to generate or e
 
 Store relay auth tokens in the macOS Keychain. The config file should reference the relay URL and local identity, but not store raw bearer tokens. If a hackathon build temporarily stores a token in config, keep that clearly marked as temporary and avoid committing local config files.
 
+Default config location:
+
+```text
+~/Library/Application Support/Vibes/config.json
+```
+
+Recommended Keychain naming:
+
+- service: `Vibes Relay`
+- account: `<relay_url>|<handle>`
+
 Example:
 
 ```json
@@ -652,6 +670,8 @@ node server/cli.mjs status get --user marcus
 ```
 
 The CLI should print machine-readable JSON by default or via `--json`, so agents can call it safely and parse results.
+
+For v1, CLI output should be JSON by default. Human-friendly tables can come later if useful.
 
 ## Decision Notes
 
