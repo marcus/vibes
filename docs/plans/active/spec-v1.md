@@ -174,7 +174,9 @@ Initial supported agent labels:
 - OpenCode
 - Unknown / Manual / Human
 
-Agent detection can be heuristic or manual in v1. Allow users to manually enable or disable agent labels and set repo-level defaults.
+V1 should use manual repo-level agent labels. Users or setup agents can assign a default agent label to each tracked repo, and the scanner can aggregate that into a coarse agent mix.
+
+Automatic detection is future work. Allow users to manually enable or disable agent labels and set repo-level defaults.
 
 Possible future detection methods:
 
@@ -185,7 +187,7 @@ Possible future detection methods:
 - user-provided mapping
 - local agent transcript paths
 
-For v1, manual configuration plus lightweight heuristics is enough.
+For v1, manual configuration is enough.
 
 ## Spotify Stretch Goal
 
@@ -224,7 +226,9 @@ SwiftUI macOS app:
 - periodic scan/publish
 - scan-now action
 
-Data can be stored in simple JSON or SQLite. For the one-day build, JSON config and lightweight local persistence are fine.
+The app will not target the Mac App Store. V1 can be signed for local distribution without App Store sandboxing. This keeps arbitrary local repo scanning straightforward and avoids security-scoped bookmark work during the hackathon.
+
+Use JSON config and lightweight local persistence for the first build. If local persistence grows beyond simple settings and cached feed state, SQLite is fine.
 
 ### Relay
 
@@ -249,6 +253,94 @@ Initial stack:
 - systemd service
 - deployed to a configurable HTTPS relay host
 
+### Status Semantics
+
+The relay stores the latest status only. It does not store status history by default.
+
+Status records do not expire. If a user has ever published a status, friends can continue to see that latest status with its `updated_at` timestamp. The client can render stale states such as "last updated 3h ago" or "last updated yesterday", but the relay should not delete or hide a status just because it is old.
+
+Offline is an explicit presence mode or the absence of any status. If the app quits without publishing an Offline status, the previous status remains visible as stale.
+
+This keeps v1 simple and matches the desired product behavior: "what was their latest vibe?" rather than a strict realtime online indicator.
+
+### Relay Data Model
+
+Use SQLite with a deliberately small schema. The relay should be flexible enough to evolve, but the first version needs concrete tables so auth, invites, and feed reads are not improvised.
+
+Suggested v1 tables:
+
+```sql
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,
+  handle TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  disabled_at TEXT
+);
+
+CREATE TABLE auth_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  label TEXT,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+
+CREATE TABLE friendships (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  friend_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  state TEXT NOT NULL DEFAULT 'accepted',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, friend_user_id)
+);
+
+CREATE TABLE invites (
+  id TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL UNIQUE,
+  creator_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  accepted_by_user_id TEXT REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  accepted_at TEXT,
+  revoked_at TEXT,
+  expires_at TEXT
+);
+
+CREATE TABLE statuses (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  mode TEXT NOT NULL,
+  client_day TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL,
+  server_received_at TEXT NOT NULL
+);
+```
+
+Notes:
+
+- `statuses` is one row per user. `POST /api/status` upserts this row.
+- `updated_at` comes from the client payload; `server_received_at` is when the relay accepted it.
+- `client_day` allows local-day stats without making the relay understand user time zones.
+- `payload_json` stores the publishable status blob, not raw scanner output.
+- `friendships` can store reciprocal rows for simpler feed queries, or one canonical row if the implementation prefers that. Pick one and keep it consistent.
+- `expires_at` on invites is allowed because invite lifetime is different from status lifetime.
+
+### Auth Model
+
+Use bearer tokens for v1.
+
+- The client sends `Authorization: Bearer <token>` for all authenticated API calls.
+- The relay stores only `token_hash`, never the raw token.
+- Tokens can be created during setup, invite acceptance, or an admin/bootstrap flow.
+- Tokens can be revoked by setting `revoked_at`.
+- A token identifies exactly one user.
+- Feed reads return the caller's own status plus accepted friends' latest statuses.
+
+This leaves room for future signed status blobs or keypair identity without blocking the hackathon on a full auth system.
+
 ## Federation / Distributed Future
 
 Design as if status blobs could later be portable or federated, while keeping v1 centralized for onboarding and connectivity.
@@ -265,8 +357,8 @@ Users should have a local identity:
 
 - handle
 - display name
-- generated public/private keypair if time allows
 - relay account/token
+- generated public/private keypair later if useful
 
 Friendship should be mutual.
 
@@ -384,44 +476,60 @@ Last update: 8m ago
 
 ## Configuration
 
-Use a simple config file for v1.
+Use a simple JSON config file for v1. Setup agents are expected to generate or edit this file, so human-friendly YAML is not required.
+
+Store relay auth tokens in Keychain when practical. If a hackathon build temporarily stores a token in config, keep that clearly marked as temporary and avoid committing local config files.
 
 Example:
 
-```yaml
-identity:
-  handle: marcus
-  display_name: Marcus
-tracking:
-  repos:
-    - path: ~/code/vibes
-      alias: Vibes
-      publish_alias: true
-    - path: ~/code/braid
-      alias: Braid
-      publish_alias: true
-agents:
-  codex:
-    enabled: true
-    detection: auto
-  claude_code:
-    enabled: true
-    detection: auto
-  grok_build:
-    enabled: true
-    detection: manual
-  gemini:
-    enabled: true
-    detection: manual
-privacy:
-  publish_repo_aliases: true
-  publish_agent_mix: true
-  publish_spotify: false
-  publish_commit_messages: false
-  publish_branch_names: false
-  publish_file_names: false
-server:
-  relay_url: https://vibes.example.com
+```json
+{
+  "identity": {
+    "handle": "marcus",
+    "display_name": "Marcus"
+  },
+  "tracking": {
+    "repos": [
+      {
+        "path": "~/code/vibes",
+        "alias": "Vibes",
+        "publish_alias": true,
+        "agent": "codex"
+      },
+      {
+        "path": "~/code/braid",
+        "alias": "Braid",
+        "publish_alias": true,
+        "agent": "claude_code"
+      }
+    ]
+  },
+  "agents": {
+    "codex": {
+      "enabled": true
+    },
+    "claude_code": {
+      "enabled": true
+    },
+    "grok_build": {
+      "enabled": true
+    },
+    "gemini": {
+      "enabled": true
+    }
+  },
+  "privacy": {
+    "publish_repo_aliases": true,
+    "publish_agent_mix": true,
+    "publish_spotify": false,
+    "publish_commit_messages": false,
+    "publish_branch_names": false,
+    "publish_file_names": false
+  },
+  "server": {
+    "relay_url": "https://vibes.example.com"
+  }
+}
 ```
 
 ## Agentic Configuration
@@ -487,7 +595,7 @@ For v1, a simple guided setup or generated config file is enough.
 - GitHub OAuth
 - chat
 - mobile app
-- App Store distribution
+- notarized non-App-Store distribution
 - perfect agent attribution
 
 ## One-Day Execution Plan
@@ -514,10 +622,12 @@ Build minimal API:
 
 - `POST /api/status`
 - `GET /api/feed`
+- `POST /api/users`
 - `POST /api/invites`
 - `POST /api/invites/accept`
+- `POST /api/tokens/revoke`
 
-Use simple auth/token for v1.
+Use bearer token auth for v1.
 
 ### Phase 4: Real Friend Feed
 
