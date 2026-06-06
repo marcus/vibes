@@ -96,17 +96,17 @@ make server-check
 
 ## Definition of Done
 
-Every working session must satisfy all three of these before it ends. They are requirements, not suggestions.
+These requirements apply to sessions that change code (anything under `client/`, `server/`, `scripts/`, or build config). Docs-only sessions (such as edits confined to `docs/`, `README.md`, or `AGENTS.md`) are exempt. When a session touches code, satisfy all three before it ends. They are requirements, not suggestions.
 
 1. **Tests pass.** Run the relevant checks (`make check`, or `make client` / `make server-check` for scoped changes) and confirm they pass. Do not end a session with failing or skipped tests. If a test genuinely cannot pass, leave it failing and say so explicitly rather than deleting, skipping, or hiding it.
 
-2. **Independent review of every commit.** Every commit that changes code gets an independent review with fresh eyes — a separate review agent or a distinct review pass, not the author re-reading their own diff. Incorporate the review's feedback before the session ends (follow-up commits are fine). If a review item is intentionally not addressed, record why.
+2. **Independent review of every code commit.** Every commit that changes code gets an independent review with fresh eyes via a sub-agent (for example a `code-reviewer` sub-agent or `/code-review`), not the author re-reading their own diff. Incorporate the review's feedback before the session ends (follow-up commits are fine). If a review item is intentionally not addressed, record why.
 
 3. **Proof it works.** Provide evidence the code actually runs, not just that it compiles. Use passing test output for non-visual changes, or a screenshot of the running app for UI changes. "Done" without test results or a screenshot is not done.
 
 ## Git
 
 - Keep commits small and descriptive.
-- Every code-changing commit must be independently reviewed with feedback incorporated (see Definition of Done).
+- Every code-changing commit must be independently reviewed by a sub-agent with feedback incorporated (see Definition of Done).
 - Do not rewrite unrelated user changes.
 - Keep generated build products out of git.
