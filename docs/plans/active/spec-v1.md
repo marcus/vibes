@@ -229,6 +229,8 @@ SwiftUI macOS app:
 - broadcast mode toggle
 - manual status editor
 - friend feed UI, including an empty state when the user has no friends yet
+- friend detail popover
+- minimal settings window for repos, sharing, and identity
 - periodic scan/publish
 - secondary manual refresh action for debugging or impatient users
 
@@ -661,6 +663,74 @@ Agents: Claude Code 72%, Codex 28%
 Last update: 8m ago
 ```
 
+## macOS UX
+
+### Window and Activation Model
+
+Vibes is a regular Dock app (`.regular` activation policy) with one main window and a secondary menu bar companion. The menu bar companion provides quick mode switching and Show/Hide without bringing the app forward; it is not the only way to reach the app.
+
+The main window is a standard, calm, resizable SwiftUI window with a minimal title bar. It has a small minimum size and remembers its position and size across launches via frame autosave. Closing the window hides it while the app keeps running, so presence keeps publishing; the user reopens it from the Dock icon or the menu bar's "Show Vibes". Quit is explicit (Cmd-Q or the menu bar Quit action) and triggers the best-effort Offline publish.
+
+A fully chromeless or floating-panel presentation, an always-on-top toggle, and a global hotkey remain later polish and do not change this model.
+
+### Layout and Navigation
+
+The main window has three regions:
+
+- A slim header with the app name and a sync indicator.
+- A scrolling friend feed. Rows scroll when friends overflow the window height. The user's own row is not shown in the feed; their state lives in the footer.
+- A footer with the user's own mode control and manual status field.
+
+Clicking a friend row opens that friend's detail as a popover anchored to the row. The detail is read-only in v1 and shows the expanded stats, agent mix, and last-update time from the example detail view, plus a "Remove friend…" action that confirms before calling unfriend. Dismissing the popover returns to the feed.
+
+### Own Status Controls
+
+The footer holds two controls:
+
+- A mode control (Broadcasting / Quiet / Offline). Changing it publishes immediately.
+- A single-line manual status field. Typing and committing publishes the new manual status; clearing the field to empty removes `manual_status`. A small clear affordance empties it in one click.
+
+### Settings Window
+
+A standard Settings scene (Cmd-,) provides minimal in-app editing so non-developers are not forced into JSON:
+
+- Repos: add a tracked repo with a folder picker, remove one, and per repo set its alias, publish-alias toggle, and default agent label. Because the app is not sandboxed, the folder picker needs no security-scoped bookmarks.
+- Sharing: toggle each card in `sharing.cards` and each item in `sharing.redactions`.
+- Identity and relay: show handle, display name, device label, and relay URL. These are mostly read-only in v1.
+
+Settings writes the same config JSON described in Configuration, so hand-edited and agent-generated config stay interchangeable with what the UI produces.
+
+### Visual Language
+
+The app is native SwiftUI and supports both light and dark mode, following the system accent. The tone is calm and low-density: generous spacing, SF Pro text, and SF Symbols. Each derived vibe has an icon and tint so the feed reads at a glance. A starting mapping:
+
+| Vibe | Symbol | Tint |
+| --- | --- | --- |
+| offline | `moon.zzz` | gray |
+| quiet | `circle.dotted` | gray |
+| warming up | `sunrise` | soft orange |
+| vibing | `waveform` | green |
+| deep work | `scope` | indigo |
+| yak shaving | `scissors` | brown |
+| ship mode | `paperplane.fill` | teal |
+| wandering | `figure.walk` | purple |
+| rage fixing | `flame` | red |
+
+Exact symbols and tints are not critical for v1; the mapping exists so vibes are visually distinct rather than text-only.
+
+### Feed States
+
+The feed has explicit states beyond the normal populated list:
+
+- Loading: a subtle placeholder on first fetch before any feed data is cached.
+- Stale: each friend row renders relative freshness such as "last updated 3h ago".
+- Relay unreachable: a small inline banner ("Can't reach relay — showing last known") while the last cached feed stays visible.
+- Empty: when the user has no friends yet, a friendly empty state with a "Create invite" action that calls `POST /api/invites` and shows the invite URL to copy.
+
+### Deferred
+
+Accessibility polish (VoiceOver labels, Dynamic Type tuning), Launch at Login, notifications, and the chromeless/floating polish are deferred. The v1 window and controls should still use standard SwiftUI controls so basic accessibility comes for free.
+
 ## Configuration
 
 Use a simple JSON config file for v1. Setup agents are expected to generate or edit this file, so human-friendly YAML is not required.
@@ -816,14 +886,17 @@ An ADR is an Architecture Decision Record: a short document that records one imp
 
 ### Should Have
 
-- remember window position
+- remember window position and size
 - tune scan interval and stale-state display
 - secondary manual refresh action
 - clean visual design
-- derived vibe label
+- light and dark mode support
+- derived vibe label with per-vibe iconography
+- friend detail popover
+- feed loading, stale, relay-unreachable, and empty states
 - repo aliases
 - privacy-respecting payload
-- local config editing
+- minimal settings window for repos, sharing, and identity
 
 ### Could Have
 
@@ -890,11 +963,12 @@ This can initially be a Swift service or a separate helper command.
 Build the small SwiftUI window:
 
 - friend rows using mock data
+- friend detail popover
 - own status editor
 - mode toggle
 - automatic refresh loop
 - secondary manual refresh action
-- simple settings/config
+- minimal settings window for repos, sharing, and identity
 
 ### Phase 7: Full Relay API
 
