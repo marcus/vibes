@@ -147,7 +147,7 @@ Track per day:
 - latest activity timestamp
 - optional repo aliases
 
-Use the user's local calendar day for "today" rather than a rolling 24-hour window. The scanner should not count untracked files in v1; use committed changes, working tree diff, and staged diff only.
+Use the user's local calendar day for "today" rather than a rolling 24-hour window. When the local day rolls over, the client rescans and republishes so the feed resets to the new day's stats; until it republishes, the previous `client_day` blob stays visible and the feed treats it as belonging to that earlier day. The scanner should not count untracked files in v1; use committed changes, working tree diff, and staged diff only.
 
 Use local Git CLI commands rather than GitHub APIs.
 
@@ -179,6 +179,8 @@ Initial supported agent labels:
 - Unknown / Manual / Human
 
 V1 should use manual repo-level agent labels. Users or setup agents can assign a default agent label to each tracked repo, and the scanner can aggregate that into a coarse agent mix.
+
+The agent mix is weighted by commits. Each tracked repo contributes its commit count for the local day to its assigned agent label, and the mix is each agent label's share of total commits for the day. Repos with no commits that day do not contribute to the mix.
 
 Automatic detection is future work. Allow users to manually enable or disable agent labels and set repo-level defaults.
 
@@ -226,7 +228,7 @@ SwiftUI macOS app:
 - local status aggregation
 - broadcast mode toggle
 - manual status editor
-- friend feed UI
+- friend feed UI, including an empty state when the user has no friends yet
 - periodic scan/publish
 - secondary manual refresh action for debugging or impatient users
 
@@ -263,11 +265,27 @@ The relay stores the latest status only. It does not store status history by def
 
 Status records do not expire. If a user has ever published a status, friends can continue to see that latest status with its `updated_at` timestamp. The client can render stale states such as "last updated 3h ago" or "last updated yesterday", but the relay should not delete or hide a status just because it is old.
 
-Offline is an explicit presence mode or the absence of any status. If the app quits without publishing an Offline status, the previous status remains visible as stale.
+Offline is an explicit presence mode or the absence of any status. On a graceful quit the app makes a best-effort publish of an Offline status for that device. If the app exits without publishing Offline, the previous status remains visible as stale.
 
 Quiet is also explicit. Publishing Quiet replaces the user's latest status blob with a quiet payload containing no optional cards.
 
-This keeps v1 simple and matches the desired product behavior: "what was their latest vibe?" rather than a strict realtime online indicator.
+The model answers "what was their latest vibe?" rather than acting as a strict realtime online indicator.
+
+### Multi-Device
+
+A user can run Vibes on more than one Mac (for example a laptop and a desktop). Each install has its own device identity and its own auth token, and publishes its own status row keyed by `(user_id, device_id)`.
+
+Each install generates a stable `device_id` (a local UUID) on first launch and stores it in config, along with a human `device_label` such as "MacBook" or "Mac mini". The client sends both with every `POST /api/status`.
+
+The feed merges a user's device rows into one presence view per user on read. Merge rules:
+
+- Presence mode is the strongest mode across the user's devices, using the order broadcasting > quiet > offline. A user is Offline only when every device is Offline or absent.
+- Manual status, derived vibe, and singleton cards (`spotify`, `weather`, `harness`, `repo_aliases`) come from the broadcasting device with the most recent `updated_at`.
+- `git_stats` is summed across broadcasting devices that share the most recent `client_day`. Devices reporting an older `client_day` are ignored so a stale laptop does not inflate today's totals.
+- `agent_mix` is recomputed from the summed per-agent commit counts across those same devices, so the mix stays commit-weighted across machines.
+- `updated_at` for the merged view is the newest contributing device's `updated_at`.
+
+Revoking a device's token stops that device from publishing. Its last status row remains until overwritten or until the row is removed by admin action.
 
 ### Status Blob Extensibility
 
@@ -305,9 +323,9 @@ Status payloads should be capped at 32 KB for v1. If a client receives an unknow
 
 ### Relay Data Model
 
-Use SQLite with a deliberately small schema. The relay should be flexible enough to evolve, but the first version needs concrete tables so auth, invites, and feed reads are not improvised.
+Use SQLite with a deliberately small schema. The relay is flexible enough to evolve, and the v1 tables are concrete so auth, invites, and feed reads are not improvised.
 
-Suggested v1 tables:
+v1 tables:
 
 ```sql
 CREATE TABLE users (
@@ -350,25 +368,34 @@ CREATE TABLE invites (
 );
 
 CREATE TABLE statuses (
-  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL,
+  device_label TEXT,
   mode TEXT NOT NULL,
   client_day TEXT NOT NULL,
   payload_json TEXT NOT NULL,
   schema_version INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL,
-  server_received_at TEXT NOT NULL
+  server_received_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, device_id)
+);
+
+CREATE TABLE schema_migrations (
+  version INTEGER PRIMARY KEY,
+  applied_at TEXT NOT NULL
 );
 ```
 
 Notes:
 
-- `statuses` is one row per user. `POST /api/status` upserts this row.
+- `statuses` is one row per `(user_id, device_id)`. `POST /api/status` upserts on that key. See Multi-Device for how the feed merges a user's devices.
 - `updated_at` comes from the client payload; `server_received_at` is when the relay accepted it.
 - `client_day` allows local-day stats without making the relay understand user time zones.
 - `payload_json` stores the publishable status blob, not raw scanner output.
-- `friendships` should store reciprocal rows for v1. Feed queries stay simple and direct.
+- `friendships` stores reciprocal rows for v1. Feed queries stay simple and direct. Unfriending deletes both rows.
 - `expires_at` on invites is allowed because invite lifetime is different from status lifetime.
 - `invite_url_path` is the public magic-link path, for example `/invite/<code>`.
+- `schema_migrations` records applied migration versions. `db migrate` applies pending migrations in order and is idempotent.
 
 ### Auth Model
 
@@ -383,11 +410,62 @@ Use bearer tokens for v1.
 
 This leaves room for future signed status blobs or keypair identity without blocking the hackathon on a full auth system.
 
+### API Contract
+
+The relay and client share one contract. Every endpoint accepts and returns JSON, except `GET /invite/:code`, which returns HTML.
+
+Authenticated endpoints require `Authorization: Bearer <token>`. A missing or revoked token returns `401`.
+
+Errors use a single shape with an appropriate HTTP status:
+
+```json
+{ "error": { "code": "string_code", "message": "human readable" } }
+```
+
+Endpoints:
+
+- `POST /api/users` — create a user during bootstrap.
+  - Request: `{ "handle": "marcus", "display_name": "Marcus" }`
+  - Response `201`: `{ "user": { "id": "...", "handle": "marcus", "display_name": "Marcus" } }`
+  - `409 handle_taken` if the handle exists.
+- `POST /api/invites` (auth) — create an invite for the caller.
+  - Request: `{}`
+  - Response `201`: `{ "invite_url": "https://relay/invite/<code>", "expires_at": "..." }`
+- `GET /invite/:code` — HTML accept page.
+- `POST /invite/:code/accept` — accept an invite and create the accepting user.
+  - Request: `{ "handle": "ken", "display_name": "Ken", "device_label": "Ken MacBook" }`
+  - Response `201`: `{ "token": "<raw token shown once>", "config": { ...first-launch config JSON... } }`
+  - `409 handle_taken` if the handle exists; the caller may retry with a different handle. The invite is consumed only on success.
+  - `410 invite_unusable` if the invite is expired, revoked, or already used.
+- `POST /api/status` (auth) — upsert the caller's status for one device.
+  - Request: the status blob plus `device_id` and `device_label`.
+  - Response `200`: `{ "ok": true, "server_received_at": "..." }`
+  - `413 payload_too_large` if the blob exceeds 32 KB.
+- `GET /api/feed` (auth) — the caller's own merged status plus accepted friends' merged statuses.
+  - Response `200`: `{ "you": { ...merged status... }, "friends": [ { ...merged status... } ] }`
+- `POST /api/friends/remove` (auth) — unfriend a user by handle.
+  - Request: `{ "handle": "ken" }`
+  - Response `200`: `{ "ok": true }`. Deletes both reciprocal `friendships` rows. Idempotent.
+- `POST /api/tokens/revoke` (auth) — revoke a token the caller owns.
+  - Request: `{ "token_id": "..." }`
+  - Response `200`: `{ "ok": true }`
+
+Public endpoints (`POST /api/users`, `GET /invite/:code`, `POST /invite/:code/accept`) and `POST /api/status` are rate limited per IP. The limit is coarse and only needs to stop accidental loops and casual abuse for v1.
+
+#### Keeping client and relay in sync
+
+The contract has one source of truth so the Swift client and Node relay cannot drift:
+
+- Canonical request/response/error examples live as JSON fixtures in `shared/contract/` in the repo. The example status blob, feed response, and error shape are fixtures, not prose.
+- The relay has a contract test that exercises each endpoint and asserts responses match the fixtures.
+- The client has a decode test that loads the same fixtures into its `Codable` models.
+- Both test suites read the same files, so a contract change that breaks either side fails CI before it ships. Changing an endpoint means changing the fixture, which forces both sides to update.
+
 ### Magic-Link Invites
 
-Friend setup should use a magic-link style flow.
+Friend setup uses a magic-link style flow. An invite is 1:1: it is single-use and connects exactly the creator and the one friend who accepts it. A group of friends connects through one invite per pair.
 
-Recommended v1 flow:
+Invite flow:
 
 1. Existing user asks the relay to create an invite.
 2. Relay returns a URL like `https://relay.example.com/invite/<code>`.
@@ -399,9 +477,11 @@ Recommended v1 flow:
 8. The browser shows the raw token exactly once and also offers a downloadable config JSON snippet. Later this can become a custom URL scheme.
 9. On first launch, the app can import the downloaded config JSON, accept a pasted config/token, or open a local config file selected by the user.
 
-Invites should be single-use by default, expire after 7 days, and be manually revocable. Accepting an invite should never reveal the creator's token.
+Invites are single-use, expire after 7 days, and are manually revocable. Accepting an invite never reveals the creator's token.
 
-For hackathon speed, a minimal HTML response is enough as long as the URL can be shared directly.
+Raw invite codes and bearer tokens never appear in logs. The relay stores only `code_hash` and `token_hash`, and the application and reverse proxy are configured not to log the `/invite/<code>` path, the `Authorization` header, or accept-response bodies.
+
+A minimal HTML response is enough for the accept page as long as the URL can be shared directly.
 
 ### First-Launch Setup
 
@@ -416,10 +496,11 @@ The setup screen should support:
 After import, the app should:
 
 1. validate the relay URL and token with the relay
-2. write config JSON to Application Support
-3. store the raw token in Keychain
-4. remove the raw token from the persisted config if present
-5. start automatic scan/publish/feed refresh
+2. generate a `device.id` and `device.label` if the config does not already have one
+3. write config JSON to Application Support
+4. store the raw token in Keychain
+5. remove the raw token from the persisted config if present
+6. start automatic scan/publish/feed refresh
 
 The app should not require the user to press "Scan Now" during normal operation.
 
@@ -442,7 +523,7 @@ Users should have a local identity:
 - relay account/token
 - generated public/private keypair later if useful
 
-Friendship should be mutual.
+Friendship is mutual. Either friend can unfriend the other, which removes both reciprocal rows and stops sharing in both directions.
 
 Handles are globally unique per relay for v1.
 
@@ -592,7 +673,7 @@ Default config location:
 ~/Library/Application Support/Vibes/config.json
 ```
 
-Recommended Keychain naming:
+Keychain naming:
 
 - service: `Vibes Relay`
 - account: `<relay_url>|<handle>`
@@ -604,6 +685,10 @@ Example:
   "identity": {
     "handle": "marcus",
     "display_name": "Marcus"
+  },
+  "device": {
+    "id": "b9c1f3e2-7a4d-4f0c-9e21-5d2a8c6f1a90",
+    "label": "MacBook"
   },
   "tracking": {
     "repos": [
@@ -635,14 +720,6 @@ Example:
       "enabled": true
     }
   },
-  "privacy": {
-    "publish_repo_aliases": true,
-    "publish_agent_mix": true,
-    "publish_spotify": false,
-    "publish_commit_messages": false,
-    "publish_branch_names": false,
-    "publish_file_names": false
-  },
   "server": {
     "relay_url": "https://vibes.example.com"
   },
@@ -654,10 +731,18 @@ Example:
       "spotify": false,
       "weather": false,
       "harness": false
+    },
+    "redactions": {
+      "commit_messages": true,
+      "branch_names": true,
+      "file_names": true,
+      "repo_paths": true
     }
   }
 }
 ```
+
+`sharing` is the single source of truth for what leaves the device. `sharing.cards` controls which optional cards are published: a card is included in the status blob only when its flag is true. `sharing.redactions` covers raw details that are never expressed as cards; `true` means that detail is redacted and never leaves the device. These redactions are belt-and-suspenders, since the default payload already excludes them.
 
 ## Agentic Configuration
 
@@ -690,6 +775,7 @@ node server/cli.mjs tokens create --user marcus --label "Marcus MacBook"
 node server/cli.mjs invites create --user marcus
 node server/cli.mjs invites accept --code <code> --handle ken --display-name Ken
 node server/cli.mjs friends list --user marcus
+node server/cli.mjs friends remove --user marcus --friend ken
 node server/cli.mjs tokens revoke --token-id <id>
 node server/cli.mjs status get --user marcus
 ```
@@ -700,15 +786,17 @@ For v1, CLI output should be JSON by default. Human-friendly tables can come lat
 
 ## Decision Notes
 
-An ADR is an Architecture Decision Record: a short document that records one important technical/product decision, the alternatives considered, and the consequences. Vibes does not need heavy process, but a few decisions should be written down once implementation starts so future agents do not reopen the same questions.
-
-Good first ADRs:
+An ADR is an Architecture Decision Record: a short document that records one important technical/product decision, the alternatives considered, and the consequences. Vibes does not need heavy process. As implementation starts, each of these settled decisions gets a short ADR:
 
 - latest-status-only relay, no status expiry
 - bearer token auth for v1
 - no Mac App Store sandbox target
 - JSON config generated by agents
 - extensible status cards as the sharing model
+- `sharing` config block as the single source of truth for what leaves the device
+- per-device status rows merged into one presence view per user
+- commit-weighted agent mix
+- shared JSON fixtures as the client/relay contract
 
 ## Build Priorities
 
@@ -817,6 +905,7 @@ Complete the minimal API:
 - `POST /api/users`
 - `POST /api/invites`
 - `POST /api/invites/accept`
+- `POST /api/friends/remove`
 - `POST /api/tokens/revoke`
 - `GET /invite/:code`
 - `POST /invite/:code/accept`
