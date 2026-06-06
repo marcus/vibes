@@ -230,6 +230,7 @@ SwiftUI macOS app:
 - manual status editor
 - friend feed UI, including an empty state when the user has no friends yet
 - friend detail popover
+- invite sheet for creating, sharing, and revoking invites
 - minimal settings window for repos, sharing, and identity
 - periodic scan/publish
 - secondary manual refresh action for debugging or impatient users
@@ -432,7 +433,11 @@ Endpoints:
   - `409 handle_taken` if the handle exists.
 - `POST /api/invites` (auth) — create an invite for the caller.
   - Request: `{}`
-  - Response `201`: `{ "invite_url": "https://relay/invite/<code>", "expires_at": "..." }`
+  - Response `201`: `{ "id": "...", "invite_url": "https://relay/invite/<code>", "expires_at": "..." }`
+- `GET /api/invites` (auth) — list the caller's invites.
+  - Response `200`: `{ "invites": [ { "id": "...", "invite_url": "...", "state": "open|accepted|revoked|expired", "created_at": "...", "expires_at": "...", "accepted_by": "ken" } ] }`. `accepted_by` is null until an invite is accepted.
+- `POST /api/invites/:id/revoke` (auth) — revoke an invite the caller created.
+  - Response `200`: `{ "ok": true }`. Idempotent. `404` if the invite is not the caller's.
 - `GET /invite/:code` — HTML accept page.
 - `POST /invite/:code/accept` — accept an invite and create the accepting user.
   - Request: `{ "handle": "ken", "display_name": "Ken", "device_label": "Ken MacBook" }`
@@ -725,7 +730,18 @@ The feed has explicit states beyond the normal populated list:
 - Loading: a subtle placeholder on first fetch before any feed data is cached.
 - Stale: each friend row renders relative freshness such as "last updated 3h ago".
 - Relay unreachable: a small inline banner ("Can't reach relay — showing last known") while the last cached feed stays visible.
-- Empty: when the user has no friends yet, a friendly empty state with a "Create invite" action that calls `POST /api/invites` and shows the invite URL to copy.
+- Empty: when the user has no friends yet, a friendly empty state with a "Create invite" action that opens the same invite flow described in Inviting Friends.
+
+### Inviting Friends
+
+Inviting is a primary action, not just an empty-state affordance, because growing the friend group is a core part of the experience. The main window header has an "Invite" button, and the menu bar companion has an "Invite a friend…" item. Both open the same invite sheet.
+
+The invite sheet:
+
+- A "Create invite link" button calls `POST /api/invites` and shows the returned single-use URL with a Copy button, a Share button using the macOS share sheet, and the expiry date.
+- A list of the user's still-open invites (created, not yet accepted or expired), each with its expiry and a Revoke action that calls `POST /api/invites/:id/revoke`. Accepted, revoked, and expired invites drop off the list.
+
+Because invites are 1:1, the sheet makes clear that each link connects exactly one friend, so onboarding a group means creating one link per person.
 
 ### Deferred
 
@@ -843,6 +859,8 @@ node server/cli.mjs db migrate
 node server/cli.mjs users create --handle marcus --display-name Marcus
 node server/cli.mjs tokens create --user marcus --label "Marcus MacBook"
 node server/cli.mjs invites create --user marcus
+node server/cli.mjs invites list --user marcus
+node server/cli.mjs invites revoke --invite-id <id>
 node server/cli.mjs invites accept --code <code> --handle ken --display-name Ken
 node server/cli.mjs friends list --user marcus
 node server/cli.mjs friends remove --user marcus --friend ken
@@ -893,6 +911,7 @@ An ADR is an Architecture Decision Record: a short document that records one imp
 - light and dark mode support
 - derived vibe label with per-vibe iconography
 - friend detail popover
+- in-app invite creation, sharing, and revocation
 - feed loading, stale, relay-unreachable, and empty states
 - repo aliases
 - privacy-respecting payload
@@ -978,7 +997,8 @@ Complete the minimal API:
 - `GET /api/feed`
 - `POST /api/users`
 - `POST /api/invites`
-- `POST /api/invites/accept`
+- `GET /api/invites`
+- `POST /api/invites/:id/revoke`
 - `POST /api/friends/remove`
 - `POST /api/tokens/revoke`
 - `GET /invite/:code`
