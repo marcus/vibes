@@ -263,6 +263,38 @@ Offline is an explicit presence mode or the absence of any status. If the app qu
 
 This keeps v1 simple and matches the desired product behavior: "what was their latest vibe?" rather than a strict realtime online indicator.
 
+### Status Blob Extensibility
+
+The latest status blob is the central primitive. It should have a stable core plus typed optional cards.
+
+Core fields:
+
+- user identity summary
+- presence mode
+- manual status
+- derived vibe label
+- client day
+- `updated_at`
+
+Optional cards can represent things the user chooses to share:
+
+- `git_stats`
+- `agent_mix`
+- `repo_aliases`
+- `spotify`
+- `weather`
+- `harness`
+- future adapter-defined cards
+
+Each card should include:
+
+- `type`: stable card type string
+- `enabled`: whether the card is intended to be shared
+- `summary`: short display-friendly text when useful
+- `data`: card-specific JSON payload
+
+Adapters can produce cards locally. The publish layer decides which enabled cards enter the final status blob based on privacy config. The relay should treat cards as JSON and avoid interpreting card-specific details except for basic validation and size limits.
+
 ### Relay Data Model
 
 Use SQLite with a deliberately small schema. The relay should be flexible enough to evolve, but the first version needs concrete tables so auth, invites, and feed reads are not improvised.
@@ -301,6 +333,7 @@ CREATE TABLE invites (
   id TEXT PRIMARY KEY,
   code_hash TEXT NOT NULL UNIQUE,
   creator_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invite_url_path TEXT NOT NULL UNIQUE,
   accepted_by_user_id TEXT REFERENCES users(id),
   created_at TEXT NOT NULL,
   accepted_at TEXT,
@@ -327,6 +360,7 @@ Notes:
 - `payload_json` stores the publishable status blob, not raw scanner output.
 - `friendships` can store reciprocal rows for simpler feed queries, or one canonical row if the implementation prefers that. Pick one and keep it consistent.
 - `expires_at` on invites is allowed because invite lifetime is different from status lifetime.
+- `invite_url_path` is the public magic-link path, for example `/invite/<code>`.
 
 ### Auth Model
 
@@ -340,6 +374,24 @@ Use bearer tokens for v1.
 - Feed reads return the caller's own status plus accepted friends' latest statuses.
 
 This leaves room for future signed status blobs or keypair identity without blocking the hackathon on a full auth system.
+
+### Magic-Link Invites
+
+Friend setup should use a magic-link style flow.
+
+Recommended v1 flow:
+
+1. Existing user asks the relay to create an invite.
+2. Relay returns a URL like `https://relay.example.com/invite/<code>`.
+3. The raw invite code is shown only in the URL. The relay stores `code_hash`.
+4. Friend opens the link.
+5. The page or app route asks for handle/display name if needed.
+6. Accepting the invite creates or identifies the accepting user, creates their token, and creates a mutual friendship.
+7. The friend copies or imports the resulting relay URL and token into the Mac app. Later this can become a custom URL scheme.
+
+Invites should be single-use by default. They may have `expires_at`, and they can be manually revoked. Accepting an invite should never reveal the creator's token.
+
+For hackathon speed, a minimal HTML response or CLI-assisted accept flow is fine as long as the URL can be shared directly.
 
 ## Federation / Distributed Future
 
@@ -388,8 +440,7 @@ Default shared status should include only:
 - derived vibe label
 - aggregate daily stats
 - last updated timestamp
-- optional agent percentages
-- optional repo aliases
+- optional enabled cards such as agent percentages, repo aliases, Spotify, weather, or harness/tool info
 
 Default shared status should avoid:
 
@@ -415,27 +466,50 @@ The app is for friends, but still avoid accidental oversharing.
   "manual_status": "working on Vibes",
   "derived_status": "vibing",
   "day": "2026-06-06",
-  "totals": {
-    "commits": 7,
-    "files_changed": 31,
-    "insertions": 1248,
-    "deletions": 402,
-    "uncommitted_insertions": 184,
-    "uncommitted_deletions": 22,
-    "repos_touched": 4
-  },
-  "agents": {
-    "codex": 0.65,
-    "claude_code": 0.25,
-    "grok_build": 0.1
-  },
-  "repo_aliases": ["Vibes", "Braid"],
-  "spotify": {
-    "enabled": true,
-    "artist": "Boards of Canada",
-    "track": "Dayvan Cowboy"
-  },
-  "updated_at": "2026-06-06T18:02:00Z"
+  "updated_at": "2026-06-06T18:02:00Z",
+  "cards": [
+    {
+      "type": "git_stats",
+      "enabled": true,
+      "summary": "4 repos touched - 7 commits - +1,248 / -402 LOC",
+      "data": {
+        "commits": 7,
+        "files_changed": 31,
+        "insertions": 1248,
+        "deletions": 402,
+        "uncommitted_insertions": 184,
+        "uncommitted_deletions": 22,
+        "repos_touched": 4
+      }
+    },
+    {
+      "type": "agent_mix",
+      "enabled": true,
+      "summary": "Codex 65%, Claude Code 25%, Grok Build 10%",
+      "data": {
+        "codex": 0.65,
+        "claude_code": 0.25,
+        "grok_build": 0.1
+      }
+    },
+    {
+      "type": "repo_aliases",
+      "enabled": true,
+      "summary": "Vibes, Braid",
+      "data": {
+        "aliases": ["Vibes", "Braid"]
+      }
+    },
+    {
+      "type": "spotify",
+      "enabled": true,
+      "summary": "Boards of Canada - Dayvan Cowboy",
+      "data": {
+        "artist": "Boards of Canada",
+        "track": "Dayvan Cowboy"
+      }
+    }
+  ]
 }
 ```
 
@@ -478,7 +552,7 @@ Last update: 8m ago
 
 Use a simple JSON config file for v1. Setup agents are expected to generate or edit this file, so human-friendly YAML is not required.
 
-Store relay auth tokens in Keychain when practical. If a hackathon build temporarily stores a token in config, keep that clearly marked as temporary and avoid committing local config files.
+Store relay auth tokens in the macOS Keychain. The config file should reference the relay URL and local identity, but not store raw bearer tokens. If a hackathon build temporarily stores a token in config, keep that clearly marked as temporary and avoid committing local config files.
 
 Example:
 
@@ -528,6 +602,16 @@ Example:
   },
   "server": {
     "relay_url": "https://vibes.example.com"
+  },
+  "sharing": {
+    "cards": {
+      "git_stats": true,
+      "agent_mix": true,
+      "repo_aliases": true,
+      "spotify": false,
+      "weather": false,
+      "harness": false
+    }
   }
 }
 ```
@@ -538,15 +622,48 @@ The project should be friendly to agent-assisted setup. Users should ideally be 
 
 The app or agent should help answer:
 
-- Which repos should be tracked?
+- Which repos should be tracked? Repo tracking is explicit opt-in.
 - Should repo names be published or hidden?
 - Which coding agents do you use?
+- Which optional cards should be shared?
 - Should Spotify be included?
+- Should weather or local harness/tool info be included?
 - Should work repos be excluded?
 - What handle/display name should friends see?
 - What relay should be used?
 
-For v1, a simple guided setup or generated config file is enough.
+For v1, a simple guided setup or generated config file is enough. Repo tracking should be explicit opt-in: an agent should ask which repos to track during setup, write only those repos into config, and later additions should require the user to manually add the repo or ask an agent to add it.
+
+## Relay CLI and Agent Interface
+
+The relay should include a small CLI for bootstrap, admin, and agent-driven operations. Agents should use the CLI rather than editing SQLite directly.
+
+Initial commands:
+
+```bash
+node server/cli.mjs db migrate
+node server/cli.mjs users create --handle marcus --display-name Marcus
+node server/cli.mjs tokens create --user marcus --label "Marcus MacBook"
+node server/cli.mjs invites create --user marcus
+node server/cli.mjs invites accept --code <code> --handle ken --display-name Ken
+node server/cli.mjs friends list --user marcus
+node server/cli.mjs tokens revoke --token-id <id>
+node server/cli.mjs status get --user marcus
+```
+
+The CLI should print machine-readable JSON by default or via `--json`, so agents can call it safely and parse results.
+
+## Decision Notes
+
+An ADR is an Architecture Decision Record: a short document that records one important technical/product decision, the alternatives considered, and the consequences. Vibes does not need heavy process, but a few decisions should be written down once implementation starts so future agents do not reopen the same questions.
+
+Good first ADRs:
+
+- latest-status-only relay, no status expiry
+- bearer token auth for v1
+- no Mac App Store sandbox target
+- JSON config generated by agents
+- extensible status cards as the sharing model
 
 ## Build Priorities
 
@@ -626,6 +743,8 @@ Build minimal API:
 - `POST /api/invites`
 - `POST /api/invites/accept`
 - `POST /api/tokens/revoke`
+- `GET /invite/:code`
+- `POST /invite/:code/accept`
 
 Use bearer token auth for v1.
 
