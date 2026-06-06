@@ -31,7 +31,9 @@ struct ContentView: View {
         .textFieldStyle(.roundedBorder)
 
       HStack {
-        Button("Scan Now") {}
+        Button("Refresh") {}
+          .buttonStyle(.borderless)
+          .foregroundStyle(.secondary)
         Spacer()
         Text("Relay: not configured")
           .foregroundStyle(.secondary)

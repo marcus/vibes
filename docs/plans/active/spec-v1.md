@@ -228,7 +228,7 @@ SwiftUI macOS app:
 - manual status editor
 - friend feed UI
 - periodic scan/publish
-- scan-now action
+- secondary manual refresh action for debugging or impatient users
 
 The app will not target the Mac App Store. V1 can be signed for local distribution without App Store sandboxing. This keeps arbitrary local repo scanning straightforward and avoids security-scoped bookmark work during the hackathon.
 
@@ -397,10 +397,31 @@ Recommended v1 flow:
 6. Accepting the invite can create the accepting user for v1.
 7. Accepting the invite creates the accepting user's token and creates a mutual friendship.
 8. The browser shows the raw token exactly once and also offers a downloadable config JSON snippet. Later this can become a custom URL scheme.
+9. On first launch, the app can import the downloaded config JSON, accept a pasted config/token, or open a local config file selected by the user.
 
 Invites should be single-use by default, expire after 7 days, and be manually revocable. Accepting an invite should never reveal the creator's token.
 
 For hackathon speed, a minimal HTML response is enough as long as the URL can be shared directly.
+
+### First-Launch Setup
+
+For non-developers, first launch should be a setup screen rather than an empty app.
+
+The setup screen should support:
+
+- importing a downloaded invite/config JSON file
+- pasting a relay URL plus one-time token
+- opening an existing config from `~/Library/Application Support/Vibes/config.json`
+
+After import, the app should:
+
+1. validate the relay URL and token with the relay
+2. write config JSON to Application Support
+3. store the raw token in Keychain
+4. remove the raw token from the persisted config if present
+5. start automatic scan/publish/feed refresh
+
+The app should not require the user to press "Scan Now" during normal operation.
 
 ## Federation / Distributed Future
 
@@ -702,13 +723,14 @@ Good first ADRs:
 - relay publish
 - friend feed
 - at least basic invite/friend setup
+- automatic scan/publish/feed refresh
 - optional menu bar companion
 
 ### Should Have
 
 - remember window position
-- scan every few minutes
-- scan-now button
+- tune scan interval and stale-state display
+- secondary manual refresh action
 - clean visual design
 - derived vibe label
 - repo aliases
@@ -782,7 +804,8 @@ Build the small SwiftUI window:
 - friend rows using mock data
 - own status editor
 - mode toggle
-- scan-now button
+- automatic refresh loop
+- secondary manual refresh action
 - simple settings/config
 
 ### Phase 7: Full Relay API
