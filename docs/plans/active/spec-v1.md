@@ -74,6 +74,8 @@ Example:
 Marcus is online, not broadcasting
 ```
 
+Quiet should publish a latest status with `mode: "quiet"` and no share cards. It should not preserve old broadcast cards in the feed while hiding them client-side.
+
 ### Offline / Invisible
 
 Friends see user as offline or last seen, depending on implementation.
@@ -263,6 +265,8 @@ Status records do not expire. If a user has ever published a status, friends can
 
 Offline is an explicit presence mode or the absence of any status. If the app quits without publishing an Offline status, the previous status remains visible as stale.
 
+Quiet is also explicit. Publishing Quiet replaces the user's latest status blob with a quiet payload containing no optional cards.
+
 This keeps v1 simple and matches the desired product behavior: "what was their latest vibe?" rather than a strict realtime online indicator.
 
 ### Status Blob Extensibility
@@ -394,7 +398,7 @@ Recommended v1 flow:
 7. Accepting the invite creates the accepting user's token and creates a mutual friendship.
 8. The browser shows the raw token exactly once and also offers a downloadable config JSON snippet. Later this can become a custom URL scheme.
 
-Invites should be single-use by default. They may have `expires_at`, and they can be manually revoked. Accepting an invite should never reveal the creator's token.
+Invites should be single-use by default, expire after 7 days, and be manually revocable. Accepting an invite should never reveal the creator's token.
 
 For hackathon speed, a minimal HTML response is enough as long as the URL can be shared directly.
 
@@ -737,13 +741,41 @@ Good first ADRs:
 
 ## One-Day Execution Plan
 
-### Phase 1: Local Scanner
+### Phase 1: Relay Schema and CLI
+
+Build the SQLite schema, migration path, and relay CLI first.
+
+Initial CLI capabilities:
+
+- migrate database
+- create users
+- create/revoke tokens
+- create/accept invites
+- list friends
+- inspect latest status
+
+### Phase 2: Relay Auth and Invites
+
+Build bearer token auth and the magic-link invite accept page.
+
+### Phase 3: Status API
+
+Build status publish and feed API:
+
+- `POST /api/status`
+- `GET /api/feed`
+
+### Phase 4: Client Config and Keychain
+
+Build Swift config loading and Keychain token storage.
+
+### Phase 5: Local Scanner
 
 Build a local scanner that reads configured repo paths and produces aggregate daily JSON.
 
 This can initially be a Swift service or a separate helper command.
 
-### Phase 2: Local UI
+### Phase 6: Local UI
 
 Build the small SwiftUI window:
 
@@ -753,9 +785,9 @@ Build the small SwiftUI window:
 - scan-now button
 - simple settings/config
 
-### Phase 3: Relay
+### Phase 7: Full Relay API
 
-Build minimal API:
+Complete the minimal API:
 
 - `POST /api/status`
 - `GET /api/feed`
@@ -768,13 +800,13 @@ Build minimal API:
 
 Use bearer token auth for v1.
 
-### Phase 4: Real Friend Feed
+### Phase 8: Real Friend Feed
 
 Connect two running clients through the relay.
 
 Goal: Marcus and Ken can see each other's status update.
 
-### Phase 5: Polish
+### Phase 9: Polish
 
 Add:
 
