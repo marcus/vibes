@@ -242,7 +242,7 @@ The relay should store latest presence/status data and serve friend feeds. Use S
 
 Initial stack:
 
-- Node.js 22+
+- Node.js 20+
 - HTTP API
 - SQLite database
 - nginx reverse proxy

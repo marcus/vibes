@@ -33,8 +33,15 @@ ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "systemctl restart '${SERVICE_NAME}.service'
 echo "Checking ${DEPLOY_URL}..."
 SMOKE_FILE="$(mktemp -t vibes-deploy-smoke.XXXXXX)"
 STATUS=""
+CURL_RESOLVE_ARGS=()
+if [[ "${DEPLOY_HOST}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  DEPLOY_URL_HOST="$(node -e "const url = new URL(process.argv[1]); console.log(url.hostname)" "${DEPLOY_URL}")"
+  DEPLOY_URL_PORT="$(node -e "const url = new URL(process.argv[1]); console.log(url.port || (url.protocol === 'https:' ? '443' : '80'))" "${DEPLOY_URL}")"
+  CURL_RESOLVE_ARGS=(--resolve "${DEPLOY_URL_HOST}:${DEPLOY_URL_PORT}:${DEPLOY_HOST}")
+fi
+
 for attempt in {1..12}; do
-  STATUS="$(curl -sS -o "${SMOKE_FILE}" -w "%{http_code}" "${DEPLOY_URL}" || true)"
+  STATUS="$(curl "${CURL_RESOLVE_ARGS[@]}" -sS -o "${SMOKE_FILE}" -w "%{http_code}" "${DEPLOY_URL}" || true)"
   if [[ "${STATUS}" == "200" ]]; then
     break
   fi

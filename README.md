@@ -19,7 +19,7 @@ Hackathon scaffold. The repo is ready for client and relay implementation, with 
 ## Requirements
 
 - macOS with Xcode 26 or newer.
-- Node.js 22 or newer for the relay.
+- Node.js 20 or newer for the relay.
 - GitHub CLI for repo administration.
 - SSH access to the Open Tangle VPS for deployment.
 
