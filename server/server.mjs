@@ -17,7 +17,15 @@ function sendJson(res, statusCode, payload) {
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
 
-  if (req.method === "GET" && url.pathname === "/healthz") {
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/healthz") {
+    if (req.method === "HEAD") {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+      });
+      res.end();
+      return;
+    }
+
     sendJson(res, 200, {
       ok: true,
       service: "vibes-relay",
