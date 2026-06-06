@@ -1,0 +1,101 @@
+# AGENTS.md
+
+This repo is set up for a fast hackathon build. Keep changes focused, privacy-aware, and easy for another contributor to pick up.
+
+## Product Intent
+
+Vibes is a private ambient presence app for small groups of coding friends. It should feel warm, low-stakes, and technically useful without becoming a productivity dashboard.
+
+Core v1 flow:
+
+1. A Mac user configures local Git repos.
+2. The app scans aggregate daily activity.
+3. The user adds an optional manual status.
+4. The user chooses Broadcasting, Quiet, or Offline.
+5. Friends see each other's latest status through the relay.
+
+## Repo Map
+
+- `client/`: SwiftUI macOS app.
+- `server/`: Node relay service.
+- `deploy/`: nginx and systemd config.
+- `scripts/`: deployment helpers.
+- `docs/plans/active/spec-v1.md`: current product plan.
+- `docs/client-runbook.md`: client setup and build notes.
+- `docs/server-runbook.md`: relay deployment notes.
+
+## Implementation Priorities
+
+Work in this order unless the user says otherwise:
+
+1. Local Git stats scanner.
+2. SwiftUI app shell with mock feed, manual status, and mode picker.
+3. Relay API and SQLite schema.
+4. Real client publish/feed integration.
+5. Invite flow and friend relationships.
+6. Menu bar companion and window polish.
+
+## Privacy Constraints
+
+Default shared payloads may include:
+
+- handle and display name
+- presence mode
+- manual status
+- derived vibe label
+- aggregate daily stats
+- last updated timestamp
+- optional agent mix
+- optional repo aliases
+
+Default shared payloads must avoid:
+
+- raw repo paths
+- branch names
+- commit messages
+- filenames
+- exact editor or window activity
+- detailed process history
+- raw agent transcripts
+
+## Client Conventions
+
+- Use native SwiftUI for macOS.
+- Keep the main interface a small desktop window.
+- Prefer straightforward app state and service types over framework-heavy architecture until the product hardens.
+- If adding dependencies, document why in the README or runbook.
+- Keep the checked-in Xcode project buildable with `make client`.
+
+## Server Conventions
+
+- Prefer a tiny Node relay and SQLite for v1.
+- Keep the relay dumb: identity, invites, friends, latest status, feed.
+- Avoid public discovery and broad social graph behavior in v1.
+- Add API docs or curl examples as routes become real.
+- Do not commit secrets, tokens, database files, or production cert material.
+
+## Validation
+
+Before handing off changes, run the relevant checks:
+
+```bash
+make check
+```
+
+For client-only changes:
+
+```bash
+make client
+```
+
+For server-only changes:
+
+```bash
+make server-check
+```
+
+## Git
+
+- Keep commits small and descriptive.
+- Do not rewrite unrelated user changes.
+- Keep generated build products out of git.
