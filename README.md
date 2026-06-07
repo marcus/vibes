@@ -6,7 +6,7 @@ Vibes shows who is around, what kind of coding day they are having, and coarse d
 
 ## Status
 
-Hackathon scaffold. The repo has a checked-in Xcode project, a SvelteKit relay with SQLite and a working magic-link signup page, deploy scripts, and runbooks.
+Fully functional implementation. The repository includes a SwiftUI macOS client with local Git scanning and presence status derivation, a SvelteKit relay backed by SQLite with schema migrations, an invite-based friend flow, contract schema testing, and deployment playbooks.
 
 ## Project Shape
 

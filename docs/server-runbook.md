@@ -129,6 +129,8 @@ Implemented so far:
 - `POST /api/status`, `GET /api/feed`
 - `POST /api/friends/remove`, `POST /api/tokens/revoke`
 
-Still to build: broader admin tooling, packaged Mac app distribution, and fuller contract tests that exercise the HTTP routes end to end.
+Contract validation tests are located in [relay.test.js](file:///Users/marcusvorwaller/code/vibes/server/tests/relay.test.js). They load the contract fixtures from `shared/contract/` and verify that API requests and responses match both SvelteKit route logic and SwiftUI JSON models to prevent drift.
+
+Still to build: broader admin tooling and packaged Mac app distribution.
 
 Bearer token auth for v1. Identities, friend links, invites, and latest status blobs live in SQLite; the schema and migrations are in `server/src/lib/server/db.js`.
