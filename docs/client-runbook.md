@@ -61,7 +61,7 @@ Keep the checked-in project buildable with `make client`.
 
 ## Signed Release & Notarization
 
-Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app. Auto-updates are planned via Sparkle (see [docs/plans/active/client-auto-update.md](plans/active/client-auto-update.md)); this section covers the signing/notarization pipeline, which is independent of the Sparkle app integration.
+Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app with in-app updates via Sparkle (integrated; see [docs/plans/active/client-auto-update.md](plans/active/client-auto-update.md)). Sparkle 2.x is added as a SwiftPM dependency (`Package.resolved` is committed), the updater is wired in [VibesApp.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/VibesApp.swift) / [UpdaterController.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/UpdaterController.swift), and the Sparkle keys live in `Info.plist`.
 
 ### One-time setup (requires your Apple Developer account)
 
@@ -82,7 +82,8 @@ Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app.
    scripts/setup-notary.sh password vibes-notary marcus@vorwaller.net <TEAM_ID>
    ```
 4. **Bundle id** — `PRODUCT_BUNDLE_IDENTIFIER` is set to `com.opentangle.vibes`. This is permanent once an update-capable build ships; do not change it.
-5. **Sparkle EdDSA keys** — when Sparkle is integrated, run Sparkle's `generate_keys` once; private key stays in the Keychain, public key goes in `SUPublicEDKey`.
+5. **Sparkle EdDSA keys** — done. The keypair was generated with Sparkle's `generate_keys`; the private key is in the login Keychain and the public key `BoFhKL3O/oB9tBt3cctygi6yv7qMpl7peOYiQ+SVqAA=` is set as `SUPublicEDKey` in `Info.plist`. Back up the private key with `generate_keys -x <file>` and store it somewhere safe — losing it means you can never ship a verifiable update to existing users.
+6. **Appcast feed URL** — `SUFeedURL` in `Info.plist` is a placeholder (`https://updates.opentangle.com/vibes/appcast.xml`). Set the real public HTTPS URL where `appcast.xml` will live before the first release, and keep it stable forever after.
 
 ### Required release environment variables
 
@@ -110,11 +111,12 @@ Then upload the update zip (and DMG, if built) to the release host and publish `
 
 ### Old-to-new update QA
 
-Once Sparkle is wired in: install an older signed/notarized build into `/Applications`, host a test appcast with a newer signed archive, and use `Vibes → Check for Updates...` to confirm download, relaunch on the new version, and preserved config. Confirm the installed `SUPublicEDKey` matches the key that signed the test archive.
+Install an older signed/notarized build into `/Applications`, host a test appcast with a newer signed archive, and use `Vibes → Check for Updates...` to confirm download, relaunch on the new version, and preserved config. Confirm the installed `SUPublicEDKey` matches the key that signed the test archive. Build two versions by bumping `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` between `release-mac.sh` runs.
 
 ### Troubleshooting
 
 - **appcast 404 / invalid TLS** — appcast URL or host misconfigured; verify it loads over HTTPS.
+- **`generate-appcast.sh` hangs** — it's blocked on a macOS Keychain prompt for the EdDSA key; click "Always Allow", or set `VIBES_ED_KEY_FILE` to sign non-interactively.
 - **missing `CFBundleVersion`** — the app must carry version keys (it now does); a release with none breaks Sparkle version comparison.
 - **EdDSA signature mismatch** — the installed app's `SUPublicEDKey` does not match the signing private key. Most common Sparkle failure.
 - **app running from a read-only disk image** — updates can't apply; install to `/Applications` first.

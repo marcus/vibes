@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8B0000222F33A00100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 8B0000212F33A00100000001 /* Sparkle */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		8B0000012F33A00100000001 /* Vibes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vibes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -36,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8B0000222F33A00100000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +83,7 @@
 			);
 			name = Vibes;
 			packageProductDependencies = (
+				8B0000212F33A00100000001 /* Sparkle */,
 			);
 			productName = Vibes;
 			productReference = 8B0000012F33A00100000001 /* Vibes.app */;
@@ -108,6 +114,7 @@
 			mainGroup = 8B0000062F33A00100000001;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				8B0000202F33A00100000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8B0000072F33A00100000001 /* Products */;
@@ -302,15 +309,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		8B00000C2F33A00100000001 /* Build configuration list for PBXProject "Vibes" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8B00000D2F33A00100000001 /* Debug */,
-				8B00000E2F33A00100000001 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		8B0000082F33A00100000001 /* Build configuration list for PBXNativeTarget "Vibes" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -320,7 +318,35 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		8B00000C2F33A00100000001 /* Build configuration list for PBXProject "Vibes" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B00000D2F33A00100000001 /* Debug */,
+				8B00000E2F33A00100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8B0000202F33A00100000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8B0000212F33A00100000001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8B0000202F33A00100000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8B00000B2F33A00100000001 /* Project object */;
 }

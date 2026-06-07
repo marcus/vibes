@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -23,6 +24,14 @@ struct VibesApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @StateObject private var model = AppModel()
 
+  // Owns the Sparkle updater for the app's lifetime; starts it immediately so
+  // background checks run and `canCheckForUpdates` is observable.
+  private let updaterController = SPUStandardUpdaterController(
+    startingUpdater: true,
+    updaterDelegate: nil,
+    userDriverDelegate: nil
+  )
+
   var body: some Scene {
     WindowGroup {
       ContentView()
@@ -32,11 +41,17 @@ struct VibesApp: App {
         }
     }
     .windowResizability(.contentSize)
+    .commands {
+      CommandGroup(after: .appInfo) {
+        CheckForUpdatesView(updater: updaterController.updater)
+      }
+    }
 
     MenuBarExtra("Vibes", systemImage: "dot.radiowaves.left.and.right") {
       Button("Show Vibes") {
         NSApp.activate(ignoringOtherApps: true)
       }
+      CheckForUpdatesView(updater: updaterController.updater)
       Divider()
       Picker("Mode", selection: Binding(
         get: { model.mode },

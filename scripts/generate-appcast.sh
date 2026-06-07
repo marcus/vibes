@@ -66,9 +66,25 @@ or build the app once so SwiftPM resolves the Sparkle artifact."
 note "Using generate_appcast: ${GENERATE_APPCAST}"
 
 # --- Generate ----------------------------------------------------------------
+#
+# By default generate_appcast reads the EdDSA private key from the login
+# Keychain. The first time a given tool binary touches the key, macOS shows a
+# GUI authorization prompt — fine interactively (click "Always Allow"), but it
+# hangs headless/CI runs. Set VIBES_ED_KEY_FILE to a private-key file (exported
+# once via Sparkle's `generate_keys -x`) to sign non-interactively instead.
+
+key_args=()
+if [[ -n "${VIBES_ED_KEY_FILE:-}" ]]; then
+  [[ -f "${VIBES_ED_KEY_FILE}" ]] || die "VIBES_ED_KEY_FILE is set but not a file: ${VIBES_ED_KEY_FILE}"
+  key_args=(--ed-key-file "${VIBES_ED_KEY_FILE}")
+  note "Signing with key file ${VIBES_ED_KEY_FILE}"
+else
+  note "Signing with Keychain key (approve the macOS prompt if it appears)"
+fi
 
 note "Generating appcast from ${APPCAST_STAGING} with download prefix ${VIBES_APPCAST_BASE_URL}"
 "${GENERATE_APPCAST}" \
+  "${key_args[@]}" \
   --download-url-prefix "${VIBES_APPCAST_BASE_URL}/" \
   "${APPCAST_STAGING}"
 
