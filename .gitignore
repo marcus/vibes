@@ -16,6 +16,7 @@ npm-debug.log*
 
 # Local tooling
 .claude/
+.todos/
 
 # SvelteKit
 .svelte-kit/
