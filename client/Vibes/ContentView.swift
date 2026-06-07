@@ -19,7 +19,7 @@ struct ContentView: View {
 
 private struct SetupPanel: View {
   @EnvironmentObject private var model: AppModel
-  @State private var relayURL = ""
+  @State private var relayURL = "https://vibes.opentangle.com"
   @State private var token = ""
   @State private var handle = ""
   @State private var displayName = ""
@@ -30,7 +30,7 @@ private struct SetupPanel: View {
       Header(title: "vibes", subtitle: "private presence for coding friends")
 
       VStack(alignment: .leading, spacing: 12) {
-        Field("relay url", text: $relayURL, prompt: "https://vibes.example.com")
+        Field("relay url", text: $relayURL, prompt: "https://vibes.opentangle.com")
         Field("token", text: $token, prompt: "shown once on the invite page")
         HStack(spacing: 12) {
           Field("handle", text: $handle, prompt: "marcus")
