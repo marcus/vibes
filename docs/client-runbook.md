@@ -83,7 +83,7 @@ Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app 
    ```
 4. **Bundle id** — `PRODUCT_BUNDLE_IDENTIFIER` is set to `com.opentangle.vibes`. This is permanent once an update-capable build ships; do not change it.
 5. **Sparkle EdDSA keys** — done. The keypair was generated with Sparkle's `generate_keys`; the private key is in the login Keychain and the public key `BoFhKL3O/oB9tBt3cctygi6yv7qMpl7peOYiQ+SVqAA=` is set as `SUPublicEDKey` in `Info.plist`. Back up the private key with `generate_keys -x <file>` and store it somewhere safe — losing it means you can never ship a verifiable update to existing users.
-6. **Appcast feed URL** — `SUFeedURL` is `https://vibes.opentangle.com/appcast.xml`, served as a static file from the existing deployment (nginx; see [server-runbook.md](server-runbook.md)). Publish `release/appcast/appcast.xml` to that path on each release. Update **zips** can live anywhere public — `VIBES_APPCAST_BASE_URL` controls their download prefix (GitHub Releases or the same host). Keep the feed URL stable forever once shipped.
+6. **Appcast feed URL** — `SUFeedURL` is `https://vibes.opentangle.com/appcast.xml`, served as a static file from the existing deployment (nginx; see [server-runbook.md](server-runbook.md)). Publish `release/appcast/appcast.xml` to that path on each release. Update **zips** and first-download DMGs are self-hosted under `https://vibes.opentangle.com/downloads`; `VIBES_APPCAST_BASE_URL` must be `https://vibes.opentangle.com/downloads` for public releases. Keep the feed URL stable forever once shipped.
 
 ### Required release environment variables
 
@@ -97,22 +97,45 @@ Copy `.env.release.example` to `.env.release` (gitignored) and fill it in. Team 
 | `VIBES_NOTARY_PROFILE` | notarytool keychain profile name |
 | `VIBES_RELEASE_VERSION` | must equal project `MARKETING_VERSION` |
 | `VIBES_BUILD_NUMBER` | integer, must exceed last released build |
-| `VIBES_APPCAST_BASE_URL` | public download URL prefix for update archives |
-| `VIBES_BUILD_DMG` | `1` to also build + notarize a DMG |
+| `VIBES_APPCAST_BASE_URL` | public download URL prefix for update archives; public releases use `https://vibes.opentangle.com/downloads` |
+| `VIBES_BUILD_DMG` | `1` to also build + notarize a DMG; `make mac-release` sets this for the first-download artifact |
 
-### Build a signed, notarized release
+### Local release sequence
 
 ```bash
-scripts/release-mac.sh          # archive → export → notarize → staple → verify → stage update zip
-scripts/generate-appcast.sh     # EdDSA-sign archive + (re)generate release/appcast/appcast.xml
-scripts/publish-update.sh       # rsync appcast + archives to the host's updates dir
+open client/Vibes.xcodeproj
+# Bump MARKETING_VERSION and CURRENT_PROJECT_VERSION in the Vibes target.
+
+$EDITOR release/release-notes/<version>.md
+
+cp .env.release.example .env.release
+$EDITOR .env.release
+# Set VIBES_RELEASE_VERSION=<version>
+# Set VIBES_BUILD_NUMBER=<integer greater than the previous public build>
+# Confirm VIBES_APPCAST_BASE_URL=https://vibes.opentangle.com/downloads
+
+make mac-release
 ```
 
-`publish-update.sh` ships the staged files to `${DEPLOY_PATH}/releases` on the relay host (reusing `.env.deploy`) — appcast to `releases/appcast.xml`, archives to `releases/downloads/` — where nginx serves `https://vibes.opentangle.com/appcast.xml` and `https://vibes.opentangle.com/downloads/<archive>`. It uploads archives before the appcast and verifies the feed returns HTTP 200. See [release/README.md](../release/README.md) and the [server runbook](server-runbook.md#auto-update-channel) for the hosting side.
+`scripts/release-mac.sh` validates that `VIBES_RELEASE_VERSION` equals the project's `MARKETING_VERSION`, uses `VIBES_BUILD_NUMBER` as `CURRENT_PROJECT_VERSION`, archives the app, exports a Developer ID build, notarizes and staples the app, verifies code signing/Gatekeeper, creates `release/appcast/Vibes-<version>.zip`, and with `VIBES_BUILD_DMG=1` creates/notarizes/staples `build/Vibes-<version>.dmg`.
+
+`scripts/generate-appcast.sh` signs the update archive with Sparkle's EdDSA private key and regenerates `release/appcast/appcast.xml`.
+
+`scripts/publish-mac-release.sh` requires `.env.deploy` plus `.env.release`, including an explicit `DEPLOY_USER`. It uploads to `${DEPLOY_PATH}/releases`, refuses to overwrite existing versioned artifacts with different content, atomically repoints `/downloads/Vibes.dmg`, writes and uploads `build/latest.json` to `/downloads/latest.json`, uploads `/downloads/SHA256SUMS`, and smoke-checks the public URLs.
+
+After `make mac-release` succeeds:
+
+1. Open `https://vibes.opentangle.com/download`.
+2. Download and install the DMG into `/Applications`.
+3. Run old-version-to-new-version Sparkle QA before announcing the release.
+
+See [release/README.md](../release/README.md) and the [server runbook](server-runbook.md#auto-update-channel) for the public URL model, remote layout, and rollback commands.
 
 ### Old-to-new update QA
 
-Install an older signed/notarized build into `/Applications`, host a test appcast with a newer signed archive, and use `Vibes → Check for Updates...` to confirm download, relaunch on the new version, and preserved config. Confirm the installed `SUPublicEDKey` matches the key that signed the test archive. Build two versions by bumping `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` between `release-mac.sh` runs.
+Install an older signed/notarized build into `/Applications`, publish or host an appcast with a newer signed archive, and use `Vibes → Check for Updates...` to confirm Sparkle sees the update, shows the release notes, downloads the expected `Vibes-<version>.zip`, relaunches on the new version/build, and preserves config. Confirm the installed `SUPublicEDKey` matches the key that signed the archive. Build two versions by bumping `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` between `release-mac.sh` runs.
+
+Do this against the public release channel after `make mac-release`: the old installed app should update from `https://vibes.opentangle.com/appcast.xml` to the just-published build.
 
 ### Troubleshooting
 

@@ -111,9 +111,13 @@ make deploy
 The macOS app's Sparkle appcast and release downloads are served as static
 files from the same host, decoupled from relay deploys:
 
-- `https://${DEPLOY_DOMAIN}/appcast.xml` → `${DEPLOY_PATH}/releases/appcast.xml` (no-cache)
-- `https://${DEPLOY_DOMAIN}/downloads/<archive>` → `${DEPLOY_PATH}/releases/downloads/<archive>` (versioned, immutable, long-cached)
-- `https://${DEPLOY_DOMAIN}/downloads/Vibes.dmg` → stable first-download URL (no-cache), overwritten each release for the website button
+- `https://${DEPLOY_DOMAIN}/download` → SvelteKit download page with the primary DMG link and checksum link.
+- `https://${DEPLOY_DOMAIN}/downloads/Vibes.dmg` → `${DEPLOY_PATH}/releases/downloads/Vibes.dmg`; stable first-download URL, no-cache, atomically repointed each release.
+- `https://${DEPLOY_DOMAIN}/downloads/Vibes-<version>.dmg` → `${DEPLOY_PATH}/releases/downloads/Vibes-<version>.dmg`; immutable first-download artifact.
+- `https://${DEPLOY_DOMAIN}/downloads/Vibes-<version>.zip` → `${DEPLOY_PATH}/releases/downloads/Vibes-<version>.zip`; immutable Sparkle update archive.
+- `https://${DEPLOY_DOMAIN}/appcast.xml` → `${DEPLOY_PATH}/releases/appcast.xml`; no-cache Sparkle feed.
+- `https://${DEPLOY_DOMAIN}/downloads/latest.json` → `${DEPLOY_PATH}/releases/downloads/latest.json`; generated public manifest consumed by the download page.
+- `https://${DEPLOY_DOMAIN}/downloads/SHA256SUMS` → `${DEPLOY_PATH}/releases/downloads/SHA256SUMS`; generated checksums for the current DMG and ZIP.
 
 These `location` blocks live in [nginx.conf.template](file:///Users/marcusvorwaller/code/vibes/deploy/nginx.conf.template), so re-rendering and
 reinstalling the nginx config (bootstrap steps 3–4) enables them. The
@@ -121,9 +125,14 @@ reinstalling the nginx config (bootstrap steps 3–4) enables them. The
 `make deploy` never touches published releases.
 
 Publishing is part of the **client** release flow, not the relay deploy: after
-building a signed/notarized app and generating the appcast, run
-`scripts/publish-update.sh` (creates the dir on the host, uploads archives then
-the appcast, verifies HTTP 200). See [client-runbook.md](client-runbook.md#signed-release--notarization).
+building a signed/notarized app and generating the appcast, `make mac-release`
+runs `scripts/publish-mac-release.sh`. That script loads `.env.deploy` and
+`.env.release`, requires `DEPLOY_USER` explicitly, creates an incoming directory
+under `${DEPLOY_PATH}/releases/.incoming`, uploads the versioned DMG, versioned
+ZIP, appcast, generated `SHA256SUMS`, and generated `latest.json`, then installs
+them under `${DEPLOY_PATH}/releases`. It uploads the immutable artifacts before
+publishing the appcast and smoke-checks every public URL. See
+[client-runbook.md](client-runbook.md#local-release-sequence).
 
 If nginx was installed by an earlier bootstrap, re-render and reload once to
 pick up the update routes:
@@ -133,6 +142,76 @@ node scripts/render-deploy-config.mjs
 scp "deploy/rendered/${APP_NAME:-vibes}.nginx.conf" "$DEPLOY_USER@$DEPLOY_HOST:/etc/nginx/sites-available/$DEPLOY_DOMAIN"
 ssh "$DEPLOY_USER@$DEPLOY_HOST" "nginx -t && systemctl reload nginx"
 ```
+
+## Mac Release Rollback
+
+Rollback is two separate decisions: first-download DMG traffic and Sparkle
+updates. Repointing `/downloads/Vibes.dmg` changes what new website downloads
+receive. It does **not** downgrade users who already installed the bad build.
+Sparkle compares build numbers, so avoid forced downgrades; either remove the
+bad item from the appcast for users who have not updated yet, or ship a fixed
+hotfix with a higher `VIBES_BUILD_NUMBER`.
+
+Load the deploy variables locally before running the examples:
+
+```bash
+set -a
+source .env.deploy
+set +a
+```
+
+Repoint the stable DMG URL at a known-good version on the Linux VPS:
+
+```bash
+GOOD_VERSION=0.2.0
+
+ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$GOOD_VERSION" <<'REMOTE'
+set -euo pipefail
+deploy_path="$1"
+good_version="$2"
+downloads_dir="${deploy_path}/releases/downloads"
+
+test -f "${downloads_dir}/Vibes-${good_version}.dmg"
+ln -sfn "Vibes-${good_version}.dmg" "${downloads_dir}/Vibes.dmg.tmp"
+mv -Tf "${downloads_dir}/Vibes.dmg.tmp" "${downloads_dir}/Vibes.dmg"
+REMOTE
+
+curl -fsSI "https://${DEPLOY_DOMAIN}/downloads/Vibes.dmg"
+```
+
+If the remote filesystem or OS does not support symlink replacement with
+`mv -Tf`, copy the older DMG into place atomically instead:
+
+```bash
+GOOD_VERSION=0.2.0
+
+ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$GOOD_VERSION" <<'REMOTE'
+set -euo pipefail
+deploy_path="$1"
+good_version="$2"
+downloads_dir="${deploy_path}/releases/downloads"
+
+test -f "${downloads_dir}/Vibes-${good_version}.dmg"
+cp "${downloads_dir}/Vibes-${good_version}.dmg" "${downloads_dir}/Vibes.dmg.tmp"
+mv -f "${downloads_dir}/Vibes.dmg.tmp" "${downloads_dir}/Vibes.dmg"
+REMOTE
+
+curl -fsSI "https://${DEPLOY_DOMAIN}/downloads/Vibes.dmg"
+```
+
+For Sparkle, do one of these:
+
+- Publish an appcast that omits the bad version if the goal is to stop more
+  users from updating to it. Generate or restore `release/appcast/appcast.xml`
+  without the bad item, then upload it to `${DEPLOY_PATH}/releases/appcast.xml`
+  and verify `https://${DEPLOY_DOMAIN}/appcast.xml`.
+- Cut a hotfix with the same `MARKETING_VERSION` or a newer marketing version,
+  but always with a higher `CURRENT_PROJECT_VERSION` / `VIBES_BUILD_NUMBER` than
+  the bad build. Then run the normal `make mac-release` flow.
+
+Do not try to make Sparkle force-install an older build number over a newer bad
+install. That is not a normal rollback path and risks leaving users stranded on
+an update channel they cannot verify.
 
 ## Admin Area
 
