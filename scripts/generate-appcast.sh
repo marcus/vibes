@@ -83,10 +83,16 @@ else
 fi
 
 note "Generating appcast from ${APPCAST_STAGING} with download prefix ${VIBES_APPCAST_BASE_URL}"
-"${GENERATE_APPCAST}" \
-  "${key_args[@]}" \
-  --download-url-prefix "${VIBES_APPCAST_BASE_URL}/" \
-  "${APPCAST_STAGING}"
+if (( ${#key_args[@]} > 0 )); then
+  "${GENERATE_APPCAST}" \
+    "${key_args[@]}" \
+    --download-url-prefix "${VIBES_APPCAST_BASE_URL}/" \
+    "${APPCAST_STAGING}"
+else
+  "${GENERATE_APPCAST}" \
+    --download-url-prefix "${VIBES_APPCAST_BASE_URL}/" \
+    "${APPCAST_STAGING}"
+fi
 
 [[ -f "${APPCAST_XML}" ]] || die "generate_appcast did not produce ${APPCAST_XML}"
 
