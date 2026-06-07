@@ -63,10 +63,11 @@ The deploy script reads `.env.deploy` automatically when present.
 
 ## First-Time Bootstrap
 
-The host needs Node.js 20+ and npm. `make deploy` runs `npm ci && npm run build`
-on the host, so better-sqlite3 is compiled there for the server's architecture;
-its prebuilt binaries cover common Linux targets, otherwise install `build-essential`
-and `python3`.
+The host needs Node.js 20, 22, or 24 and npm. Node 26 is not currently supported
+by the relay's SQLite native dependency. `make deploy` runs `npm ci && npm run
+build` on the host, so better-sqlite3 is compiled there for the server's
+architecture; its prebuilt binaries cover common Linux targets, otherwise
+install `build-essential` and `python3`.
 
 Load your deploy environment before running the bootstrap commands:
 

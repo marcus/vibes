@@ -19,7 +19,7 @@ Hackathon scaffold. The repo has a checked-in Xcode project, a SvelteKit relay w
 ## Requirements
 
 - macOS with Xcode 26 or newer.
-- Node.js 20 or newer for the relay.
+- Node.js 20, 22, or 24 for the relay. Node 26 is not supported by the current SQLite native dependency.
 - GitHub CLI for repo administration.
 - SSH access to a VPS-style host for deployment.
 
