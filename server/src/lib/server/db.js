@@ -64,6 +64,34 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 2,
+    name: "admin_sessions",
+    sql: `
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        token_hash TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL,                 -- 'admin' for v1; 'user' reserved for self-serve
+        user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        last_seen_at TEXT,
+        expires_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
+
+      CREATE TABLE admin_audit (
+        id TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        detail TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_admin_audit_created_at ON admin_audit(created_at);
+    `,
+  },
 ];
 
 /**

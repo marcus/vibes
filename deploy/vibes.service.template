@@ -17,6 +17,11 @@ Environment=NODE_ENV=production
 # adapter-node validates form posts against ORIGIN for CSRF behind the proxy.
 Environment=ORIGIN=https://${DEPLOY_DOMAIN}
 Environment=VIBES_DB_PATH=${DEPLOY_PATH}/data/vibes.sqlite
+# Secrets (admin password, etc.) load from a root-only env file that is never
+# committed or rsynced. An absent file leaves the admin area disabled (404).
+# On the host:  install -m 600 /dev/null ${DEPLOY_PATH}/server/.env.local
+#               then add a line:  VIBES_ADMIN_PASSWORD=<long random value>
+EnvironmentFile=-${DEPLOY_PATH}/server/.env.local
 MemoryMax=512M
 LimitNOFILE=65535
 

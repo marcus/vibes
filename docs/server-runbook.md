@@ -106,6 +106,52 @@ ssh "$DEPLOY_USER@$DEPLOY_HOST" \
 make deploy
 ```
 
+## Admin Area
+
+The relay has a password-gated web admin at `/admin` for a single superuser:
+dashboard, user management (devices, tokens, invites, friends, disable/enable,
+delete), and a global invite view.
+
+It is **disabled unless `VIBES_ADMIN_PASSWORD` is set**. With no password the
+whole `/admin/*` tree returns 404, so an un-configured relay exposes no login
+surface.
+
+`VIBES_ADMIN_PASSWORD` is a runtime secret read by the running relay, so it lives
+in a root-only env file the systemd unit loads (`EnvironmentFile=-…/server/.env.local`),
+never in git or the rsync payload.
+
+Enable it on the host:
+
+```bash
+install -m 600 /dev/null "$DEPLOY_PATH/server/.env.local"
+echo "VIBES_ADMIN_PASSWORD=$(openssl rand -base64 32)" >> "$DEPLOY_PATH/server/.env.local"
+systemctl restart "${SERVICE_NAME}.service"
+```
+
+Then open `https://$DEPLOY_DOMAIN/admin/login`. Rotating the password is editing
+that one line and restarting; existing sessions are unaffected until they expire.
+
+Sessions are SQLite-backed and cookie-referenced (httpOnly, Secure, SameSite=Lax,
+scoped to `/admin`); only the token hash is stored. Login is per-IP rate limited
+and the password compare is constant-time.
+
+Bootstrap your own user (first invite token) once signed in:
+
+1. `/admin/users/new` → create your user (handle + display name), keep "mint
+   invite link" checked.
+2. Copy the one-time `/invite/<code>` link, open it, and accept it in the Mac app
+   to receive your bearer token.
+
+The CLI (`node cli.mjs users create` / `invites create`) remains a headless
+fallback.
+
+For local development, set the password inline:
+
+```bash
+VIBES_ADMIN_PASSWORD=dev VIBES_DB_PATH=data/dev.sqlite make server-dev
+# then open http://127.0.0.1:5173/admin/login
+```
+
 ## Verification
 
 ```bash
@@ -128,6 +174,7 @@ Implemented so far:
 - `POST /api/invites`, `GET /api/invites`, `POST /api/invites/:id/revoke`
 - `POST /api/status`, `GET /api/feed`
 - `POST /api/friends/remove`, `POST /api/tokens/revoke`
+- `/admin/*` — password-gated web admin (dashboard, users, invites); 404 when `VIBES_ADMIN_PASSWORD` is unset
 
 Contract validation tests are located in [relay.test.js](file:///Users/marcusvorwaller/code/vibes/server/tests/relay.test.js). They load the contract fixtures from `shared/contract/` and verify that API requests and responses match both SvelteKit route logic and SwiftUI JSON models to prevent drift.
 

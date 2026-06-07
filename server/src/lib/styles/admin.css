@@ -1,0 +1,41 @@
+/*
+ * Admin-only derived tokens. The canonical palette lives in tokens.css (and is
+ * mirrored by the SwiftUI client); these are web-admin extensions layered on top
+ * for the operator surfaces and are intentionally kept out of the shared file.
+ *
+ * Everything is derived from the existing warm ink/paper palette and the single
+ * accent. State colors stay quiet: the burnt-orange accent marks a live
+ * broadcast and primary/destructive actions; presence otherwise reads through
+ * neutral grays, never decoration.
+ */
+
+:root {
+  /* Subtle raised surfaces. We avoid borders/shadows; panels separate from the
+     page through a faint warm tint and spacing, with a hairline only when a
+     boundary is genuinely unavoidable. */
+  --admin-panel: rgba(26, 23, 20, 0.025);
+  --admin-panel-strong: rgba(26, 23, 20, 0.05);
+  --admin-row-hover: rgba(26, 23, 20, 0.035);
+  --admin-overlay: rgba(26, 23, 20, 0.32);
+
+  /* Presence + state dots. */
+  --admin-live: var(--vibe-accent);
+  --admin-quiet: var(--vibe-ash-500);
+  --admin-idle: var(--vibe-ash-300);
+
+  /* Destructive actions reuse the accent; a faint wash backs the danger zone. */
+  --admin-danger: var(--vibe-accent);
+  --admin-danger-wash: rgba(224, 83, 31, 0.08);
+
+  --admin-focus: var(--vibe-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --admin-panel: rgba(242, 238, 230, 0.035);
+    --admin-panel-strong: rgba(242, 238, 230, 0.07);
+    --admin-row-hover: rgba(242, 238, 230, 0.05);
+    --admin-overlay: rgba(10, 9, 8, 0.55);
+    --admin-danger-wash: rgba(224, 83, 31, 0.14);
+  }
+}
