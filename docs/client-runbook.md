@@ -83,7 +83,7 @@ Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app 
    ```
 4. **Bundle id** — `PRODUCT_BUNDLE_IDENTIFIER` is set to `com.opentangle.vibes`. This is permanent once an update-capable build ships; do not change it.
 5. **Sparkle EdDSA keys** — done. The keypair was generated with Sparkle's `generate_keys`; the private key is in the login Keychain and the public key `BoFhKL3O/oB9tBt3cctygi6yv7qMpl7peOYiQ+SVqAA=` is set as `SUPublicEDKey` in `Info.plist`. Back up the private key with `generate_keys -x <file>` and store it somewhere safe — losing it means you can never ship a verifiable update to existing users.
-6. **Appcast feed URL** — `SUFeedURL` in `Info.plist` is a placeholder (`https://updates.opentangle.com/vibes/appcast.xml`). Set the real public HTTPS URL where `appcast.xml` will live before the first release, and keep it stable forever after.
+6. **Appcast feed URL** — `SUFeedURL` is `https://vibes.opentangle.com/appcast.xml`, served as a static file from the existing deployment (nginx; see [server-runbook.md](server-runbook.md)). Publish `release/appcast/appcast.xml` to that path on each release. Update **zips** can live anywhere public — `VIBES_APPCAST_BASE_URL` controls their download prefix (GitHub Releases or the same host). Keep the feed URL stable forever once shipped.
 
 ### Required release environment variables
 

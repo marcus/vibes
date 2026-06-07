@@ -30,9 +30,8 @@
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
-	<!-- PLACEHOLDER: confirm the public appcast URL before the first release. -->
 	<key>SUFeedURL</key>
-	<string>https://updates.opentangle.com/vibes/appcast.xml</string>
+	<string>https://vibes.opentangle.com/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>BoFhKL3O/oB9tBt3cctygi6yv7qMpl7peOYiQ+SVqAA=</string>
 	<key>SUVerifyUpdateBeforeExtraction</key>
