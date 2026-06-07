@@ -46,6 +46,26 @@ server {
         add_header Cache-Control "no-cache, must-revalidate" always;
     }
 
+    location = /downloads/SHA256SUMS {
+        alias ${DEPLOY_PATH}/releases/downloads/SHA256SUMS;
+        default_type text/plain;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Cache-Control "no-cache, must-revalidate" always;
+    }
+
+    location = /downloads/latest.json {
+        alias ${DEPLOY_PATH}/releases/downloads/latest.json;
+        default_type application/json;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Cache-Control "no-cache, must-revalidate" always;
+    }
+
     location /downloads/ {
         alias ${DEPLOY_PATH}/releases/downloads/;
         autoindex off;
