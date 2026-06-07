@@ -143,9 +143,12 @@ if [[ "${VIBES_BUILD_DMG:-0}" == "1" ]]; then
   ditto "${APP_PATH}" "${DMG_STAGE}/${APP_NAME}.app"
   ln -s /Applications "${DMG_STAGE}/Applications"
   hdiutil create -volname "${APP_NAME}" -srcfolder "${DMG_STAGE}" -ov -format UDZO "${DMG_PATH}"
+  note "Signing DMG..."
+  codesign --force --sign "${VIBES_CODESIGN_IDENTITY}" --timestamp "${DMG_PATH}"
   note "Notarizing DMG..."
   xcrun notarytool submit "${DMG_PATH}" --keychain-profile "${VIBES_NOTARY_PROFILE}" --wait
   xcrun stapler staple "${DMG_PATH}"
+  codesign --verify --verbose=2 "${DMG_PATH}"
   spctl --assess --type open --context context:primary-signature --verbose "${DMG_PATH}"
   note "DMG ready: ${DMG_PATH}"
 fi
