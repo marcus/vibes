@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { writeTx } from "./db.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_HANDLE_LENGTH = 32;
 const MAX_STATUS_BYTES = 32 * 1024;
 const MODES = new Set(["broadcasting", "quiet", "offline"]);
 const MODE_RANK = { offline: 0, quiet: 1, broadcasting: 2 };
@@ -26,6 +27,38 @@ const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 /** Raw tokens and invite codes are never stored; only their hashes are. */
 const newSecret = (bytes) => randomBytes(bytes).toString("base64url");
+
+function publicUser(user) {
+  if (!user) return null;
+  return { handle: user.handle, display_name: user.display_name };
+}
+
+function trimHandleToLength(handle, maxLength = MAX_HANDLE_LENGTH) {
+  return handle.slice(0, maxLength).replace(/-+$/g, "") || "friend".slice(0, maxLength);
+}
+
+/**
+ * Build a URL-safe default handle base from a display name. This is deliberately
+ * stricter than admin-created handles: app-first handles use dashes only.
+ * @param {string | null | undefined} displayName
+ */
+export function deriveHandleBase(displayName) {
+  const base = String(displayName ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return trimHandleToLength(base || "friend");
+}
+
+function handleCandidate(base, attempt) {
+  if (attempt === 1) return trimHandleToLength(base);
+  const suffix = `-${attempt}`;
+  return `${trimHandleToLength(base, MAX_HANDLE_LENGTH - suffix.length)}${suffix}`;
+}
 
 /**
  * @param {import('better-sqlite3').Database} db
@@ -62,6 +95,34 @@ export function createUser(db, { handle, displayName }) {
     throw err;
   }
   return { id, handle: cleanHandle, display_name: cleanName };
+}
+
+/**
+ * Self-register an app user and first device token in one write transaction.
+ * @param {import('better-sqlite3').Database} db
+ * @param {{ displayName: string, deviceLabel?: string | null, handle?: string | null }} input
+ */
+export function registerUser(db, { displayName, deviceLabel = null, handle = null }) {
+  const handleSource = String(handle ?? "").trim() || displayName;
+  const base = deriveHandleBase(handleSource);
+
+  return writeTx(db, () => {
+    for (let attempt = 1; attempt <= 1000; attempt += 1) {
+      try {
+        const user = createUser(db, {
+          handle: handleCandidate(base, attempt),
+          displayName,
+        });
+        const token = createToken(db, user.id, deviceLabel);
+        return { user, token };
+      } catch (err) {
+        if (err instanceof RelayError && err.code === "handle_taken") continue;
+        throw err;
+      }
+    }
+
+    throw new RelayError("handle_taken", "Could not find an available handle.", 409);
+  });
 }
 
 /**
@@ -199,13 +260,13 @@ export function inviteState(invite) {
 }
 
 /**
- * Accept an invite: create the accepting user, mint their token, mark the
- * invite used, and create the mutual friendship. All or nothing.
+ * Accept an invite for an existing user: mark the invite used and create the
+ * mutual friendship. All or nothing.
  * @param {import('better-sqlite3').Database} db
  * @param {string} code
- * @param {{ handle: string, displayName: string, deviceLabel?: string|null }} input
+ * @param {{ acceptingUserId: string }} input
  */
-export function acceptInvite(db, code, { handle, displayName, deviceLabel = null }) {
+export function acceptInvite(db, code, { acceptingUserId }) {
   // writeTx runs this in an IMMEDIATE transaction, so two concurrent accepts of
   // the same code cannot both read it as open before either writes — this is
   // what keeps the single-use guarantee under concurrency.
@@ -222,21 +283,33 @@ export function acceptInvite(db, code, { handle, displayName, deviceLabel = null
       );
     }
 
-    const user = createUser(db, { handle, displayName });
-    const token = createToken(db, user.id, deviceLabel);
+    const friendId = String(acceptingUserId ?? "").trim();
+    if (friendId === invite.creator_user_id) {
+      throw new RelayError("invite_self", "You cannot accept your own invite.", 400);
+    }
 
+    const inviter = getUserIdentity(db, invite.creator_user_id);
+    const friend = getUserIdentity(db, friendId);
+    if (!friend) {
+      throw new RelayError("not_found", "Accepting user was not found.", 404);
+    }
+    if (!inviter) {
+      throw new RelayError("invite_unusable", "This invite is not valid.", 410);
+    }
+
+    const acceptedAt = now();
     db.prepare(
       "UPDATE invites SET accepted_by_user_id = ?, accepted_at = ? WHERE id = ?",
-    ).run(user.id, now(), invite.id);
+    ).run(friend.id, acceptedAt, invite.id);
 
     const link = db.prepare(
       `INSERT OR IGNORE INTO friendships (user_id, friend_user_id, state, created_at)
        VALUES (?, ?, 'accepted', ?)`,
     );
-    link.run(invite.creator_user_id, user.id, now());
-    link.run(user.id, invite.creator_user_id, now());
+    link.run(inviter.id, friend.id, acceptedAt);
+    link.run(friend.id, inviter.id, acceptedAt);
 
-    return { user, token };
+    return { inviter: publicUser(inviter), friend: publicUser(friend) };
   });
 }
 
@@ -534,7 +607,11 @@ export function revokeToken(db, userId, tokenId) {
  * @param {string} creatorUserId
  */
 export function getUserPublic(db, creatorUserId) {
+  return publicUser(getUserIdentity(db, creatorUserId));
+}
+
+function getUserIdentity(db, userId) {
   return db
-    .prepare("SELECT handle, display_name FROM users WHERE id = ?")
-    .get(creatorUserId);
+    .prepare("SELECT id, handle, display_name FROM users WHERE id = ?")
+    .get(userId);
 }

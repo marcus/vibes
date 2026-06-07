@@ -53,16 +53,19 @@ status(marcus, "marcus-mbp", "broadcasting", "MacBook Pro", { manual: "wiring up
 status(marcus, "marcus-mini", "quiet", "Mac mini", { ageMin: 50 });
 
 const inviteKen = createInvite(db, marcus.id);
-const { user: ken } = acceptInvite(db, inviteKen.code, { handle: "ken", displayName: "Ken Norton", deviceLabel: "Ken MBP" });
+const ken = createUser(db, { handle: "ken", displayName: "Ken Norton" });
+acceptInvite(db, inviteKen.code, { acceptingUserId: ken.id });
 createToken(db, ken.id, "Ken MBP");
 status(ken, "ken-1", "broadcasting", "Ken MBP", { manual: "refactoring the scanner", ageMin: 9 });
 
 const inviteSam = createInvite(db, marcus.id);
-const { user: sam } = acceptInvite(db, inviteSam.code, { handle: "sam", displayName: "Sam Rivera", deviceLabel: "Sam Air" });
+const sam = createUser(db, { handle: "sam", displayName: "Sam Rivera" });
+acceptInvite(db, inviteSam.code, { acceptingUserId: sam.id });
 status(sam, "sam-1", "quiet", "Sam Air", { ageMin: 120 });
 
 const inviteAvery = createInvite(db, ken.id);
-const { user: avery } = acceptInvite(db, inviteAvery.code, { handle: "avery", displayName: "Avery Chen" });
+const avery = createUser(db, { handle: "avery", displayName: "Avery Chen" });
+acceptInvite(db, inviteAvery.code, { acceptingUserId: avery.id });
 // Avery stays offline (no status) and disabled.
 db.prepare("UPDATE users SET disabled_at = ? WHERE id = ?").run(new Date().toISOString(), avery.id);
 

@@ -70,7 +70,8 @@ describe("listUsers", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     createToken(db, marcus.id, "MacBook");
     const invite = createInvite(db, marcus.id);
-    acceptInvite(db, invite.code, { handle: "ken", displayName: "Ken" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     upsertStatus(db, marcus, broadcastPayload());
 
     const users = listUsers(db);
@@ -108,10 +109,8 @@ describe("getUserDetail", () => {
   it("returns profile, devices, tokens, invites, friends, and origin", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const invite = createInvite(db, marcus.id);
-    const { user: ken } = acceptInvite(db, invite.code, {
-      handle: "ken",
-      displayName: "Ken",
-    });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     createToken(db, ken.id, "Ken laptop");
     upsertStatus(db, ken, broadcastPayload({ device_id: "ken-1" }));
 
@@ -143,7 +142,8 @@ describe("listAllInvites", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const open = createInvite(db, marcus.id);
     const used = createInvite(db, marcus.id);
-    acceptInvite(db, used.code, { handle: "ken", displayName: "Ken" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    acceptInvite(db, used.code, { acceptingUserId: ken.id });
 
     const all = listAllInvites(db);
     expect(all).toHaveLength(2);
@@ -159,7 +159,8 @@ describe("listAllInvites", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     createInvite(db, marcus.id);
     const used = createInvite(db, marcus.id);
-    acceptInvite(db, used.code, { handle: "ken", displayName: "Ken" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    acceptInvite(db, used.code, { acceptingUserId: ken.id });
     expect(listAllInvites(db, { state: "open" })).toHaveLength(1);
     expect(listAllInvites(db, { state: "accepted" })).toHaveLength(1);
     expect(listAllInvites(db, { state: "revoked" })).toHaveLength(0);
@@ -171,7 +172,8 @@ describe("dashboardStats", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     createToken(db, marcus.id, "MacBook");
     const invite = createInvite(db, marcus.id);
-    acceptInvite(db, invite.code, { handle: "ken", displayName: "Ken" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     createInvite(db, marcus.id); // an extra open invite
     upsertStatus(db, marcus, broadcastPayload());
 
@@ -222,10 +224,8 @@ describe("deleteUser", () => {
   it("cascades tokens, friendships, invites, statuses and nulls accepted_by", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const invite = createInvite(db, marcus.id);
-    const { user: ken } = acceptInvite(db, invite.code, {
-      handle: "ken",
-      displayName: "Ken",
-    });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     createToken(db, ken.id, "Ken laptop");
     upsertStatus(db, ken, broadcastPayload({ device_id: "ken-1" }));
 
@@ -265,7 +265,8 @@ describe("cross-user invite and token control", () => {
   it("removes a friendship by user ids in both directions", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const invite = createInvite(db, marcus.id);
-    const { user: ken } = acceptInvite(db, invite.code, { handle: "ken", displayName: "Ken" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     adminRemoveFriendship(db, marcus.id, ken.id);
     expect(db.prepare("SELECT COUNT(*) AS n FROM friendships").get().n).toBe(0);
   });
@@ -278,7 +279,8 @@ describe("cross-user invite and token control", () => {
   it("refuses to revoke an already-accepted invite", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const invite = createInvite(db, marcus.id);
-    acceptInvite(db, invite.code, { handle: "ken", displayName: "Ken" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     expect(() => adminRevokeInvite(db, invite.id)).toThrow(RelayError);
   });
 

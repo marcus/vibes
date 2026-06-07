@@ -10,10 +10,12 @@ import {
   createInvite,
   createToken,
   createUser,
+  deriveHandleBase,
   getFeed,
   getInviteByCode,
   inviteState,
   listInvites,
+  registerUser,
   removeFriend,
   revokeInvite,
   revokeToken,
@@ -34,6 +36,17 @@ function fixture(name) {
       "utf8",
     ),
   );
+}
+
+function expectRelayError(fn, code, status) {
+  try {
+    fn();
+    throw new Error("Expected RelayError");
+  } catch (err) {
+    expect(err).toBeInstanceOf(RelayError);
+    expect(err.code).toBe(code);
+    if (status) expect(err.status).toBe(status);
+  }
 }
 
 describe("migrations", () => {
@@ -57,6 +70,12 @@ describe("migrations", () => {
 });
 
 describe("users", () => {
+  it("derives stable handle bases from display names", () => {
+    expect(deriveHandleBase("  Dána Scully!!  ")).toBe("dana-scully");
+    expect(deriveHandleBase("你好")).toBe("friend");
+    expect(deriveHandleBase("a".repeat(80))).toHaveLength(32);
+  });
+
   it("rejects a duplicate handle", () => {
     createUser(db, { handle: "marcus", displayName: "Marcus" });
     expect(() => createUser(db, { handle: "marcus", displayName: "Marc" })).toThrow(
@@ -75,6 +94,47 @@ describe("users", () => {
     expect(() => createUser(db, { handle: "mar cus", displayName: "Marcus" })).toThrow(
       RelayError,
     );
+  });
+
+  it("registerUser creates user and token together", () => {
+    const { user, token } = registerUser(db, {
+      displayName: "Dana Scully",
+      deviceLabel: "Dana MacBook",
+    });
+
+    expect(user.handle).toBe("dana-scully");
+    expect(token.token).toBeTruthy();
+    expect(authenticateToken(db, token.token).user.id).toBe(user.id);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM users").get().n).toBe(1);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM auth_tokens").get().n).toBe(1);
+  });
+
+  it("registerUser derives unique handles from duplicate display names", () => {
+    const first = registerUser(db, { displayName: "Dana" });
+    const second = registerUser(db, { displayName: "Dana" });
+
+    expect(first.user.handle).toBe("dana");
+    expect(second.user.handle).toBe("dana-2");
+  });
+
+  it("registerUser keeps suffixed handles within the handle limit", () => {
+    const name = "Dana " + "A".repeat(50);
+    const first = registerUser(db, { displayName: name });
+    const second = registerUser(db, { displayName: name });
+
+    expect(first.user.handle).toHaveLength(32);
+    expect(second.user.handle).toHaveLength(32);
+    expect(second.user.handle.endsWith("-2")).toBe(true);
+  });
+
+  it("registerUser rejects invalid display names without creating a token", () => {
+    expectRelayError(
+      () => registerUser(db, { displayName: "   ", deviceLabel: "MacBook" }),
+      "invalid_display_name",
+      400,
+    );
+    expect(db.prepare("SELECT COUNT(*) AS n FROM users").get().n).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM auth_tokens").get().n).toBe(0);
   });
 });
 
@@ -99,18 +159,15 @@ describe("auth", () => {
 });
 
 describe("invites", () => {
-  it("accepts an open invite: creates the user, token, and mutual friendship", () => {
+  it("accepts an open invite by linking existing users", () => {
     const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const friend = createUser(db, { handle: "ken", displayName: "Ken" });
     const invite = createInvite(db, creator.id);
 
-    const { user, token } = acceptInvite(db, invite.code, {
-      handle: "ken",
-      displayName: "Ken",
-      deviceLabel: "Ken MacBook",
-    });
+    const accepted = acceptInvite(db, invite.code, { acceptingUserId: friend.id });
 
-    expect(user.handle).toBe("ken");
-    expect(token.token).toBeTruthy();
+    expect(accepted.inviter.handle).toBe("marcus");
+    expect(accepted.friend.handle).toBe("ken");
 
     const links = db
       .prepare("SELECT user_id, friend_user_id FROM friendships")
@@ -121,20 +178,77 @@ describe("invites", () => {
     expect(inviteState(stored)).toBe("accepted");
   });
 
-  it("never stores the raw code", () => {
+  it("requires an existing accepting user", () => {
     const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const invite = createInvite(db, creator.id);
-    const stored = getInviteByCode(db, invite.code);
-    expect(stored.code_hash).not.toContain(invite.code);
+
+    expectRelayError(
+      () => acceptInvite(db, invite.code, { acceptingUserId: "missing-user" }),
+      "not_found",
+      404,
+    );
+    expect(inviteState(getInviteByCode(db, invite.code))).toBe("open");
+    expect(db.prepare("SELECT count(*) AS n FROM friendships").get().n).toBe(0);
+  });
+
+  it("never stores raw invite codes or raw tokens", () => {
+    const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const invite = createInvite(db, creator.id);
+    const { token } = registerUser(db, {
+      displayName: "Ken",
+      deviceLabel: "Ken MacBook",
+    });
+
+    const storedInvite = getInviteByCode(db, invite.code);
+    const storedToken = db
+      .prepare("SELECT token_hash FROM auth_tokens WHERE id = ?")
+      .get(token.id);
+
+    expect(storedInvite.code_hash).not.toContain(invite.code);
+    expect(storedToken.token_hash).not.toContain(token.token);
   });
 
   it("rejects a second acceptance of the same invite", () => {
     const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    const sam = createUser(db, { handle: "sam", displayName: "Sam" });
     const invite = createInvite(db, creator.id);
-    acceptInvite(db, invite.code, { handle: "ken", displayName: "Ken" });
-    expect(() =>
-      acceptInvite(db, invite.code, { handle: "sam", displayName: "Sam" }),
-    ).toThrow(RelayError);
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
+    expectRelayError(
+      () => acceptInvite(db, invite.code, { acceptingUserId: sam.id }),
+      "invite_unusable",
+      410,
+    );
+  });
+
+  it("rejects accepting your own invite", () => {
+    const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const invite = createInvite(db, creator.id);
+
+    expectRelayError(
+      () => acceptInvite(db, invite.code, { acceptingUserId: creator.id }),
+      "invite_self",
+      400,
+    );
+    expect(inviteState(getInviteByCode(db, invite.code))).toBe("open");
+  });
+
+  it("is idempotent for already-friends users without duplicating rows", () => {
+    const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const friend = createUser(db, { handle: "ken", displayName: "Ken" });
+    const createdAt = "2026-06-06T18:00:00.000Z";
+    const link = db.prepare(
+      `INSERT INTO friendships (user_id, friend_user_id, state, created_at)
+       VALUES (?, ?, 'accepted', ?)`,
+    );
+    link.run(creator.id, friend.id, createdAt);
+    link.run(friend.id, creator.id, createdAt);
+    const invite = createInvite(db, creator.id);
+
+    acceptInvite(db, invite.code, { acceptingUserId: friend.id });
+
+    expect(db.prepare("SELECT count(*) AS n FROM friendships").get().n).toBe(2);
+    expect(inviteState(getInviteByCode(db, invite.code))).toBe("accepted");
   });
 
   it("lists invite state without reconstructing the raw invite URL", () => {
@@ -157,23 +271,14 @@ describe("invites", () => {
     expect(inviteState(getInviteByCode(db, invite.code))).toBe("revoked");
   });
 
-  it("does not create the user when the handle is taken", () => {
-    const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
-    createUser(db, { handle: "ken", displayName: "Ken" });
-    const invite = createInvite(db, creator.id);
-
-    expect(() =>
-      acceptInvite(db, invite.code, { handle: "ken", displayName: "Ken Two" }),
-    ).toThrow(RelayError);
-
-    // Invite stays open, no extra users, friendship not created.
-    expect(inviteState(getInviteByCode(db, invite.code))).toBe("open");
-    expect(db.prepare("SELECT count(*) AS n FROM users").get().n).toBe(2);
-    expect(db.prepare("SELECT count(*) AS n FROM friendships").get().n).toBe(0);
-  });
-
   it("reports an unknown code as unusable", () => {
     expect(getInviteByCode(db, "nope")).toBeUndefined();
+    const user = createUser(db, { handle: "ken", displayName: "Ken" });
+    expectRelayError(
+      () => acceptInvite(db, "nope", { acceptingUserId: user.id }),
+      "invite_unusable",
+      410,
+    );
   });
 });
 
@@ -283,11 +388,9 @@ describe("statuses and feed", () => {
 
   it("returns accepted friends and removes them reciprocally", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
     const invite = createInvite(db, marcus.id);
-    const { user: ken } = acceptInvite(db, invite.code, {
-      handle: "ken",
-      displayName: "Ken",
-    });
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     upsertStatus(db, ken, {
       ...fixture("status-broadcasting"),
       device_id: "device-ken",
