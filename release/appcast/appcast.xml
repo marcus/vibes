@@ -1,0 +1,14 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Vibes</title>
+        <item>
+            <title>0.2.0</title>
+            <pubDate>Sat, 06 Jun 2026 21:28:45 -0700</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://vibes.opentangle.com/downloads/Vibes-0.2.0.zip" length="1483594" type="application/octet-stream" sparkle:edSignature="8IxYHRFY3p5A6V7qjeRbwladXy3cs5vAfCR/BbgHRfuNwCVg4AgJrEwsp/Ob+416YU+PdMkVSWx/ZUvJMRQFCQ=="/>
+        </item>
+    </channel>
+</rss>

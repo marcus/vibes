@@ -96,7 +96,7 @@ note "Validating ${APPCAST_XML}"
 problems=()
 grep -q 'sparkle:edSignature=' "${APPCAST_XML}" || problems+=("no EdDSA signature found")
 grep -q 'length=' "${APPCAST_XML}" || problems+=("no archive length found")
-grep -q 'sparkle:version=' "${APPCAST_XML}" || problems+=("no sparkle:version (build number) found")
+grep -qE '<sparkle:version>[0-9]' "${APPCAST_XML}" || problems+=("no sparkle:version (build number) found")
 grep -q 'url=' "${APPCAST_XML}" || problems+=("no archive URL found")
 grep -q 'sparkle:minimumSystemVersion' "${APPCAST_XML}" \
   || echo "warning: no sparkle:minimumSystemVersion in appcast; confirm the bundle declares LSMinimumSystemVersion (>= 14.0)" >&2
