@@ -1,0 +1,49 @@
+{
+  "device_id": "device-marcus-macbook",
+  "device_label": "MacBook",
+  "mode": "broadcasting",
+  "manual_status": "working on Vibes",
+  "derived_status": "vibing",
+  "day": "2026-06-06",
+  "updated_at": "2026-06-06T18:02:00.000Z",
+  "cards": [
+    {
+      "type": "git_stats",
+      "enabled": true,
+      "summary": "4 repos touched - 7 commits - +1248 / -402 LOC",
+      "data": {
+        "commits": 7,
+        "files_changed": 31,
+        "insertions": 1248,
+        "deletions": 402,
+        "uncommitted_insertions": 184,
+        "uncommitted_deletions": 22,
+        "repos_touched": 4
+      }
+    },
+    {
+      "type": "agent_mix",
+      "enabled": true,
+      "summary": "Codex 65%, Claude Code 25%, Grok Build 10%",
+      "data": {
+        "codex": 0.65,
+        "claude_code": 0.25,
+        "grok_build": 0.1,
+        "commit_counts": {
+          "codex": 13,
+          "claude_code": 5,
+          "grok_build": 2
+        }
+      }
+    },
+    {
+      "type": "repo_aliases",
+      "enabled": true,
+      "summary": "Vibes, Braid",
+      "data": {
+        "aliases": ["Vibes", "Braid"]
+      }
+    }
+  ]
+}
+
