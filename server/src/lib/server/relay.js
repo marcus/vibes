@@ -260,6 +260,7 @@ function sanitizeCard(card) {
 }
 
 function normalizeStatusPayload(authUser, input, receivedAt) {
+  assertStatusPayloadSize(input);
   const mode = String(input?.mode ?? "").trim().toLowerCase();
   if (!MODES.has(mode)) throw new RelayError("invalid_mode", "Presence mode is invalid.", 400);
 
@@ -424,7 +425,6 @@ function mergeUserStatuses(user, statusRows) {
       day: null,
       updated_at: null,
       cards: [],
-      devices: [],
     };
   }
 
@@ -437,6 +437,10 @@ function mergeUserStatuses(user, statusRows) {
     .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
   const source = broadcasting[0] ?? rows.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0];
   const latestDay = broadcasting[0]?.client_day ?? source.client_day;
+  const contributingRows =
+    strongest.mode === "broadcasting"
+      ? broadcasting.filter((row) => row.client_day === latestDay)
+      : rows.filter((row) => row.mode === strongest.mode);
   const cards = [];
   const gitStats = strongest.mode === "broadcasting" ? mergeGitStats(rows, latestDay) : null;
   const agentMix = strongest.mode === "broadcasting" ? mergeAgentMix(rows, latestDay) : null;
@@ -455,16 +459,10 @@ function mergeUserStatuses(user, statusRows) {
     manual_status: strongest.mode === "broadcasting" ? source.payload.manual_status ?? null : null,
     derived_status: strongest.mode === "broadcasting" ? source.payload.derived_status ?? "vibing" : strongest.mode,
     day: latestDay,
-    updated_at: rows
+    updated_at: contributingRows
       .map((row) => row.updated_at)
       .sort((a, b) => Date.parse(b) - Date.parse(a))[0],
     cards,
-    devices: rows.map((row) => ({
-      device_id: row.device_id,
-      device_label: row.device_label,
-      mode: row.mode,
-      updated_at: row.updated_at,
-    })),
   };
 }
 

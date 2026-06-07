@@ -7,10 +7,9 @@ export async function POST(event) {
   try {
     checkRateLimit(event, "status:post", 120);
     const auth = requireAuth(event.request);
-    const body = await readJson(event.request);
+    const body = await readJson(event.request, { maxBytes: 32 * 1024 });
     return json(upsertStatus(getDb(), auth.user, body));
   } catch (err) {
     return errorJson(err);
   }
 }
-

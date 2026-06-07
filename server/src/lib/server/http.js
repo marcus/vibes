@@ -7,7 +7,8 @@ const buckets = new Map();
 
 function clientIp(event) {
   return (
-    event.request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    event.request.headers.get("x-real-ip")?.trim() ||
+    event.request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ||
     event.getClientAddress?.() ||
     "unknown"
   );
@@ -37,12 +38,38 @@ export function errorJson(error) {
   throw error;
 }
 
-export async function readJson(request) {
+export async function readJson(request, { maxBytes = 64 * 1024 } = {}) {
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > maxBytes) {
+    throw new RelayError("payload_too_large", "Request body is too large.", 413);
+  }
+
+  const text = await readTextLimited(request, maxBytes);
   try {
-    return await request.json();
+    return JSON.parse(text);
   } catch {
     throw new RelayError("invalid_json", "Request body must be valid JSON.", 400);
   }
+}
+
+async function readTextLimited(request, maxBytes) {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      throw new RelayError("payload_too_large", "Request body is too large.", 413);
+    }
+    chunks.push(decoder.decode(value, { stream: true }));
+  }
+  chunks.push(decoder.decode());
+  return chunks.join("");
 }
 
 export function requireAuth(request) {
@@ -50,4 +77,3 @@ export function requireAuth(request) {
   const match = header.match(/^Bearer\s+(.+)$/i);
   return authenticateToken(getDb(), match?.[1]);
 }
-

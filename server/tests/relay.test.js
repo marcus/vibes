@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { migrate, openDb } from "../src/lib/server/db.js";
+import { checkRateLimit, readJson } from "../src/lib/server/http.js";
 import {
   RelayError,
   acceptInvite,
@@ -249,6 +250,37 @@ describe("statuses and feed", () => {
     expect(mix.commit_counts.claude_code).toBe(7);
   });
 
+  it("does not expose device identifiers or labels in merged feed output", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    upsertStatus(db, user, fixture("status-broadcasting"));
+
+    const json = JSON.stringify(getFeed(db, user));
+    expect(json).not.toContain("device_id");
+    expect(json).not.toContain("device-marcus-macbook");
+    expect(json).not.toContain("MacBook");
+  });
+
+  it("uses the newest contributing broadcast row for merged updated_at", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const payload = fixture("status-broadcasting");
+    upsertStatus(db, user, {
+      ...payload,
+      device_id: "broadcast-device",
+      updated_at: "2026-06-06T18:02:00.000Z",
+    });
+    upsertStatus(db, user, {
+      ...payload,
+      device_id: "quiet-device",
+      mode: "quiet",
+      derived_status: "quiet",
+      updated_at: "2026-06-06T19:02:00.000Z",
+    });
+
+    const feed = getFeed(db, user);
+    expect(feed.you.mode).toBe("broadcasting");
+    expect(feed.you.updated_at).toBe("2026-06-06T18:02:00.000Z");
+  });
+
   it("returns accepted friends and removes them reciprocally", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const invite = createInvite(db, marcus.id);
@@ -284,6 +316,24 @@ describe("statuses and feed", () => {
       }),
     ).toThrow(RelayError);
   });
+
+  it("rejects oversized disabled cards before filtering them out", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    expect(() =>
+      upsertStatus(db, user, {
+        ...fixture("status-broadcasting"),
+        mode: "quiet",
+        cards: [
+          {
+            type: "disabled_blob",
+            enabled: false,
+            summary: "hidden",
+            data: { text: "x".repeat(40_000) },
+          },
+        ],
+      }),
+    ).toThrow(RelayError);
+  });
 });
 
 describe("contract fixtures", () => {
@@ -291,5 +341,31 @@ describe("contract fixtures", () => {
     expect(fixture("status-broadcasting").mode).toBe("broadcasting");
     expect(fixture("feed-response").you.user.handle).toBe("marcus");
     expect(fixture("error").error.code).toBe("unauthorized");
+  });
+});
+
+describe("http helpers", () => {
+  it("rejects raw JSON bodies over the configured byte limit", async () => {
+    const request = new Request("https://vibes.test/api/status", {
+      method: "POST",
+      body: JSON.stringify({ text: "x".repeat(100) }),
+      headers: { "content-type": "application/json" },
+    });
+    await expect(readJson(request, { maxBytes: 32 })).rejects.toThrow(RelayError);
+  });
+
+  it("rate limits by nginx-overwritten real IP, not spoofed forwarded-for prefixes", () => {
+    const event = {
+      request: new Request("https://vibes.test/api/users", {
+        headers: {
+          "x-real-ip": "203.0.113.10",
+          "x-forwarded-for": "198.51.100.99, 203.0.113.10",
+        },
+      }),
+      getClientAddress: () => "127.0.0.1",
+    };
+
+    checkRateLimit(event, "test-spoof", 1);
+    expect(() => checkRateLimit(event, "test-spoof", 1)).toThrow(RelayError);
   });
 });
