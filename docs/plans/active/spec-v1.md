@@ -398,7 +398,8 @@ Notes:
 - `expires_at` on invites is allowed because invite lifetime is different from status lifetime.
 - The raw invite code is never stored. Only `code_hash` is persisted; the usable `/invite/<code>` URL is returned once at creation time, so a database read cannot recover live codes.
 - Handles are stored lowercased so uniqueness is case-insensitive.
-- `schema_migrations` records applied migration versions. `db migrate` applies pending migrations in order and is idempotent.
+- `schema_migrations` records applied migration versions. Migrations are a versioned list applied in one IMMEDIATE transaction; add one by appending a new version, never by editing an applied one. `db migrate` is idempotent and safe to run while the relay is up.
+- The relay opens SQLite with WAL, `busy_timeout`, and `synchronous = NORMAL`, and routes multi-statement writes through IMMEDIATE transactions (single-writer pattern). Reads stay concurrent; a second writer such as the CLI waits for the lock rather than failing.
 
 ### Auth Model
 
@@ -722,6 +723,10 @@ The app is native SwiftUI and supports both light and dark mode, following the s
 | rage fixing | `flame` | red |
 
 Exact symbols and tints are not critical for v1; the mapping exists so vibes are visually distinct rather than text-only.
+
+### Brand Assets
+
+The app mark lives at `assets/icon.png` (1254×1254): a warm off-black rounded square with a thin off-white "V" and a dot above it, matching the token palette. The client should use it as the macOS app icon — generate the `AppIcon` asset set (the standard macOS icon sizes) from this source — and may reuse the mark in the window header or wordmark. Do not restyle or recolor it; it is the canonical brand mark.
 
 ### Feed States
 

@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { writeTx } from "./db.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -38,6 +39,8 @@ export function createUser(db, { handle, displayName }) {
 
   const id = randomUUID();
   try {
+    // Single INSERT — autocommit is atomic. Callers needing multi-step
+    // atomicity (e.g. acceptInvite) wrap this in writeTx.
     db.prepare(
       `INSERT INTO users (id, handle, display_name, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?)`,
@@ -110,7 +113,10 @@ export function inviteState(invite) {
  * @param {{ handle: string, displayName: string, deviceLabel?: string|null }} input
  */
 export function acceptInvite(db, code, { handle, displayName, deviceLabel = null }) {
-  const accept = db.transaction(() => {
+  // writeTx runs this in an IMMEDIATE transaction, so two concurrent accepts of
+  // the same code cannot both read it as open before either writes — this is
+  // what keeps the single-use guarantee under concurrency.
+  return writeTx(db, () => {
     const invite = getInviteByCode(db, code);
     if (!invite) {
       throw new RelayError("invite_unusable", "This invite is not valid.", 410);
@@ -139,11 +145,6 @@ export function acceptInvite(db, code, { handle, displayName, deviceLabel = null
 
     return { user, token };
   });
-
-  // IMMEDIATE acquires the write lock up front so two concurrent accepts of the
-  // same code cannot both read it as open before either writes. Keeps the
-  // single-use guarantee under concurrency.
-  return accept.immediate();
 }
 
 /**

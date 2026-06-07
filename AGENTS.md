@@ -17,7 +17,8 @@ Core v1 flow:
 ## Repo Map
 
 - `client/`: SwiftUI macOS app.
-- `server/`: Node relay service.
+- `server/`: SvelteKit relay (API + web signup) backed by SQLite.
+- `assets/`: brand assets. `assets/icon.png` is the canonical app mark.
 - `deploy/`: nginx and systemd config.
 - `scripts/`: deployment helpers.
 - `docs/plans/active/spec-v1.md`: current product plan.
@@ -84,8 +85,10 @@ Tokens: the canonical web tokens live in `server/src/lib/styles/tokens.css`. The
 
 ## Server Conventions
 
-- Prefer a tiny Node relay and SQLite for v1.
+- The relay is a SvelteKit app (adapter-node) with SQLite via better-sqlite3.
 - Keep the relay dumb: identity, invites, friends, latest status, feed.
+- Open SQLite through `openDb` (WAL + busy_timeout) and route multi-statement writes through `writeTx` (single-writer pattern). Do not open ad-hoc connections.
+- Add schema changes as a new migration in `db.js`; never edit an applied one.
 - Avoid public discovery and broad social graph behavior in v1.
 - Add API docs or curl examples as routes become real.
 - Do not commit secrets, tokens, database files, or production cert material.

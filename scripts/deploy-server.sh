@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Anchor to the repo root so relative paths work regardless of the caller's CWD.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$(dirname "${SCRIPT_DIR}")"
+
 ENV_FILE="${DEPLOY_ENV_FILE:-.env.deploy}"
 if [[ -f "${ENV_FILE}" ]]; then
   set -a
@@ -34,30 +38,42 @@ if [[ -z "${DEPLOY_URL}" ]]; then
   fi
 fi
 
-RSYNC_FLAGS=(-az --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r)
+# Ship source only. node_modules, the SvelteKit build, and the live database
+# stay on the host: dependencies are reinstalled and rebuilt there because
+# better-sqlite3 is a native module that must match the server's architecture.
+RSYNC_FLAGS=(
+  -az --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r
+  --exclude=node_modules --exclude=build --exclude=.svelte-kit
+  --exclude=data --exclude='.env' --exclude='.env.*'
+)
 if [[ "${DRY_RUN}" == "1" ]]; then
   RSYNC_FLAGS+=(--dry-run)
 fi
 
-echo "Checking relay syntax..."
+echo "Running relay tests..."
 (cd server && npm run check)
 
 echo "Preparing ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}..."
 ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}/server' '${DEPLOY_PATH}/data'"
 
-echo "Uploading relay..."
+echo "Uploading relay source..."
 rsync "${RSYNC_FLAGS[@]}" server/ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/server/"
 
 if [[ "${DRY_RUN}" == "1" ]]; then
-  echo "Dry run complete; skipped service restart and smoke check."
+  echo "Dry run complete; skipped install, build, restart, and smoke check."
   exit 0
 fi
+
+echo "Installing dependencies and building on host..."
+ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "cd '${DEPLOY_PATH}/server' && npm ci && npm run build" \
+  || { echo "Host build failed; the running service was left untouched. Fix and redeploy." >&2; exit 1; }
 
 echo "Restarting ${SERVICE_NAME}.service..."
 ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "systemctl restart '${SERVICE_NAME}.service'"
 
 echo "Checking ${DEPLOY_URL}..."
 SMOKE_FILE="$(mktemp -t vibes-deploy-smoke.XXXXXX)"
+trap 'rm -f "${SMOKE_FILE}"' EXIT
 STATUS=""
 CURL_RESOLVE_ARGS=()
 if [[ -z "${DEPLOY_RESOLVE_IP}" && "${DEPLOY_HOST}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
