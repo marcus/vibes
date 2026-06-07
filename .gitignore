@@ -9,6 +9,7 @@ xcuserdata/
 
 # SwiftPM / build output
 .build/
+client/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-*.png
 
 # Node
 node_modules/

@@ -70,6 +70,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 8B0000082F33A00100000001 /* Build configuration list for PBXNativeTarget "Vibes" */;
 			buildPhases = (
+				8B0000232F33A00100000001 /* Generate App Icon */,
 				8B0000092F33A00100000001 /* Sources */,
 				8B0000052F33A00100000001 /* Frameworks */,
 				8B00000A2F33A00100000001 /* Resources */,
@@ -135,6 +136,41 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		8B0000232F33A00100000001 /* Generate App Icon */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../assets/icon.png",
+				"$(SRCROOT)/../scripts/generate-client-app-icon.sh",
+			);
+			name = "Generate App Icon";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/Contents.json",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-16x16@1x.png",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-16x16@2x.png",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-32x32@1x.png",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-32x32@2x.png",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-128x128@1x.png",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-128x128@2x.png",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-256x256@1x.png",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-256x256@2x.png",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-512x512@1x.png",
+				"$(SRCROOT)/Vibes/Assets.xcassets/AppIcon.appiconset/app-icon-generated-512x512@2x.png",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"$SRCROOT/../scripts/generate-client-app-icon.sh\" \"$SRCROOT/../assets/icon.png\" \"$SRCROOT/Vibes/Assets.xcassets/AppIcon.appiconset\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		8B0000092F33A00100000001 /* Sources */ = {
