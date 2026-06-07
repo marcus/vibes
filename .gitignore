@@ -22,6 +22,7 @@ npm-debug.log*
 .env.*
 !.env.example
 !.env.deploy.example
+!.env.release.example
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
@@ -32,3 +33,12 @@ tmp/
 dist/
 build/
 deploy/rendered/
+
+# Release staging — keep appcast.xml and release-notes sources, ignore built artifacts
+release/appcast/*.zip
+release/appcast/*.dmg
+release/appcast/*.delta
+release/appcast/*.html
+release/appcast/*.md
+release/release-notes/*.html
+*.xcarchive

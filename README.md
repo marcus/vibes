@@ -94,6 +94,10 @@ The deploy scaffold expects a VPS-style host:
 
 See [docs/server-runbook.md](docs/server-runbook.md) for bootstrap and deploy details.
 
+## Releases
+
+The macOS client ships as a Developer ID–signed, notarized app with Sparkle auto-updates (planned). Release scripts live in `scripts/` (`release-mac.sh`, `generate-appcast.sh`, `setup-notary.sh`). See [docs/client-runbook.md](docs/client-runbook.md#signed-release--notarization) for the signing, notarization, and publishing flow.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

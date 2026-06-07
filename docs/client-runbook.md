@@ -56,3 +56,67 @@ Keep repo aliases opt-in. Do not publish raw repo paths, branch names, commit me
 The project uses Xcode filesystem-synchronized groups. New Swift files under `client/Vibes/` should appear in the `Vibes` target automatically.
 
 Keep the checked-in project buildable with `make client`.
+
+`GENERATE_INFOPLIST_FILE = NO`, so `client/Vibes/Info.plist` is authoritative. `CFBundleShortVersionString` and `CFBundleVersion` map to `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)` build settings — bump versions in the project, not in the plist.
+
+## Signed Release & Notarization
+
+Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app. Auto-updates are planned via Sparkle (see [docs/plans/active/client-auto-update.md](plans/active/client-auto-update.md)); this section covers the signing/notarization pipeline, which is independent of the Sparkle app integration.
+
+### One-time setup (requires your Apple Developer account)
+
+1. **Apple Developer Program membership** — required to issue a Developer ID certificate.
+2. **Developer ID Application certificate** — create in Xcode (Settings → Accounts → Manage Certificates → + → Developer ID Application) or at developer.apple.com. Confirm with:
+
+   ```bash
+   security find-identity -v -p codesigning | grep "Developer ID Application"
+   ```
+
+   You currently have only an `Apple Development` identity, which cannot sign a distributable build.
+3. **notarytool credentials** — store a reusable keychain profile:
+
+   ```bash
+   # Recommended: App Store Connect API key (Keys tab → generate, role "Developer")
+   scripts/setup-notary.sh api vibes-notary <KEY_ID> <ISSUER_ID> /path/to/AuthKey_XXXX.p8
+   # Or an app-specific password:
+   scripts/setup-notary.sh password vibes-notary marcus@vorwaller.net <TEAM_ID>
+   ```
+4. **Real bundle id** — replace `com.example.vibes` (`PRODUCT_BUNDLE_IDENTIFIER`) in the Xcode project.
+5. **Sparkle EdDSA keys** — when Sparkle is integrated, run Sparkle's `generate_keys` once; private key stays in the Keychain, public key goes in `SUPublicEDKey`.
+
+### Required release environment variables
+
+Copy `.env.release.example` to `.env.release` (gitignored) and fill it in. The detected Team ID `J23CYSN68B` is pre-filled as a default — confirm it owns the Developer ID cert.
+
+| Variable | Meaning |
+| --- | --- |
+| `VIBES_BUNDLE_ID` | reverse-DNS app id for the public build |
+| `VIBES_DEVELOPMENT_TEAM` | Apple Developer Team ID |
+| `VIBES_CODESIGN_IDENTITY` | full `Developer ID Application: …` identity string |
+| `VIBES_NOTARY_PROFILE` | notarytool keychain profile name |
+| `VIBES_RELEASE_VERSION` | must equal project `MARKETING_VERSION` |
+| `VIBES_BUILD_NUMBER` | integer, must exceed last released build |
+| `VIBES_APPCAST_BASE_URL` | public download URL prefix for update archives |
+| `VIBES_BUILD_DMG` | `1` to also build + notarize a DMG |
+
+### Build a signed, notarized release
+
+```bash
+scripts/release-mac.sh          # archive → export → notarize → staple → verify → stage update zip
+scripts/generate-appcast.sh     # EdDSA-sign archive + (re)generate release/appcast/appcast.xml
+```
+
+Then upload the update zip (and DMG, if built) to the release host and publish `release/appcast/appcast.xml` at the public appcast URL. See [release/README.md](../release/README.md) for the flow.
+
+### Old-to-new update QA
+
+Once Sparkle is wired in: install an older signed/notarized build into `/Applications`, host a test appcast with a newer signed archive, and use `Vibes → Check for Updates...` to confirm download, relaunch on the new version, and preserved config. Confirm the installed `SUPublicEDKey` matches the key that signed the test archive.
+
+### Troubleshooting
+
+- **appcast 404 / invalid TLS** — appcast URL or host misconfigured; verify it loads over HTTPS.
+- **missing `CFBundleVersion`** — the app must carry version keys (it now does); a release with none breaks Sparkle version comparison.
+- **EdDSA signature mismatch** — the installed app's `SUPublicEDKey` does not match the signing private key. Most common Sparkle failure.
+- **app running from a read-only disk image** — updates can't apply; install to `/Applications` first.
+- **notarization failure** — run `xcrun notarytool log <submission-id> --keychain-profile vibes-notary` to see the rejection reason (usually unsigned nested code or missing hardened runtime).
+- **broken framework symlinks** — always package with `ditto -c -k --keepParent`, never `zip`, so signatures and symlinks survive.

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Developer ID export template for `xcodebuild -exportArchive`.
+  Used by scripts/release-mac.sh.
+
+  teamID is your Apple Developer Team ID. The value below was detected from
+  the local "Apple Development" signing identity; confirm it matches the team
+  that owns the Developer ID Application certificate before the first release.
+  release-mac.sh overrides it from $VIBES_DEVELOPMENT_TEAM when that is set.
+-->
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>developer-id</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>signingCertificate</key>
+  <string>Developer ID Application</string>
+  <key>teamID</key>
+  <string>J23CYSN68B</string>
+</dict>
+</plist>
