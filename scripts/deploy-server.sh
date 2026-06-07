@@ -65,7 +65,7 @@ if [[ "${DRY_RUN}" == "1" ]]; then
 fi
 
 echo "Installing dependencies and building on host..."
-ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "cd '${DEPLOY_PATH}/server' && npm ci && npm run build" \
+ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "cd '${DEPLOY_PATH}/server' && npm ci && npm run build && npm prune --omit=dev" \
   || { echo "Host build failed; the running service was left untouched. Fix and redeploy." >&2; exit 1; }
 
 echo "Restarting ${SERVICE_NAME}.service..."
