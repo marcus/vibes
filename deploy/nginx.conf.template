@@ -29,12 +29,20 @@ server {
     location = /appcast.xml {
         alias ${DEPLOY_PATH}/releases/appcast.xml;
         default_type application/xml;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-Frame-Options "DENY" always;
         add_header Cache-Control "no-cache, must-revalidate" always;
     }
 
     location = /downloads/Vibes.dmg {
         alias ${DEPLOY_PATH}/releases/downloads/Vibes.dmg;
         default_type application/x-apple-diskimage;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-Frame-Options "DENY" always;
         add_header Cache-Control "no-cache, must-revalidate" always;
     }
 
@@ -47,6 +55,10 @@ server {
             text/plain txt;
             application/json json;
         }
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-Frame-Options "DENY" always;
         add_header Cache-Control "public, max-age=31536000, immutable" always;
     }
 
