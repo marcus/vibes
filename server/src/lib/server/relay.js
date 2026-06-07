@@ -187,13 +187,13 @@ export function createInvite(db, creatorUserId, { ttlDays = 7 } = {}) {
   const code = newSecret(18);
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + ttlDays * DAY_MS).toISOString();
-  // Only the hash is stored. The usable /invite/<code> path is returned once
+  // Only the hash is stored. The usable /i/<code> path is returned once
   // here and never persisted, so a database read cannot recover live codes.
   db.prepare(
     `INSERT INTO invites (id, code_hash, creator_user_id, created_at, expires_at)
      VALUES (?, ?, ?, ?, ?)`,
   ).run(id, sha256(code), creatorUserId, now(), expiresAt);
-  return { id, code, invite_url_path: `/invite/${code}`, expires_at: expiresAt };
+  return { id, code, invite_url_path: `/i/${code}`, expires_at: expiresAt };
 }
 
 /**

@@ -249,7 +249,7 @@ describe("cross-user invite and token control", () => {
   it("revokes an invite created by anyone", () => {
     const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const invite = adminCreateInviteFor(db, marcus.id);
-    expect(invite.invite_url_path).toMatch(/^\/invite\//);
+    expect(invite.invite_url_path).toMatch(/^\/i\//);
     adminRevokeInvite(db, invite.id);
     expect(listAllInvites(db, { state: "revoked" }).map((i) => i.id)).toContain(invite.id);
   });
