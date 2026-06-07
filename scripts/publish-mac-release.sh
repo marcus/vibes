@@ -5,8 +5,8 @@ set -euo pipefail
 # scripts/release-mac.sh and scripts/generate-appcast.sh to the relay VPS.
 #
 # This script does not build, sign, or notarize. It only validates and uploads
-# the already-staged DMG, Sparkle update zip, appcast, checksums, and latest
-# manifest into ${DEPLOY_PATH}/releases.
+# the already-staged DMG, Sparkle update zip, optional Sparkle deltas, appcast,
+# checksums, and latest manifest into ${DEPLOY_PATH}/releases.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "${SCRIPT_DIR}")"
@@ -65,6 +65,10 @@ ZIP_PATH="release/appcast/${APP_NAME}-${VERSION}.zip"
 DMG_PATH="build/${APP_NAME}-${VERSION}.dmg"
 SHA256_PATH="build/SHA256SUMS"
 LATEST_JSON_PATH="build/latest.json"
+DELTA_PATHS=()
+while IFS= read -r -d '' delta_path; do
+  DELTA_PATHS+=("${delta_path}")
+done < <(find release/appcast -maxdepth 1 -type f -name '*.delta' -print0)
 
 [[ -f "${APPCAST_XML}" ]] || die "missing ${APPCAST_XML}; run scripts/generate-appcast.sh first"
 [[ -f "${ZIP_PATH}" ]] || die "missing ${ZIP_PATH}; run scripts/release-mac.sh first"
@@ -139,12 +143,18 @@ note "Creating remote incoming directory ${REMOTE_INCOMING_DIR}"
 ssh "${REMOTE_TARGET}" "mkdir -p '${REMOTE_INCOMING_DIR}'"
 
 note "Uploading release files to ${REMOTE_TARGET}:${REMOTE_INCOMING_DIR}/"
-rsync -az --chmod=Fu=rw,Fgo=r \
+UPLOAD_PATHS=(
   "${DMG_PATH}" \
   "${ZIP_PATH}" \
   "${APPCAST_XML}" \
   "${SHA256_PATH}" \
-  "${LATEST_JSON_PATH}" \
+  "${LATEST_JSON_PATH}"
+)
+if (( ${#DELTA_PATHS[@]} > 0 )); then
+  UPLOAD_PATHS+=("${DELTA_PATHS[@]}")
+fi
+rsync -az --chmod=Fu=rw,Fgo=r \
+  "${UPLOAD_PATHS[@]}" \
   "${REMOTE_TARGET}:${REMOTE_INCOMING_DIR}/"
 
 note "Installing release files on ${DEPLOY_HOST}"
@@ -175,6 +185,10 @@ install_immutable_artifact() {
 
 install_immutable_artifact "${incoming_dir}/${app_name}-${version}.dmg" "${downloads_dir}/${app_name}-${version}.dmg"
 install_immutable_artifact "${incoming_dir}/${app_name}-${version}.zip" "${downloads_dir}/${app_name}-${version}.zip"
+for delta_source in "${incoming_dir}"/*.delta; do
+  [[ -e "${delta_source}" ]] || continue
+  install_immutable_artifact "${delta_source}" "${downloads_dir}/$(basename "${delta_source}")"
+done
 install -m 0644 "${incoming_dir}/SHA256SUMS" "${downloads_dir}/SHA256SUMS"
 
 mv_test_src="${downloads_dir}/.${app_name}.mv-test-src.$$"
@@ -217,6 +231,11 @@ public_urls=(
   "${SHA256_URL}"
   "${LATEST_JSON_URL}"
 )
+if (( ${#DELTA_PATHS[@]} > 0 )); then
+  for delta_path in "${DELTA_PATHS[@]}"; do
+    public_urls+=("https://${DEPLOY_DOMAIN}/downloads/$(basename "${delta_path}")")
+  done
+fi
 for url in "${public_urls[@]}"; do
   headers="$(curl -fsSI "${url}")"
   if [[ "${url}" == "${APPCAST_URL}" ]]; then
