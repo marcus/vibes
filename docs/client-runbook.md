@@ -105,9 +105,10 @@ Copy `.env.release.example` to `.env.release` (gitignored) and fill it in. Team 
 ```bash
 scripts/release-mac.sh          # archive → export → notarize → staple → verify → stage update zip
 scripts/generate-appcast.sh     # EdDSA-sign archive + (re)generate release/appcast/appcast.xml
+scripts/publish-update.sh       # rsync appcast + archives to the host's updates dir
 ```
 
-Then upload the update zip (and DMG, if built) to the release host and publish `release/appcast/appcast.xml` at the public appcast URL. See [release/README.md](../release/README.md) for the flow.
+`publish-update.sh` ships the staged files to `${DEPLOY_PATH}/releases` on the relay host (reusing `.env.deploy`) — appcast to `releases/appcast.xml`, archives to `releases/downloads/` — where nginx serves `https://vibes.opentangle.com/appcast.xml` and `https://vibes.opentangle.com/downloads/<archive>`. It uploads archives before the appcast and verifies the feed returns HTTP 200. See [release/README.md](../release/README.md) and the [server runbook](server-runbook.md#auto-update-channel) for the hosting side.
 
 ### Old-to-new update QA
 

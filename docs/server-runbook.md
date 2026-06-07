@@ -106,6 +106,34 @@ ssh "$DEPLOY_USER@$DEPLOY_HOST" \
 make deploy
 ```
 
+## Auto-Update Channel
+
+The macOS app's Sparkle appcast and release downloads are served as static
+files from the same host, decoupled from relay deploys:
+
+- `https://${DEPLOY_DOMAIN}/appcast.xml` → `${DEPLOY_PATH}/releases/appcast.xml` (no-cache)
+- `https://${DEPLOY_DOMAIN}/downloads/<archive>` → `${DEPLOY_PATH}/releases/downloads/<archive>` (versioned, immutable, long-cached)
+- `https://${DEPLOY_DOMAIN}/downloads/Vibes.dmg` → stable first-download URL (no-cache), overwritten each release for the website button
+
+These `location` blocks live in [nginx.conf.template](file:///Users/marcusvorwaller/code/vibes/deploy/nginx.conf.template), so re-rendering and
+reinstalling the nginx config (bootstrap steps 3–4) enables them. The
+`${DEPLOY_PATH}/releases` directory sits outside the rsync'd `server/` tree, so
+`make deploy` never touches published releases.
+
+Publishing is part of the **client** release flow, not the relay deploy: after
+building a signed/notarized app and generating the appcast, run
+`scripts/publish-update.sh` (creates the dir on the host, uploads archives then
+the appcast, verifies HTTP 200). See [client-runbook.md](client-runbook.md#signed-release--notarization).
+
+If nginx was installed by an earlier bootstrap, re-render and reload once to
+pick up the update routes:
+
+```bash
+node scripts/render-deploy-config.mjs
+scp "deploy/rendered/${APP_NAME:-vibes}.nginx.conf" "$DEPLOY_USER@$DEPLOY_HOST:/etc/nginx/sites-available/$DEPLOY_DOMAIN"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "nginx -t && systemctl reload nginx"
+```
+
 ## Admin Area
 
 The relay has a password-gated web admin at `/admin` for a single superuser:
