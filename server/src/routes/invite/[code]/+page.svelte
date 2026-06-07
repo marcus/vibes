@@ -10,6 +10,17 @@
     await navigator.clipboard.writeText(form.token);
     copied = true;
   }
+
+  function downloadConfig() {
+    if (!form?.config) return;
+    const blob = new Blob([form.config], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "vibes-config.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 </script>
 
 <main>
@@ -32,6 +43,8 @@
         <summary>config snippet</summary>
         <pre>{form.config}</pre>
       </details>
+
+      <button type="button" class="download" onclick={downloadConfig}>download config</button>
     {:else if data.state !== "open"}
       <h1>This invite can't be used.</h1>
       <p class="lede">
@@ -191,6 +204,11 @@
 
   .config {
     margin-top: var(--space-6);
+  }
+
+  .download {
+    margin-top: var(--space-4);
+    align-self: flex-start;
   }
 
   .config summary {
