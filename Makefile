@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: check client server server-dev server-build server-check deploy
+.PHONY: check client server server-dev server-build server-check deploy mac-release
 
 check: server-check client
 
@@ -21,3 +21,8 @@ server-check:
 
 deploy:
 	./scripts/deploy-server.sh
+
+mac-release:
+	VIBES_BUILD_DMG=1 scripts/release-mac.sh
+	scripts/generate-appcast.sh
+	scripts/publish-mac-release.sh

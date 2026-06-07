@@ -13,6 +13,8 @@ release/
     <ver>.md           staged release notes copy (NOT committed)
   release-notes/
     0.2.0.md           source release notes, one file per version (committed)
+build/
+  latest.json          generated public latest manifest (NOT committed)
 ```
 
 ## How a release flows
@@ -20,16 +22,26 @@ release/
 1. Bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the Xcode project.
 2. Write `release/release-notes/<version>.md`.
 3. `cp .env.release.example .env.release` and fill it in.
-4. `scripts/release-mac.sh` — builds, signs, notarizes, staples, packages the
-   update zip into `release/appcast/`, and copies the release notes there.
-5. `scripts/generate-appcast.sh` — signs the archive and regenerates
-   `release/appcast/appcast.xml`.
-6. Upload the update zip (and DMG, if built) to the release host.
-7. Publish `release/appcast/appcast.xml` at the public appcast URL.
+4. `make mac-release` — builds, signs, notarizes, staples, packages the update
+   zip and first-download DMG, regenerates the appcast, writes
+   `build/latest.json`, and publishes the release.
+
+The `mac-release` target runs the same steps directly:
+
+```bash
+VIBES_BUILD_DMG=1 scripts/release-mac.sh
+scripts/generate-appcast.sh
+scripts/publish-mac-release.sh
+```
+
+`scripts/publish-mac-release.sh` generates the public latest manifest from the
+release environment and uploads it to `/downloads/latest.json`. Do not edit that
+manifest manually.
 
 Only `appcast.xml` and the `release-notes/*.md` sources are committed. Built
-archives, DMGs, and staged copies are gitignored. See `docs/client-runbook.md`
-for full instructions and troubleshooting.
+archives, DMGs, staged copies, checksums, and `build/latest.json` are
+gitignored. See `docs/client-runbook.md` for full instructions and
+troubleshooting.
 
 ## Never commit
 
