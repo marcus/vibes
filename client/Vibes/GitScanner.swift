@@ -32,15 +32,42 @@ struct GitScanner {
 
   private func scanRepo(repo: RepoConfig, now: Date) -> DailyGitStats {
     var stats = DailyGitStats()
-    let log = runGit(["-C", repo.path, "log", "--since=midnight", "--numstat", "--pretty=format:__VIBES_COMMIT__"])
+    guard let authorEmail = configuredUserEmail(repo.path) else {
+      scanWorkingTree(repo: repo, into: &stats)
+      if stats.hasActivity {
+        stats.latestActivity = now
+      }
+      return stats
+    }
+
+    let log = runGit([
+      "-C", repo.path,
+      "log",
+      "--since=midnight",
+      "--numstat",
+      "--pretty=format:__VIBES_COMMIT__%ae"
+    ])
+    var includeCurrentCommit = false
     for line in log.split(separator: "\n", omittingEmptySubsequences: false) {
-      if line.contains("__VIBES_COMMIT__") {
-        stats.commits += 1
-      } else {
+      if line.hasPrefix("__VIBES_COMMIT__") {
+        let email = line.replacingOccurrences(of: "__VIBES_COMMIT__", with: "")
+        includeCurrentCommit = email.caseInsensitiveCompare(authorEmail) == .orderedSame
+        if includeCurrentCommit {
+          stats.commits += 1
+        }
+      } else if includeCurrentCommit {
         parseNumstat(line, committed: true, into: &stats)
       }
     }
 
+    scanWorkingTree(repo: repo, into: &stats)
+    if stats.hasActivity {
+      stats.latestActivity = now
+    }
+    return stats
+  }
+
+  private func scanWorkingTree(repo: RepoConfig, into stats: inout DailyGitStats) {
     let unstaged = runGit(["-C", repo.path, "diff", "--numstat"])
     for line in unstaged.split(separator: "\n") {
       parseNumstat(line, committed: false, into: &stats)
@@ -49,10 +76,6 @@ struct GitScanner {
     for line in staged.split(separator: "\n") {
       parseNumstat(line, committed: false, into: &stats)
     }
-    if stats.hasActivity {
-      stats.latestActivity = now
-    }
-    return stats
   }
 
   private func parseNumstat(_ line: Substring, committed: Bool, into stats: inout DailyGitStats) {
@@ -86,6 +109,12 @@ struct GitScanner {
     } catch {
       return ""
     }
+  }
+
+  private func configuredUserEmail(_ path: String) -> String? {
+    let email = runGit(["-C", path, "config", "--get", "user.email"])
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return email.isEmpty ? nil : email
   }
 }
 
@@ -148,6 +177,9 @@ struct RelayClient {
     method: String,
     body: Body?
   ) async throws -> Response {
+    guard baseURL.isAllowedRelayTransport else {
+      throw RelayClientError.insecureRelayURL
+    }
     var request = URLRequest(url: baseURL.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))))
     request.httpMethod = method
     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -201,13 +233,23 @@ struct ErrorEnvelope: Codable {
 
 enum RelayClientError: LocalizedError {
   case invalidResponse
+  case insecureRelayURL
   case server(String)
 
   var errorDescription: String? {
     switch self {
     case .invalidResponse: "Relay returned an invalid response."
+    case .insecureRelayURL: "Relay URL must use HTTPS unless it is localhost."
     case .server(let message): message
     }
+  }
+}
+
+private extension URL {
+  var isAllowedRelayTransport: Bool {
+    if scheme == "https" { return true }
+    guard scheme == "http", let host = host(percentEncoded: false)?.lowercased() else { return false }
+    return host == "localhost" || host == "127.0.0.1" || host == "::1"
   }
 }
 
@@ -304,4 +346,3 @@ private extension String {
     isEmpty ? nil : self
   }
 }
-

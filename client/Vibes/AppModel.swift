@@ -32,7 +32,15 @@ final class AppModel: ObservableObject {
 
   func loadLocalState() {
     do {
-      config = try configStore.load()
+      if let loaded = try configStore.load() {
+        guard isAllowedRelayURL(loaded.server.relayURL) else {
+          lastError = "Saved relay URL must use HTTPS unless it is localhost."
+          config = nil
+          token = ""
+          return
+        }
+        config = loaded
+      }
       token = try keychain.readToken() ?? ""
       mode = config?.presence.mode ?? .broadcasting
       manualStatus = config?.presence.manualStatus ?? ""
@@ -46,8 +54,14 @@ final class AppModel: ObservableObject {
   }
 
   func completeManualSetup(relayURLText: String, token: String, handle: String, displayName: String, deviceLabel: String) async {
+    let cleanToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let imported = config, !cleanToken.isEmpty {
+      await install(config: imported, token: cleanToken)
+      return
+    }
+
     guard let relayURL = normalizeRelayURL(relayURLText) else {
-      lastError = "Enter a valid relay URL."
+      lastError = "Use HTTPS for hosted relays. HTTP is only allowed for localhost."
       return
     }
     let label = deviceLabel.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -71,6 +85,10 @@ final class AppModel: ObservableObject {
     guard panel.runModal() == .OK, let url = panel.url else { return }
     do {
       let imported = try configStore.importConfig(from: url)
+      guard isAllowedRelayURL(imported.config.server.relayURL) else {
+        lastError = "Imported relay URL must use HTTPS unless it is localhost."
+        return
+      }
       if let importedToken = imported.token, !importedToken.isEmpty {
         await install(config: imported.config, token: importedToken)
       } else {
@@ -87,6 +105,10 @@ final class AppModel: ObservableObject {
     let cleanToken = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !cleanToken.isEmpty else {
       lastError = "Paste the token from the invite page."
+      return
+    }
+    guard isAllowedRelayURL(next.server.relayURL) else {
+      lastError = "Relay URL must use HTTPS unless it is localhost."
       return
     }
     do {
@@ -229,10 +251,21 @@ final class AppModel: ObservableObject {
     NSWorkspace.shared.activateFileViewerSelecting([configStore.configURL])
   }
 
-  func publishOfflineBeforeQuit() {
+  func publishOfflineForQuit() async {
     mode = .offline
     persistPresence()
-    Task { await scanPublishAndFetch() }
+    guard let config, isConfigured else { return }
+    do {
+      let payload = StatusBuilder.payload(
+        config: config,
+        mode: .offline,
+        manualStatus: "",
+        stats: DailyGitStats()
+      )
+      try await client(for: config).publish(payload)
+    } catch {
+      lastError = error.localizedDescription
+    }
   }
 
   private func startLoop() {
@@ -271,10 +304,22 @@ final class AppModel: ObservableObject {
     if !text.contains("://") {
       text = "https://\(text)"
     }
-    guard let url = URL(string: text), let scheme = url.scheme, ["http", "https"].contains(scheme) else {
+    guard let url = URL(string: text), url.scheme != nil else {
       return nil
     }
-    return url
+    return isAllowedRelayURL(url) ? url : nil
+  }
+
+  private func isAllowedRelayURL(_ url: URL) -> Bool {
+    if url.scheme == "https" { return true }
+    return url.scheme == "http" && url.isLoopback
+  }
+}
+
+private extension URL {
+  var isLoopback: Bool {
+    guard let host = host(percentEncoded: false)?.lowercased() else { return false }
+    return host == "localhost" || host == "127.0.0.1" || host == "::1"
   }
 }
 

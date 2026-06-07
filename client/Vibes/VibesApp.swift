@@ -1,13 +1,35 @@
+import AppKit
 import SwiftUI
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+  static var model: AppModel?
+  private var isTerminatingAfterOfflinePublish = false
+
+  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    guard !isTerminatingAfterOfflinePublish, let model = Self.model, model.isConfigured else {
+      return .terminateNow
+    }
+    isTerminatingAfterOfflinePublish = true
+    Task {
+      await model.publishOfflineForQuit()
+      sender.reply(toApplicationShouldTerminate: true)
+    }
+    return .terminateLater
+  }
+}
 
 @main
 struct VibesApp: App {
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @StateObject private var model = AppModel()
 
   var body: some Scene {
     WindowGroup {
       ContentView()
         .environmentObject(model)
+        .onAppear {
+          AppDelegate.model = model
+        }
     }
     .windowResizability(.contentSize)
 
@@ -29,7 +51,6 @@ struct VibesApp: App {
       }
       Divider()
       Button("Quit") {
-        model.publishOfflineBeforeQuit()
         NSApp.terminate(nil)
       }
     }

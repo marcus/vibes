@@ -124,7 +124,11 @@ Implemented so far:
 - `GET /healthz`
 - `GET /invite/:code` — web signup page
 - `POST /invite/:code/accept` — accept an invite (creates user, token, mutual friendship)
+- `POST /api/users` — create a bootstrap user
+- `POST /api/invites`, `GET /api/invites`, `POST /api/invites/:id/revoke`
+- `POST /api/status`, `GET /api/feed`
+- `POST /api/friends/remove`, `POST /api/tokens/revoke`
 
-Still to build: `POST /api/status`, `GET /api/feed`, `POST /api/invites`, `GET /api/invites`, `POST /api/invites/:id/revoke`, `POST /api/friends/remove`, `POST /api/tokens/revoke`.
+Still to build: broader admin tooling, packaged Mac app distribution, and fuller contract tests that exercise the HTTP routes end to end.
 
 Bearer token auth for v1. Identities, friend links, invites, and latest status blobs live in SQLite; the schema and migrations are in `server/src/lib/server/db.js`.
