@@ -72,7 +72,7 @@ Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app.
    security find-identity -v -p codesigning | grep "Developer ID Application"
    ```
 
-   You currently have only an `Apple Development` identity, which cannot sign a distributable build.
+   The installed identity is `Developer ID Application: Marcus Vorwaller (H5G3VW27DZ)`.
 3. **notarytool credentials** — store a reusable keychain profile:
 
    ```bash
@@ -86,7 +86,7 @@ Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app.
 
 ### Required release environment variables
 
-Copy `.env.release.example` to `.env.release` (gitignored) and fill it in. The detected Team ID `J23CYSN68B` is pre-filled as a default — confirm it owns the Developer ID cert.
+Copy `.env.release.example` to `.env.release` (gitignored) and fill it in. Team ID `H5G3VW27DZ` and the Developer ID identity are pre-filled.
 
 | Variable | Meaning |
 | --- | --- |

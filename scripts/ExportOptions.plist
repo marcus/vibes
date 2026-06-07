@@ -4,10 +4,8 @@
   Developer ID export template for `xcodebuild -exportArchive`.
   Used by scripts/release-mac.sh.
 
-  teamID is your Apple Developer Team ID. The value below was detected from
-  the local "Apple Development" signing identity; confirm it matches the team
-  that owns the Developer ID Application certificate before the first release.
-  release-mac.sh overrides it from $VIBES_DEVELOPMENT_TEAM when that is set.
+  teamID is the Apple Developer Team ID that owns the Developer ID Application
+  certificate. release-mac.sh overrides it from $VIBES_DEVELOPMENT_TEAM when set.
 -->
 <plist version="1.0">
 <dict>
@@ -18,6 +16,6 @@
   <key>signingCertificate</key>
   <string>Developer ID Application</string>
   <key>teamID</key>
-  <string>J23CYSN68B</string>
+  <string>H5G3VW27DZ</string>
 </dict>
 </plist>
