@@ -160,54 +160,96 @@ source .env.deploy
 set +a
 ```
 
-Repoint the stable DMG URL at a known-good version on the Linux VPS:
+Repoint the stable DMG URL at a known-good version on the Linux VPS and
+restore matching public metadata. The publish script normally writes
+`/downloads/latest.json` and `/downloads/SHA256SUMS`; keep those in sync because
+`/download` reads `latest.json`.
 
 ```bash
 GOOD_VERSION=0.2.0
+GOOD_BUILD=12
+GOOD_MINIMUM_MACOS=14.0
 
-ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$GOOD_VERSION" <<'REMOTE'
+ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$GOOD_VERSION" "$GOOD_BUILD" "$GOOD_MINIMUM_MACOS" <<'REMOTE'
 set -euo pipefail
 deploy_path="$1"
 good_version="$2"
+good_build="$3"
+minimum_macos="$4"
+published_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 downloads_dir="${deploy_path}/releases/downloads"
 
 test -f "${downloads_dir}/Vibes-${good_version}.dmg"
-ln -sfn "Vibes-${good_version}.dmg" "${downloads_dir}/Vibes.dmg.tmp"
-mv -Tf "${downloads_dir}/Vibes.dmg.tmp" "${downloads_dir}/Vibes.dmg"
+test -f "${downloads_dir}/Vibes-${good_version}.zip"
+
+if [[ "$(uname -s)" == "Linux" ]]; then
+  ln -sfn "Vibes-${good_version}.dmg" "${downloads_dir}/Vibes.dmg.tmp"
+  mv -Tf "${downloads_dir}/Vibes.dmg.tmp" "${downloads_dir}/Vibes.dmg"
+else
+  cp "${downloads_dir}/Vibes-${good_version}.dmg" "${downloads_dir}/Vibes.dmg.tmp"
+  mv -f "${downloads_dir}/Vibes.dmg.tmp" "${downloads_dir}/Vibes.dmg"
+fi
+
+(
+  cd "${downloads_dir}"
+  sha256sum "Vibes-${good_version}.dmg" "Vibes-${good_version}.zip" \
+    | sed 's#^\([0-9a-f]*\)  Vibes-#\1  Vibes-#' > SHA256SUMS.tmp
+  mv -f SHA256SUMS.tmp SHA256SUMS
+)
+
+cat > "${downloads_dir}/latest.json.tmp" <<JSON
+{
+  "version": "${good_version}",
+  "build": ${good_build},
+  "buildString": "${good_build}",
+  "minimumMacOS": "${minimum_macos}",
+  "dmg": "/downloads/Vibes.dmg",
+  "stableDmg": "/downloads/Vibes.dmg",
+  "versionedDmg": "/downloads/Vibes-${good_version}.dmg",
+  "zip": "/downloads/Vibes-${good_version}.zip",
+  "versionedZip": "/downloads/Vibes-${good_version}.zip",
+  "appcast": "/appcast.xml",
+  "sha256": "/downloads/SHA256SUMS",
+  "publishedAt": "${published_at}"
+}
+JSON
+mv -f "${downloads_dir}/latest.json.tmp" "${downloads_dir}/latest.json"
 REMOTE
 
 curl -fsSI "https://${DEPLOY_DOMAIN}/downloads/Vibes.dmg"
+curl -fsS "https://${DEPLOY_DOMAIN}/downloads/latest.json" | python3 -m json.tool
+curl -fsS "https://${DEPLOY_DOMAIN}/downloads/SHA256SUMS" | grep -F "Vibes-${GOOD_VERSION}.dmg"
+curl -fsS "https://${DEPLOY_DOMAIN}/downloads/SHA256SUMS" | grep -F "Vibes-${GOOD_VERSION}.zip"
 ```
 
-If the remote filesystem or OS does not support symlink replacement with
-`mv -Tf`, copy the older DMG into place atomically instead:
+For Sparkle, publish an appcast that omits the bad version if the goal is to
+stop more users from updating to it. Generate or restore
+`release/appcast/appcast.xml` without the bad item, then upload and install it on
+the Linux VPS:
 
 ```bash
 GOOD_VERSION=0.2.0
+ROLLBACK_APPCAST=release/appcast/appcast.xml
+REMOTE_APPCAST_INCOMING="/tmp/vibes-appcast-$(date -u '+%Y%m%d%H%M%S').xml"
 
-ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$GOOD_VERSION" <<'REMOTE'
+test -f "$ROLLBACK_APPCAST"
+scp "$ROLLBACK_APPCAST" "$DEPLOY_USER@$DEPLOY_HOST:$REMOTE_APPCAST_INCOMING"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$REMOTE_APPCAST_INCOMING" <<'REMOTE'
 set -euo pipefail
 deploy_path="$1"
-good_version="$2"
-downloads_dir="${deploy_path}/releases/downloads"
-
-test -f "${downloads_dir}/Vibes-${good_version}.dmg"
-cp "${downloads_dir}/Vibes-${good_version}.dmg" "${downloads_dir}/Vibes.dmg.tmp"
-mv -f "${downloads_dir}/Vibes.dmg.tmp" "${downloads_dir}/Vibes.dmg"
+incoming="$2"
+install -m 0644 "$incoming" "${deploy_path}/releases/appcast.xml"
+rm -f "$incoming"
 REMOTE
 
-curl -fsSI "https://${DEPLOY_DOMAIN}/downloads/Vibes.dmg"
+curl -fsSI "https://${DEPLOY_DOMAIN}/appcast.xml"
+curl -fsS "https://${DEPLOY_DOMAIN}/appcast.xml" | grep -F "Vibes-${GOOD_VERSION}.zip"
 ```
 
-For Sparkle, do one of these:
-
-- Publish an appcast that omits the bad version if the goal is to stop more
-  users from updating to it. Generate or restore `release/appcast/appcast.xml`
-  without the bad item, then upload it to `${DEPLOY_PATH}/releases/appcast.xml`
-  and verify `https://${DEPLOY_DOMAIN}/appcast.xml`.
-- Cut a hotfix with the same `MARKETING_VERSION` or a newer marketing version,
-  but always with a higher `CURRENT_PROJECT_VERSION` / `VIBES_BUILD_NUMBER` than
-  the bad build. Then run the normal `make mac-release` flow.
+Alternatively, cut a hotfix with the same `MARKETING_VERSION` or a newer
+marketing version, but always with a higher `CURRENT_PROJECT_VERSION` /
+`VIBES_BUILD_NUMBER` than the bad build. Then run the normal `make mac-release`
+flow.
 
 Do not try to make Sparkle force-install an older build number over a newer bad
 install. That is not a normal rollback path and risks leaving users stranded on
