@@ -362,7 +362,6 @@ CREATE TABLE invites (
   id TEXT PRIMARY KEY,
   code_hash TEXT NOT NULL UNIQUE,
   creator_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  invite_url_path TEXT NOT NULL UNIQUE,
   accepted_by_user_id TEXT REFERENCES users(id),
   created_at TEXT NOT NULL,
   accepted_at TEXT,
@@ -397,7 +396,8 @@ Notes:
 - `payload_json` stores the publishable status blob, not raw scanner output.
 - `friendships` stores reciprocal rows for v1. Feed queries stay simple and direct. Unfriending deletes both rows.
 - `expires_at` on invites is allowed because invite lifetime is different from status lifetime.
-- `invite_url_path` is the public magic-link path, for example `/invite/<code>`.
+- The raw invite code is never stored. Only `code_hash` is persisted; the usable `/invite/<code>` URL is returned once at creation time, so a database read cannot recover live codes.
+- Handles are stored lowercased so uniqueness is case-insensitive.
 - `schema_migrations` records applied migration versions. `db migrate` applies pending migrations in order and is idempotent.
 
 ### Auth Model

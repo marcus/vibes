@@ -58,6 +58,22 @@ Default shared payloads must avoid:
 - detailed process history
 - raw agent transcripts
 
+## Visual Style
+
+Vibes takes visual inspiration from Teenage Engineering: spare, premium, and quiet. The same language applies to the SwiftUI client and the web signup pages.
+
+Principles:
+
+- Two-color base: a warm off-black and a warm off-white. Light and dark mode swap which one is background and which is foreground.
+- One restrained accent, used rarely — a single highlight, never decoration. The per-vibe feed tints are the one place more color is allowed.
+- Thin sans-serif type: light weights for display, regular for body. Inter or the system sans. Never a monospaced font except for actual code, and never for stats, numbers, or labels.
+- Extremely conservative use of retro or display faces — at most an occasional wordmark, never body text.
+- No emoji anywhere. Use SF Symbols (client) or simple line glyphs (web) when an icon is genuinely needed.
+- Layout comes from spacing and alignment, not borders and shadows. Avoid borders, dividers, and drop shadows unless absolutely necessary; when a separation is unavoidable, prefer a hairline in a near-background tone over a heavy rule.
+- Generous whitespace, tight type, calm density. Let emptiness do the work.
+
+Tokens: the canonical web tokens live in `server/src/lib/styles/tokens.css`. The core palette is a warm off-black (`#1a1714`) and warm off-white (`#f2eee6`) with warm-neutral grays and a single burnt-orange accent (`#e0531f`). The SwiftUI client mirrors the same palette, type scale, and spacing scale so both surfaces feel identical; update the tokens file first and mirror from it.
+
 ## Client Conventions
 
 - Use native SwiftUI for macOS.

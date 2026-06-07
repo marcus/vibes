@@ -1,0 +1,81 @@
+/*
+ * Vibes design tokens — Teenage Engineering inspired.
+ *
+ * Canonical web tokens. The SwiftUI client mirrors these values so the desktop
+ * app and the web signup pages feel like one product.
+ *
+ * Principles: warm off-black + warm off-white, one restrained accent, thin
+ * sans-serif type, layout from spacing (not borders/shadows), no emoji,
+ * monospace only for code.
+ */
+
+:root {
+  /* --- Raw palette -------------------------------------------------------- */
+  --vibe-ink: #1a1714; /* warm off-black */
+  --vibe-paper: #f2eee6; /* warm off-white */
+
+  /* Warm neutrals, light -> dark */
+  --vibe-ash-100: #d9d3c7;
+  --vibe-ash-300: #a89f92;
+  --vibe-ash-500: #6e665b;
+  --vibe-ash-700: #3a352f;
+
+  /* One restrained accent. Used rarely, never as decoration. */
+  --vibe-accent: #e0531f;
+
+  /* --- Type --------------------------------------------------------------- */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* Monospace is for code only. Never for stats, labels, or UI text. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+
+  --text-xs: 0.75rem; /* 12 */
+  --text-sm: 0.875rem; /* 14 */
+  --text-base: 1rem; /* 16 */
+  --text-lg: 1.25rem; /* 20 */
+  --text-xl: 1.75rem; /* 28 */
+  --text-2xl: 2.5rem; /* 40 */
+
+  --leading-tight: 1.15;
+  --leading-normal: 1.5;
+  --tracking-wide: 0.04em;
+
+  /* --- Spacing (4px base) ------------------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* --- Shape -------------------------------------------------------------- */
+  /* Minimal rounding. Borders and shadows are avoided; a hairline exists only
+     for the rare separation that spacing cannot express. */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --hairline: rgba(26, 23, 20, 0.1);
+
+  /* --- Semantic (light is default) --------------------------------------- */
+  --bg: var(--vibe-paper);
+  --fg: var(--vibe-ink);
+  --muted: var(--vibe-ash-500);
+  --faint: var(--vibe-ash-300);
+  --accent: var(--vibe-accent);
+  --field-bg: rgba(26, 23, 20, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: var(--vibe-ink);
+    --fg: var(--vibe-paper);
+    --muted: var(--vibe-ash-300);
+    --faint: var(--vibe-ash-500);
+    --hairline: rgba(242, 238, 230, 0.12);
+    --field-bg: rgba(242, 238, 230, 0.06);
+  }
+}

@@ -8,12 +8,14 @@ StartLimitBurst=3
 Type=simple
 User=${SERVICE_USER}
 WorkingDirectory=${DEPLOY_PATH}/server
-ExecStart=/usr/bin/node server.mjs
+ExecStart=/usr/bin/node build
 Restart=on-failure
 RestartSec=5
 Environment=HOST=${SERVICE_HOST}
 Environment=PORT=${SERVICE_PORT}
 Environment=NODE_ENV=production
+# adapter-node validates form posts against ORIGIN for CSRF behind the proxy.
+Environment=ORIGIN=https://${DEPLOY_DOMAIN}
 Environment=VIBES_DB_PATH=${DEPLOY_PATH}/data/vibes.sqlite
 MemoryMax=512M
 LimitNOFILE=65535

@@ -18,9 +18,32 @@ Common values:
 
 ## Local Relay
 
+The relay is a SvelteKit app (adapter-node) backed by SQLite via better-sqlite3.
+
+Development, with hot reload:
+
+```bash
+cd server && npm install
+cd .. && make server-dev
+curl http://127.0.0.1:5173/healthz
+```
+
+Production-style build and run (`node build`):
+
 ```bash
 make server
-curl http://127.0.0.1:3136/healthz
+```
+
+adapter-node validates form posts against the `ORIGIN` environment variable, so
+set `ORIGIN` (plus `HOST`/`PORT`) when running the build directly; the systemd
+unit sets `ORIGIN` from `DEPLOY_DOMAIN`.
+
+Seed a user and invite for local testing:
+
+```bash
+cd server
+VIBES_DB_PATH=data/dev.sqlite node cli.mjs users create --handle marcus --display-name Marcus
+VIBES_DB_PATH=data/dev.sqlite node cli.mjs invites create --user marcus
 ```
 
 ## Routine Deploy
@@ -88,12 +111,14 @@ ssh "$DEPLOY_USER@$DEPLOY_HOST" "systemctl status ${SERVICE_NAME} --no-pager -l"
 
 ## API Direction
 
-Initial routes:
+The full contract lives in `docs/plans/active/spec-v1.md` (API Contract section).
+
+Implemented so far:
 
 - `GET /healthz`
-- `POST /api/status`
-- `GET /api/feed`
-- `POST /api/invites`
-- `POST /api/invites/accept`
+- `GET /invite/:code` — web signup page
+- `POST /invite/:code/accept` — accept an invite (creates user, token, mutual friendship)
 
-Use simple token auth for v1. Store identities, friend links, invites, and latest status blobs in SQLite.
+Still to build: `POST /api/status`, `GET /api/feed`, `POST /api/invites`, `GET /api/invites`, `POST /api/invites/:id/revoke`, `POST /api/friends/remove`, `POST /api/tokens/revoke`.
+
+Bearer token auth for v1. Identities, friend links, invites, and latest status blobs live in SQLite; the schema and migrations are in `server/src/lib/server/db.js`.

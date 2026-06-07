@@ -6,12 +6,12 @@ Vibes shows who is around, what kind of coding day they are having, and coarse d
 
 ## Status
 
-Hackathon scaffold. The repo is ready for client and relay implementation, with a checked-in Xcode project, a minimal Node relay shell, deploy scripts, and runbooks.
+Hackathon scaffold. The repo has a checked-in Xcode project, a SvelteKit relay with SQLite and a working magic-link signup page, deploy scripts, and runbooks.
 
 ## Project Shape
 
 - `client/`: native SwiftUI macOS app project.
-- `server/`: tiny Node relay service shell.
+- `server/`: SvelteKit relay (API + web signup) backed by SQLite.
 - `deploy/`: nginx and systemd templates for a relay host.
 - `scripts/`: local and server deployment helpers.
 - `docs/plans/active/spec-v1.md`: product and implementation plan.
@@ -37,11 +37,12 @@ Open the macOS app:
 open client/Vibes.xcodeproj
 ```
 
-Run the relay locally:
+Run the relay locally (dev server with hot reload):
 
 ```bash
-make server
-curl http://127.0.0.1:3136/healthz
+cd server && npm install
+cd .. && make server-dev
+curl http://127.0.0.1:5173/healthz
 ```
 
 Build the macOS app from the command line:
@@ -72,10 +73,12 @@ The client is a SwiftUI macOS app. The first build target is a small mostly chro
 Useful commands:
 
 ```bash
-make check       # run available validation
+make check       # run server tests + build the macOS target
 make client      # build the macOS target
-make server      # run the local relay shell
-make deploy      # deploy the relay shell to the configured VPS
+make server-dev  # run the relay dev server (hot reload)
+make server      # build and run the production relay
+make server-check # run the relay test suite
+make deploy      # deploy the relay to the configured VPS
 ```
 
 Read [AGENTS.md](AGENTS.md) before starting implementation work. It captures repo conventions, privacy constraints, and suggested first tasks.
