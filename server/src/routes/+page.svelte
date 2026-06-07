@@ -1,71 +1,71 @@
+<svelte:head>
+  <title>Vibes</title>
+  <meta
+    name="description"
+    content="Private ambient presence for small coding groups."
+  />
+</svelte:head>
+
 <main>
-  <section class="hero" aria-labelledby="home-title">
-    <div class="wordmark" id="home-title">vibes</div>
-    <p class="tagline">a quiet presence layer for coding friends</p>
+  <section class="intro" aria-labelledby="home-title">
+    <p class="eyebrow">vibes</p>
+    <h1 id="home-title">A quiet presence layer for coding friends.</h1>
+    <p class="subhead">See who is around, what kind of day they are having, and when they prefer quiet.</p>
+    <p class="description">
+      Vibes is a Mac app for small groups. It turns local Git activity and an optional status into a simple friend feed.
+    </p>
+    <p class="privacy">
+      Shares aggregate activity only. No repo paths, branches, commit messages, filenames, editor activity, process history, or transcripts.
+    </p>
+    <a class="download-link" href="/download">Download for Mac</a>
   </section>
 
-  <section class="trust" aria-labelledby="trust-title">
-    <p class="section-label" id="trust-title">what it is</p>
-    <div class="trust-grid">
-      <p class="summary">
-        Vibes is a free, open-source Mac app for small groups who want a low-key
-        sense of who is around and building today.
-      </p>
-      <div class="details">
-        <p>
-          The app scans local Git repos, aggregates the day into broad activity
-          stats, and only publishes what you choose to share with friends:
-          presence mode, optional status text, derived vibe, aggregate Git stats,
-          and optional cards such as repo aliases or agent mix.
-        </p>
-        <p>
-          It does not publish raw repo paths, branch names, commit messages,
-          filenames, editor activity, process history, or agent transcripts. The
-          relay stores the latest friend-visible status for your feed. There is
-          no telemetry product, no ads, and no data sale.
-        </p>
-      </div>
-    </div>
+  <figure class="product-visual">
+    <img
+      src="/images/vibes-aspirational-screenshot.png"
+      alt="Stylized mockup of the Vibes Mac app showing a quiet friend presence feed."
+      width="1536"
+      height="1024"
+    />
+    <figcaption>Concept mockup, not a screenshot of the current app.</figcaption>
+  </figure>
+
+  <section class="steps" aria-labelledby="steps-title">
+    <p class="section-label">get started</p>
+    <h2 id="steps-title">Bring your group online.</h2>
+    <ol>
+      <li>
+        <span>Download and install Vibes for macOS.</span>
+      </li>
+      <li>
+        <span>Get a relay token from the person running your group.</span>
+      </li>
+      <li>
+        <span>Add the local Git repos you want summarized.</span>
+      </li>
+      <li>
+        <span>Choose Broadcasting, Quiet, or Offline.</span>
+      </li>
+    </ol>
   </section>
 </main>
 
 <style>
   main {
-    min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: clamp(var(--space-12), 12vh, 7rem);
-    padding: var(--space-16) var(--space-8);
+    width: min(100%, 72rem);
+    margin: 0 auto;
+    padding: clamp(var(--space-12), 9vw, 7rem) var(--space-8) var(--space-16);
   }
 
-  .hero {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+  .intro {
+    width: min(100%, 42rem);
+    display: grid;
     gap: var(--space-4);
-    text-align: center;
   }
 
-  .wordmark {
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-light);
-    letter-spacing: var(--tracking-wide);
-  }
-
-  .tagline {
-    margin: 0;
-    color: var(--muted);
-    font-weight: var(--weight-light);
-  }
-
-  .trust {
-    width: min(100%, 46rem);
-  }
-
+  .eyebrow,
   .section-label {
-    margin: 0 0 var(--space-6);
+    margin: 0;
     color: var(--faint);
     font-size: var(--text-xs);
     font-weight: var(--weight-regular);
@@ -73,46 +73,145 @@
     text-transform: uppercase;
   }
 
-  .trust-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr);
-    gap: var(--space-12);
-    align-items: start;
+  h1,
+  h2,
+  p {
+    margin: 0;
   }
 
-  .summary {
-    margin: 0;
-    font-size: var(--text-lg);
+  h1 {
+    max-width: 13ch;
+    font-size: clamp(3rem, 7.5vw, 5.75rem);
     font-weight: var(--weight-light);
-    line-height: 1.35;
+    line-height: 0.97;
   }
 
-  .details {
-    display: grid;
-    gap: var(--space-4);
+  .subhead {
+    max-width: 34rem;
     color: var(--muted);
-    font-size: var(--text-sm);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-light);
+    line-height: 1.24;
   }
 
-  .details p {
+  .description {
+    max-width: 32rem;
+    color: var(--fg);
+    font-size: var(--text-base);
+  }
+
+  .privacy {
+    max-width: 34rem;
+    color: var(--faint);
+    font-size: var(--text-xs);
+    line-height: 1.45;
+  }
+
+  .download-link {
+    width: fit-content;
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: var(--space-2);
+    padding: 0 var(--space-6);
+    background: var(--fg);
+    color: var(--bg);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    text-decoration: none;
+  }
+
+  .download-link:hover,
+  .download-link:focus-visible {
+    background: var(--accent);
+    color: var(--vibe-paper);
+  }
+
+  .product-visual {
+    margin: clamp(var(--space-12), 8vw, 5.5rem) 0 0;
+  }
+
+  .product-visual img {
+    width: min(100%, 58rem);
+    height: auto;
+    display: block;
+  }
+
+  .product-visual figcaption {
+    margin-top: var(--space-3);
+    color: var(--faint);
+    font-size: var(--text-xs);
+  }
+
+  .steps {
+    width: min(100%, 42rem);
+    display: grid;
+    gap: var(--space-6);
+    margin-top: clamp(var(--space-12), 9vw, 6rem);
+  }
+
+  h2 {
+    max-width: 16rem;
+    font-size: var(--text-2xl);
+    font-weight: var(--weight-light);
+    line-height: var(--leading-tight);
+  }
+
+  ol {
     margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: steps;
+  }
+
+  li {
+    counter-increment: steps;
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+    gap: var(--space-6);
+    padding: 1.25rem 0;
+    color: var(--muted);
+    border-top: 1px solid var(--hairline);
+  }
+
+  li:last-child {
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  li::before {
+    content: counter(steps, decimal-leading-zero);
+    color: var(--faint);
+    font-size: var(--text-xs);
+    letter-spacing: var(--tracking-wide);
+  }
+
+  li span {
+    color: var(--fg);
   }
 
   @media (max-width: 720px) {
     main {
-      align-items: stretch;
-      gap: var(--space-12);
-      padding: var(--space-12) var(--space-6);
+      padding: var(--space-12) var(--space-6) var(--space-16);
     }
 
-    .hero {
-      align-items: flex-start;
-      text-align: left;
+    h1 {
+      max-width: 9ch;
+      font-size: clamp(3rem, 17vw, 5rem);
     }
 
-    .trust-grid {
-      grid-template-columns: 1fr;
-      gap: var(--space-6);
+    .subhead {
+      font-size: var(--text-lg);
+    }
+
+    .product-visual {
+      margin-left: calc(var(--space-6) * -1);
+      margin-right: calc(var(--space-6) * -1);
+    }
+
+    .product-visual figcaption {
+      padding: 0 var(--space-6);
     }
   }
 </style>
