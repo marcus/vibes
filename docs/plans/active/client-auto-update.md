@@ -18,7 +18,7 @@ Do not build a custom updater in v1. The only acceptable fallback is a documente
 
 - Client target: `client/Vibes.xcodeproj`, scheme `Vibes`.
 - macOS deployment target: `14.0`.
-- Current bundle identifier: `com.example.vibes`; replace before any public update-capable build ships.
+- Bundle identifier: `com.opentangle.vibes` (set in the project; permanent once an update-capable build ships).
 - Current versions: `MARKETING_VERSION = 0.1.0`, `CURRENT_PROJECT_VERSION = 1`.
 - Hardened runtime is already enabled.
 - The checked-in project uses filesystem-synchronized groups, so new Swift files under `client/Vibes/` should appear in the target automatically.
@@ -31,7 +31,7 @@ Do not build a custom updater in v1. The only acceptable fallback is a documente
 
 Set the release identity before the first public build:
 
-- `PRODUCT_BUNDLE_IDENTIFIER`: change from `com.example.vibes` to the real reverse-DNS id, for example `app.vibes.mac` or `com.marcusvorwaller.vibes`.
+- `PRODUCT_BUNDLE_IDENTIFIER`: `com.opentangle.vibes` (already set).
 - `MARKETING_VERSION`: human version, SemVer-like, for example `0.2.0`.
 - `CURRENT_PROJECT_VERSION`: monotonically increasing integer build number. Never decrease it after any update-capable build has shipped.
 - `CFBundleShortVersionString`: must resolve to `$(MARKETING_VERSION)`.

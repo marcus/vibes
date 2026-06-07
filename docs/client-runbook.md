@@ -81,7 +81,7 @@ Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app.
    # Or an app-specific password:
    scripts/setup-notary.sh password vibes-notary marcus@vorwaller.net <TEAM_ID>
    ```
-4. **Real bundle id** — replace `com.example.vibes` (`PRODUCT_BUNDLE_IDENTIFIER`) in the Xcode project.
+4. **Bundle id** — `PRODUCT_BUNDLE_IDENTIFIER` is set to `com.opentangle.vibes`. This is permanent once an update-capable build ships; do not change it.
 5. **Sparkle EdDSA keys** — when Sparkle is integrated, run Sparkle's `generate_keys` once; private key stays in the Keychain, public key goes in `SUPublicEDKey`.
 
 ### Required release environment variables
