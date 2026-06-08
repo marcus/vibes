@@ -13,8 +13,11 @@ final class AppModel: ObservableObject {
   @Published var stats = DailyGitStats()
   @Published var invites: [InviteSummary] = []
   @Published var latestInviteURL: URL?
+  @Published var pendingInvite: PendingInvite?
+  @Published var inviteCodeInput: String = ""
   @Published var isBusy = false
   @Published var lastError: String?
+  @Published var successMessage: String?
   @Published var lastSyncedAt: Date?
 
   private let configStore = ConfigStore()
@@ -51,6 +54,42 @@ final class AppModel: ObservableObject {
     } catch {
       lastError = error.localizedDescription
     }
+  }
+
+  func register(displayName: String, deviceLabel: String, relayURLText: String) async {
+    let cleanName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanName.isEmpty else {
+      lastError = "Display name is required."
+      return
+    }
+    guard let relayURL = normalizeRelayURL(relayURLText.nilIfBlank ?? "https://vibes.opentangle.com") else {
+      lastError = "Use HTTPS for hosted relays. HTTP is only allowed for localhost."
+      return
+    }
+
+    let label = deviceLabel.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+      ?? Host.current().localizedName
+      ?? "Mac"
+
+    isBusy = true
+    lastError = nil
+    successMessage = nil
+    do {
+      let identity = try await RelayClient(baseURL: relayURL, token: "").register(
+        displayName: cleanName,
+        deviceLabel: label
+      )
+      let next = VibesConfig.firstLaunch(
+        relayURL: relayURL,
+        handle: identity.user.handle,
+        displayName: identity.user.displayName,
+        deviceLabel: label
+      )
+      await install(config: next, token: identity.token)
+    } catch {
+      lastError = error.localizedDescription
+    }
+    isBusy = false
   }
 
   func completeManualSetup(relayURLText: String, token: String, handle: String, displayName: String, deviceLabel: String) async {
@@ -120,9 +159,59 @@ final class AppModel: ObservableObject {
       manualStatus = next.presence.manualStatus
       startLoop()
       await refreshAll()
+      if pendingInvite != nil {
+        successMessage = nil
+      }
     } catch {
       lastError = error.localizedDescription
     }
+  }
+
+  func handleIncomingURL(_ url: URL) {
+    guard url.scheme?.lowercased() == "vibes",
+          url.host(percentEncoded: false)?.lowercased() == "invite",
+          let code = url.pathComponents.first(where: { component in
+            component != "/" && !component.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          })?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !code.isEmpty
+    else {
+      return
+    }
+
+    pendingInvite = PendingInvite(code: code)
+    inviteCodeInput = code
+    successMessage = nil
+    NSApp.activate(ignoringOtherApps: true)
+  }
+
+  func acceptPendingInvite() async {
+    guard let pendingInvite else { return }
+    await acceptInvite(code: pendingInvite.code)
+  }
+
+  func acceptInvite(code rawCode: String) async {
+    let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !code.isEmpty else { return }
+    guard let config, isConfigured else {
+      pendingInvite = PendingInvite(code: code)
+      inviteCodeInput = code
+      return
+    }
+
+    isBusy = true
+    lastError = nil
+    successMessage = nil
+    do {
+      let result = try await client(for: config).acceptInvite(code: code)
+      pendingInvite = nil
+      inviteCodeInput = ""
+      await refreshFeedOnly()
+      await refreshInvites()
+      successMessage = "Now friends with \(result.inviter.displayName)."
+    } catch {
+      lastError = error.localizedDescription
+    }
+    isBusy = false
   }
 
   func refreshAll() async {
@@ -326,5 +415,10 @@ private extension URL {
 private extension String {
   var nilIfEmpty: String? {
     isEmpty ? nil : self
+  }
+
+  var nilIfBlank: String? {
+    let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }

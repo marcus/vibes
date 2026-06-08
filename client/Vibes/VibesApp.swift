@@ -39,6 +39,10 @@ struct VibesApp: App {
         .onAppear {
           AppDelegate.model = model
         }
+        .onOpenURL { url in
+          NSApp.activate(ignoringOtherApps: true)
+          model.handleIncomingURL(url)
+        }
     }
     .windowResizability(.contentSize)
     .commands {

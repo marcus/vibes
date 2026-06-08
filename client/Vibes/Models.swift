@@ -282,6 +282,12 @@ struct AcceptInviteResult: Codable, Equatable {
   var friend: UserSummary
 }
 
+struct PendingInvite: Equatable, Identifiable {
+  var code: String
+
+  var id: String { code }
+}
+
 struct MergedStatus: Codable, Equatable, Identifiable {
   var id: String { user.handle }
   var user: UserSummary
