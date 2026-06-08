@@ -24,44 +24,80 @@ private struct SetupPanel: View {
   @State private var handle = ""
   @State private var displayName = ""
   @State private var deviceLabel = Host.current().localizedName ?? "Mac"
+  @State private var showAdvanced = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 26) {
+    VStack(alignment: .leading, spacing: 24) {
       Header(title: "vibes", subtitle: "private presence for coding friends")
 
-      VStack(alignment: .leading, spacing: 12) {
-        Field("relay url", text: $relayURL, prompt: "https://vibes.opentangle.com")
-        Field("token", text: $token, prompt: "shown once on the invite page")
-        HStack(spacing: 12) {
-          Field("handle", text: $handle, prompt: "marcus")
-          Field("display name", text: $displayName, prompt: "Marcus")
-        }
-        Field("device", text: $deviceLabel, prompt: "MacBook")
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Let's set you up.")
+          .font(.system(size: 18, weight: .light))
+        Text("This stays on your Mac.")
+          .font(.system(size: 13))
+          .foregroundStyle(VibeColor.muted)
       }
+
+      Field("display name", text: $displayName, prompt: "Marcus")
 
       HStack(spacing: 10) {
         Button {
           Task {
-            await model.completeManualSetup(
-              relayURLText: relayURL,
-              token: token,
-              handle: handle,
+            await model.register(
               displayName: displayName,
-              deviceLabel: deviceLabel
+              deviceLabel: deviceLabel,
+              relayURLText: relayURL
             )
           }
         } label: {
-          Label("Connect", systemImage: "checkmark")
+          Label("Create my identity", systemImage: "checkmark")
         }
         .buttonStyle(AccentButtonStyle())
-
-        Button {
-          Task { await model.importConfigFile() }
-        } label: {
-          Label("Import JSON", systemImage: "square.and.arrow.down")
-        }
-        .buttonStyle(PlainVibeButtonStyle())
+        .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
       }
+
+      DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
+        VStack(alignment: .leading, spacing: 12) {
+          Field("relay url", text: $relayURL, prompt: "https://vibes.opentangle.com")
+
+          VStack(alignment: .leading, spacing: 8) {
+            Text("I already have a token")
+              .font(.caption)
+              .foregroundStyle(VibeColor.muted)
+            Field("token", text: $token, prompt: "existing relay token")
+            HStack(spacing: 12) {
+              Field("handle", text: $handle, prompt: "marcus")
+              Field("device", text: $deviceLabel, prompt: "MacBook")
+            }
+          }
+
+          HStack(spacing: 10) {
+            Button {
+              Task {
+                await model.completeManualSetup(
+                  relayURLText: relayURL,
+                  token: token,
+                  handle: handle,
+                  displayName: displayName,
+                  deviceLabel: deviceLabel
+                )
+              }
+            } label: {
+              Label("Use token", systemImage: "key")
+            }
+            .buttonStyle(PlainVibeButtonStyle())
+
+            Button {
+              Task { await model.importConfigFile() }
+            } label: {
+              Label("Import JSON", systemImage: "square.and.arrow.down")
+            }
+            .buttonStyle(PlainVibeButtonStyle())
+          }
+        }
+        .padding(.top, 12)
+      }
+      .font(.system(size: 13))
 
       if let error = model.lastError {
         Text(error)
@@ -82,7 +118,7 @@ private struct MainPanel: View {
   enum Section: String, CaseIterable, Identifiable {
     case feed
     case repos
-    case invites
+    case friends
 
     var id: String { rawValue }
   }
@@ -125,13 +161,17 @@ private struct MainPanel: View {
         FeedSection()
       case .repos:
         ReposSection()
-      case .invites:
-        InvitesSection()
+      case .friends:
+        FriendsSection()
       }
 
       Footer()
     }
     .padding(22)
+    .sheet(item: $model.pendingInvite) { invite in
+      InviteSheet(invite: invite)
+        .environmentObject(model)
+    }
   }
 }
 
@@ -372,23 +412,25 @@ private struct RepoRow: View {
   }
 }
 
-private struct InvitesSection: View {
+private struct FriendsSection: View {
   @EnvironmentObject private var model: AppModel
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      HStack {
-        Text("invites")
-          .font(.caption)
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Add a friend")
+          .font(.system(size: 18, weight: .light))
+        Text("Send a one-time link. They tap it and you're connected.")
+          .font(.system(size: 13))
           .foregroundStyle(VibeColor.muted)
-        Spacer()
-        Button {
-          Task { await model.createInvite() }
-        } label: {
-          Label("Create", systemImage: "link")
-        }
-        .buttonStyle(AccentButtonStyle())
       }
+
+      Button {
+        Task { await model.createInvite() }
+      } label: {
+        Label("Create invite link", systemImage: "link")
+      }
+      .buttonStyle(AccentButtonStyle())
 
       if let url = model.latestInviteURL {
         VStack(alignment: .leading, spacing: 8) {
@@ -406,25 +448,56 @@ private struct InvitesSection: View {
         .padding(.vertical, 8)
       }
 
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Have an invite code?")
+          .font(.caption)
+          .foregroundStyle(VibeColor.muted)
+        HStack(spacing: 8) {
+          TextField("7Qm3-X2pK", text: $model.inviteCodeInput)
+            .textFieldStyle(.plain)
+            .padding(10)
+            .background(VibeColor.field)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .onSubmit {
+              Task { await model.acceptInvite(code: model.inviteCodeInput) }
+            }
+
+          Button("Accept") {
+            Task { await model.acceptInvite(code: model.inviteCodeInput) }
+          }
+          .buttonStyle(PlainVibeButtonStyle())
+          .disabled(model.inviteCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
+        }
+      }
+
+      Text("Pending invites")
+        .font(.caption)
+        .foregroundStyle(VibeColor.muted)
+        .padding(.top, 2)
+
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 10) {
-          ForEach(model.invites) { invite in
-            HStack {
-              VStack(alignment: .leading) {
-                Text(invite.state)
-                Text(invite.acceptedBy.map { "accepted by \($0)" } ?? "expires \(relative(invite.expiresAt))")
-                  .font(.caption)
-                  .foregroundStyle(VibeColor.muted)
-              }
-              Spacer()
-              if invite.state == "open" {
-                Button("Revoke") {
-                  Task { await model.revokeInvite(invite) }
+          if model.invites.isEmpty {
+            EmptyState(text: "Create an invite link when you're ready to connect with someone.")
+          } else {
+            ForEach(model.invites) { invite in
+              HStack {
+                VStack(alignment: .leading) {
+                  Text(invite.state)
+                  Text(invite.acceptedBy.map { "accepted by \($0)" } ?? "expires \(relative(invite.expiresAt))")
+                    .font(.caption)
+                    .foregroundStyle(VibeColor.muted)
                 }
-                .buttonStyle(PlainVibeButtonStyle())
+                Spacer()
+                if invite.state == "open" {
+                  Button("Revoke") {
+                    Task { await model.revokeInvite(invite) }
+                  }
+                  .buttonStyle(PlainVibeButtonStyle())
+                }
               }
+              .padding(.vertical, 8)
             }
-            .padding(.vertical, 8)
           }
         }
       }
@@ -437,6 +510,48 @@ private struct InvitesSection: View {
   }
 }
 
+private struct InviteSheet: View {
+  @EnvironmentObject private var model: AppModel
+  var invite: PendingInvite
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: 8) {
+        Text("You've been invited")
+          .font(.system(size: 22, weight: .light))
+        Text("Someone invited you to Vibes.")
+          .font(.system(size: 14))
+          .foregroundStyle(VibeColor.muted)
+        Text(invite.code)
+          .font(.caption)
+          .foregroundStyle(VibeColor.muted)
+          .textSelection(.enabled)
+      }
+
+      Text("Accepting lets you both see each other's presence.")
+        .font(.system(size: 13))
+        .foregroundStyle(VibeColor.muted)
+
+      HStack(spacing: 10) {
+        Button("Accept") {
+          Task { await model.acceptPendingInvite() }
+        }
+        .buttonStyle(AccentButtonStyle())
+        .disabled(model.isBusy)
+
+        Button("Not now") {
+          model.pendingInvite = nil
+        }
+        .buttonStyle(PlainVibeButtonStyle())
+      }
+    }
+    .padding(24)
+    .frame(width: 340)
+    .background(VibeColor.background)
+    .foregroundStyle(VibeColor.foreground)
+  }
+}
+
 private struct Footer: View {
   @EnvironmentObject private var model: AppModel
 
@@ -445,6 +560,10 @@ private struct Footer: View {
       if let error = model.lastError {
         Text(error)
           .foregroundStyle(VibeColor.accent)
+          .lineLimit(1)
+      } else if let message = model.successMessage {
+        Text(message)
+          .foregroundStyle(VibeColor.muted)
           .lineLimit(1)
       } else {
         Text(model.lastSyncedAt.map { "synced \($0.formatted(.relative(presentation: .named)))" } ?? "not synced")
