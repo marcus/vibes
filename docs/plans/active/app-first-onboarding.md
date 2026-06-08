@@ -2,310 +2,627 @@
 
 ## Purpose
 
-Today's signup flow is two-headed and awkward: a person downloads the Mac app, then has to obtain a *relay token* out-of-band (from an admin, or by filling a web form that mints a token and makes them copy/paste it into the app). The web form even creates the user account, so identity is split between "the website made me" and "the app holds my token."
+Today's signup flow is two-headed and awkward: a person downloads the Mac app, then has to obtain a relay token out-of-band from an admin or by filling out a web form that mints a token and makes them copy it into the app. The web form also creates the user account, so identity is split between "the website made me" and "the app holds my token."
 
-This plan collapses that into a single, app-first model that reads like a normal consumer app:
+This plan collapses that into a single, app-first model that reads like a normal small Mac app:
 
-1. You download Vibes. On first launch it **creates its own identity and token locally** — no website visit, no token to copy.
-2. To connect with someone, you tap **Add Friend** in the app. It produces a **one-time invite link**.
-3. Your friend clicks the link. If they have Vibes, the browser **opens the app** (via a `vibes://` URL) and they tap **Accept** — done. If they don't, they download it, and the page shows them the invite **code to paste** once the app is running.
+1. You download Vibes. On first launch, you enter a display name and the app creates its identity and token through the relay. No website visit, no token to copy.
+2. To connect with someone, you tap Add Friend in the app. It produces a one-time invite link.
+3. Your friend clicks the link. If they have Vibes, the browser opens the app through `vibes://invite/<code>` and they tap Accept. If they do not have Vibes, the page sends them to the download and shows the invite code to paste once the app is running.
 
-No passwords, no OAuth, no centralized account. The relay stays exactly as private as it is now; we are only changing *how identities are minted and how two existing identities become friends*.
+No passwords, no OAuth, no centralized login. The relay stays private and dumb: it mints local-app identities, stores bearer-token hashes, stores one-time invite hashes, and records friendships.
 
 ## Goals
 
-- A new user is fully set up by installing the app and choosing a display name. No token handling.
-- Identity (user + token) is created in-app via a self-register call; the token never leaves the Mac except as a bearer header.
-- "Add Friend" generates a one-time invite link, shareable by any channel (iMessage, email, Slack).
-- Clicking an invite link **opens the app** for users who have it (custom `vibes://` URL scheme).
-- For users who don't have the app, the post-download page shows the invite **code**, and the app accepts a pasted code.
-- Accepting an invite creates a **mutual friendship between two existing identities** — it no longer creates a user.
-- The website homepage explains the new three-step flow, staying as minimal as it is today.
+- A new user is fully set up by installing the app and entering only a display name. No token handling in the default path.
+- The relay derives a unique handle from the display name during registration. The handle is stored in config and can become editable later under Advanced or profile settings.
+- Identity and token are created in-app via a self-register API call; the token never leaves the Mac except as a bearer header.
+- Add Friend generates a one-time invite link, shareable by any channel.
+- Clicking an invite link opens the app for users who have it through the custom `vibes://` URL scheme.
+- For users who do not have the app, the web page shows the invite code and the app accepts a pasted code after onboarding.
+- Accepting an invite creates a mutual friendship between two existing identities. It no longer creates a user.
+- The website homepage explains the new app-first flow while staying minimal.
 
 ## Non-Goals (v1)
 
-- Passwords, email, password reset, OAuth, or any centralized login. (Explicitly rejected.)
-- Universal Links (`https://` that open the app directly). We use a custom URL scheme; universal links can come later.
-- In-app friend discovery, search, or a friend directory. Connections are link-only.
+- Passwords, email, password reset, OAuth, or centralized login.
+- Universal Links. Use a custom URL scheme now; `apple-app-site-association`, associated-domains entitlement, and signing wiring can come later.
+- In-app friend discovery, search, public profiles, or a friend directory. Connections are link-only.
 - Friend requests with a pending/approval state. Accepting a one-time link is the approval.
-- Adding friends from the website (no logged-in web session for normal users; admin area is unchanged).
+- Adding friends from the website. Normal users have no web session; admin stays separate.
+- Multi-device account linking. A second Mac can still use the Advanced "I already have a token" path.
+- Editing display name or handle after first launch. Keep the model compatible with this future feature, but do not build it in this slice.
+- A remove-friend UI in the Friends tab. The API already exists; this plan only covers onboarding and invite acceptance.
 - Mobile/iOS. macOS only.
 
-## The flow
+## End-to-End Flow
+
+### Install and Register
 
 ```
-                          ┌─────────────────────────────────────────────┐
-                          │  INSTALL  (one time, per person)             │
-                          └─────────────────────────────────────────────┘
-
-   Download Vibes ──► First launch ──► "Pick a display name + handle"
-                                              │
-                                              ▼
-                              App calls  POST /api/register
-                                  { handle, display_name }
-                                              │
-                              Relay creates user + token (one tx)
-                                              │
-                              App stores token in Keychain ──► Ready
+Download Vibes
+  -> first launch
+  -> enter display name
+  -> app calls POST /api/register { display_name, device_label? }
+  -> relay derives unique handle, creates user, creates token in one transaction
+  -> app stores config on disk and raw token in Keychain
+  -> user lands in the main window
 ```
 
-```
-                          ┌─────────────────────────────────────────────┐
-                          │  ADD A FRIEND                                │
-                          └─────────────────────────────────────────────┘
+### Add a Friend
 
-  Marcus (has app)                                  Dana (the invitee)
-  ───────────────                                   ──────────────────
-  Taps "Add Friend"
-      │
-      │ POST /api/invites   (Bearer: Marcus)
-      ▼
-  Relay returns one-time code  ──► link:  https://vibes.../i/<CODE>
-      │
-      │  sends link by iMessage / email / Slack
-      └───────────────────────────────────────────────►  Dana opens link
-                                                              │
-                                                  ┌───────────┴────────────┐
-                                                  │ Web page /i/<CODE>      │
-                                                  │ "Marcus invited you."   │
-                                                  └───────────┬────────────┘
-                                                              │
-                            ┌─────────────────────────────────┴───────────────────────────┐
-                            ▼                                                               ▼
-                 HAS APP  → taps "Open in Vibes"                          NO APP → taps "Download Vibes"
-                            │                                                               │
-                  Browser launches  vibes://invite/<CODE>                       installs + self-registers
-                            │                                                               │
-                  App: onOpenURL → confirmation sheet                          page shows the CODE to paste
-                  "Become friends with Marcus?"  [Accept]                                   │
-                            │                                              In app: "Add Friend ▸ Paste code"
-                            ▼                                                               ▼
-                  POST /api/invites/<CODE>/accept   (Bearer: Dana) ◄───────────────────────┘
-                            │
-                  Relay: invite still open?  → create friendship (Marcus ⇄ Dana), mark invite used
-                            │
-                            ▼
-                  Both feeds now show each other. ✔
+```
+Marcus has the app
+  -> taps Friends > Create invite link
+  -> app calls POST /api/invites with Marcus's bearer token
+  -> relay returns https://vibes.opentangle.com/i/<code>
+  -> Marcus sends that link by iMessage, email, or Slack
+
+Dana opens the link
+  -> web page /i/<code> resolves the invite and shows "Marcus invited you"
+  -> if Dana has the app, she clicks Open in Vibes
+  -> browser launches vibes://invite/<code>
+  -> app shows an accept sheet
+  -> app calls POST /api/invites/<code>/accept with Dana's bearer token
+  -> relay creates Marcus <-> Dana friendship rows and marks the invite used
+  -> both feeds show each other after refresh
 ```
 
-The key idea that removes the "browser can't see local auth" problem: **the browser never authenticates anyone.** It only carries a `<CODE>` and hands it to the app (via deep link) or to the human (via on-page text). The app — which already holds Dana's token — is what calls accept.
+### No-App Fallback
 
-## Decisions
+```
+Dana opens /i/<code> without Vibes installed
+  -> page offers Download for Mac and shows the invite code
+  -> Dana installs and launches Vibes
+  -> app asks for display name and self-registers
+  -> Dana opens Friends > Have an invite code?
+  -> Dana pastes the code and accepts it
+  -> same authenticated accept endpoint creates the friendship
+```
 
-- **Identity is created in-app, once, via a new `POST /api/register`.** It mints user + token in a single transaction and returns the raw token once. This replaces manual token entry and the web signup form.
-- **Accepting an invite is friendship-only and authenticated.** A new endpoint `POST /api/invites/:code/accept` requires a Bearer token and creates the mutual friendship between the invite's creator and the caller. It never creates a user.
-- **Custom URL scheme `vibes://`, not Universal Links.** A `vibes://invite/<CODE>` link opens the app and is handled by SwiftUI `onOpenURL`. This is ~Info.plist + a handler; Universal Links need an `apple-app-site-association` file, the associated-domains entitlement, and signing wiring — deferred.
-- **The web invite page becomes a hand-off page, not a signup form.** It shows who invited you and routes you to the app (deep link) or to download + paste-the-code. The user-creating web form and the public token-minting accept path are removed.
-- **Self-accept and re-accept are rejected cleanly.** Accepting your own invite, or an expired/used/revoked one, returns a clear error. Accepting an invite from someone already your friend is idempotent (no duplicate rows, friendly message).
-- **Handles stay unique and user-chosen.** Self-register surfaces "that handle is taken" so the user can pick another. Display name is free text.
-- **Show-the-code is the no-app fallback (approved).** No clipboard magic, no token baked into the download. The page prints the code; the app has a paste field. Reliable and obvious.
+The key idea that removes the browser-auth problem: the browser never authenticates anyone. It only carries a code and hands it to the app or to the human. The app, which already holds the user's token, is the only client that accepts an invite.
 
-## Backend changes (SvelteKit relay)
+## Accepted Product Decisions
 
-All in `server/src/`.
+- **Display name only in default onboarding.** The user enters `display_name`; the relay derives a unique `handle`. Do not ask for handle on first launch.
+- **Derived handles are server-owned.** Registration must be race-safe and deterministic enough to test. The client displays the returned handle only as account metadata.
+- **Short invite links are good for v1.** Use `https://vibes.opentangle.com/i/<code>` for shared links. No custom domain work in this plan.
+- **Multi-device is out of scope.** A second Mac can be configured manually through Advanced using an existing token.
+- **Used invite revocation does not undo friendship.** Revoking only affects open invites. Do not add remove-friend UI here.
+- **Show-the-code fallback is approved.** No clipboard magic and no token baked into the download.
 
-### 1. `POST /api/register` — self-serve identity (new)
+## API Contracts
 
-New route `server/src/routes/api/register/+server.js`.
+### `POST /api/register`
 
-- Body: `{ handle, display_name, device_label? }`.
-- Rate-limited per IP (reuse `checkRateLimit`, e.g. `register:create`, ~10/window — same budget as today's `users:create`).
-- Calls a new `relay.js` helper `registerUser(db, { handle, displayName, deviceLabel })` that wraps `createUser` + `createToken` in one `writeTx`.
-- Returns `201 { user: { handle, display_name }, token: "<raw>" }`. The raw token is returned exactly once, same contract as `createToken` / `acceptInvite` today.
-- `createUser` already validates handle shape/length and throws `handle_taken` (409) on collision — surface that to the client unchanged.
+New app-facing route: `server/src/routes/api/register/+server.js`.
 
-> `POST /api/users` (creates a user, no token) stays for admin/CLI bootstrap. `/api/register` is the app-facing path.
+Request:
 
-### 2. `acceptInvite` becomes friendship-only
+```json
+{
+  "display_name": "Dana",
+  "device_label": "Dana MacBook"
+}
+```
 
-Refactor `server/src/lib/server/relay.js:208`.
+Response `201`:
 
-- New signature: `acceptInvite(db, code, { acceptingUserId })`.
-- Logic inside the existing `writeTx`:
-  - Look up invite; reject if not `open` (`invite_unusable`, 410) — unchanged.
-  - **Reject self-accept:** if `invite.creator_user_id === acceptingUserId` → `RelayError("invite_self", "You can't accept your own invite.", 400)`.
-  - Insert the two `friendships` rows with `INSERT OR IGNORE` (already idempotent today).
-  - Mark invite `accepted_by_user_id = acceptingUserId`, `accepted_at = now()`.
-  - Return `{ inviter: getUserPublic(creator), friend: getUserPublic(acceptingUserId) }` so the app can say "now friends with Marcus."
-- Drop the `createUser` / `createToken` calls from this function — that responsibility moved to `/api/register`.
+```json
+{
+  "user": {
+    "id": "uuid",
+    "handle": "dana",
+    "display_name": "Dana"
+  },
+  "token": "raw-token-shown-once"
+}
+```
 
-### 3. `POST /api/invites/:code/accept` — authenticated accept (new)
+Rules:
 
-New route `server/src/routes/api/invites/[code]/accept/+server.js`.
+- Rate-limit by IP with `checkRateLimit(event, "register:create", 10)`.
+- Accept `display_name` and optional `device_label`. Accept `displayName` and `deviceLabel` aliases only if the existing route style makes that useful for client ergonomics; canonical JSON is snake case.
+- Do not accept a user-provided handle in the default contract. If an optional `handle` is kept for a hidden Advanced path, validate it through `createUser`; the UI still must not ask for it by default.
+- Create user + token inside one `writeTx`.
+- Return the raw token exactly once. Store only the token hash, same as `createToken`.
+- Map `RelayError` through `errorJson`.
+- Keep `POST /api/users` for admin/CLI bootstrap; it still creates a user without a token.
 
-- `requireAuth(event)` → the calling user (Dana).
-- Calls `acceptInvite(db, params.code, { acceptingUserId: user.id })`.
-- Returns `200 { inviter, friend }` or the mapped `RelayError`.
+### `POST /api/invites`
 
-### 4. Web invite page → hand-off only
+Existing authenticated route, but shared links should now be short.
 
-Rewrite `server/src/routes/invite/[code]/+page.server.js` and its `+page.svelte`.
+- Keep `requireAuth(event.request)`.
+- Keep creating one-time invite codes through `createInvite`.
+- Return `invite_url` using `/i/<code>`, not `/invite/<code>`.
+- Update `createInvite` to return `invite_url_path: /i/<code>` or have the route translate the returned code into `/i/<code>`. Prefer changing the helper so admin-created links and app-created links match.
+- Existing `/invite/<code>` pages may remain as canonical pages or redirects, but new links should use `/i/<code>`.
 
-- Keep `load()` resolving invite state + inviter display name (already there).
-- **Remove** the `actions.default` form that creates a user and shows a token, and remove the `buildConfig` token/JSON download. Identity is no longer created on the web.
-- The page (`+page.svelte`) renders, by state:
-  - `open`: "**{inviter}** invited you to Vibes." with
-    - primary button → `vibes://invite/<CODE>` ("Open in Vibes"),
-    - secondary → `/download` ("Don't have Vibes? Download for Mac"),
-    - and the **code shown in monospace** with a copy button, labelled "After installing, paste this in the app: `<CODE>`".
-  - `unusable`: "This invite has expired or already been used. Ask {inviter} for a new link." (no inviter when the code is unknown).
-- Add a short route alias `/i/[code]` that redirects to `/invite/[code]` so links are tweet-short. (Or serve the page directly at `/i/`; redirect is simpler.)
-- **Remove** the public user-creating accept route `server/src/routes/invite/[code]/accept/+server.js` (the API twin of the web form). The only accept path now is the authenticated `POST /api/invites/:code/accept`.
+### `POST /api/invites/:code/accept`
 
-### 5. Migration / data
+New authenticated route: `server/src/routes/api/invites/[code]/accept/+server.js`.
 
-No schema change. `users`, `auth_tokens`, `friendships`, `invites` are unchanged. Existing users and tokens keep working — they already are app-held bearer tokens. Existing open invites created the old way still resolve; they just route through the new hand-off page. (Old invites were single-use account-creating; once we ship, any *unaccepted* old invite will, if clicked by someone with the app, create a friendship instead of an account — acceptable, arguably better. Worth a one-line note at rollout.)
+- Call `requireAuth(event.request)` to identify the accepting user.
+- Call `acceptInvite(getDb(), params.code, { acceptingUserId: auth.user.id })`.
+- Return `200 { inviter, friend }`.
+- `inviter` is the invite creator public user.
+- `friend` is the accepting public user.
+- Do not create a user.
+- Do not mint a token.
+- Do not return config JSON.
 
-## Client changes (macOS, SwiftUI)
+Success response:
 
-All in `client/Vibes/`.
+```json
+{
+  "inviter": {
+    "id": "uuid",
+    "handle": "marcus",
+    "display_name": "Marcus"
+  },
+  "friend": {
+    "id": "uuid",
+    "handle": "dana",
+    "display_name": "Dana"
+  }
+}
+```
+
+Error behavior:
+
+- Unknown, expired, revoked, or already-used invite: `410 invite_unusable`.
+- Self-accept: `400 invite_self`.
+- Missing/invalid token: existing `401 unauthorized`.
+- Already friends: return `200` with the same shape, mark the invite accepted, and rely on `INSERT OR IGNORE` to avoid duplicate rows.
+
+## Backend Implementation
+
+All files are under `server/src/` unless noted.
+
+### 1. Add server-side registration
+
+Add helpers in `lib/server/relay.js`:
+
+- `deriveHandleBase(displayName)`:
+  - trim and lowercase,
+  - normalize diacritics if practical,
+  - replace non-`[a-z0-9]` runs with `-`,
+  - trim leading/trailing `-` or `_`,
+  - fall back to `friend`,
+  - reserve room for suffixes and keep final handles at `<= 32` chars.
+- `registerUser(db, { displayName, deviceLabel, handle? })`:
+  - validate display name by reusing `createUser`,
+  - derive candidate handles inside `writeTx`,
+  - try `base`, then `base-2`, `base-3`, etc.,
+  - create the token in the same transaction,
+  - return `{ user, token }`.
+
+Implementation note: because `writeTx` uses an IMMEDIATE transaction, concurrent registrations serialize. Still catch `handle_taken` while trying candidates so the behavior is correct even if helper code is reused elsewhere.
+
+Add route `routes/api/register/+server.js`:
+
+- `checkRateLimit(event, "register:create", 10)`.
+- `readJson(event.request)`.
+- `displayName = body.display_name ?? body.displayName`.
+- `deviceLabel = body.device_label ?? body.deviceLabel ?? "Mac"`.
+- `registerUser(getDb(), { displayName, deviceLabel })`.
+- Return `201 { user, token: token.token }`.
+
+### 2. Refactor invite acceptance to friendship-only
+
+Change `acceptInvite` in `lib/server/relay.js`.
+
+Old signature:
+
+```js
+acceptInvite(db, code, { handle, displayName, deviceLabel })
+```
+
+New signature:
+
+```js
+acceptInvite(db, code, { acceptingUserId })
+```
+
+Inside the existing `writeTx`:
+
+1. Look up invite with `getInviteByCode`.
+2. Reject unknown or non-open invite with `RelayError("invite_unusable", ..., 410)`.
+3. Reject self-accept if `invite.creator_user_id === acceptingUserId`.
+4. Fetch inviter and accepting user through `getUserPublic`; fail with `not_found` if the accepting user no longer exists.
+5. Insert both friendship rows using `INSERT OR IGNORE`.
+6. Mark the invite accepted with `accepted_by_user_id = acceptingUserId` and `accepted_at = now()`.
+7. Return `{ inviter, friend }`.
+
+Do not call `createUser` or `createToken` from this function anymore.
+
+### 3. Add authenticated accept route
+
+Add `routes/api/invites/[code]/accept/+server.js`.
+
+- Mirror the error envelope style used by the other API routes.
+- Use `params.code` exactly as supplied; the code is base64url, so no extra path decoding should be needed beyond SvelteKit's normal params.
+- Do not read a body. The bearer token decides who accepts.
+
+### 4. Rewrite invite web pages as hand-off pages
+
+Update `routes/invite/[code]/+page.server.js`:
+
+- Keep `load()` resolving invite state and inviter display name.
+- Return `{ state, code, inviter }` for open invites.
+- Remove `actions`.
+- Remove `buildConfig`.
+- Remove all token/config generation.
+
+Update `routes/invite/[code]/+page.svelte`:
+
+- Remove `enhance`, form state, token copy, and config download UI.
+- For `open`, show:
+  - "{inviter} invited you to Vibes."
+  - primary link/button to `vibes://invite/<code>` with text "Open in Vibes",
+  - secondary link to `/download` with text "Download for Mac",
+  - invite code displayed in a selectable code block with a copy button,
+  - short instruction: "After installing, paste this code in Friends."
+- For unusable/unknown, show a fresh-link message. If inviter is unknown, omit the name.
+- Keep the existing minimal visual language. Use no emoji.
+
+Add `/i/[code]`:
+
+- Preferred: `server/src/routes/i/[code]/+server.js` redirects to `/invite/${params.code}` with `307`.
+- Alternative: serve the same page at `/i/[code]`; redirect is smaller and avoids duplicate Svelte files.
+
+Delete obsolete public accept route:
+
+- Remove `server/src/routes/invite/[code]/accept/+server.js`.
+- Remove any tests or docs that call the old unauthenticated route.
+
+### 5. Preserve admin behavior
+
+Admin and CLI can still create users and tokens manually.
+
+- `POST /api/users` remains unchanged.
+- Admin invite creation should return `/i/<code>` once `createInvite` changes.
+- Admin user detail pages that build invite URLs from `invite_url_path` should keep working.
+- Update seed scripts and admin tests that call `acceptInvite` so they create the accepting user first, then call the new friendship-only accept.
+
+### 6. Data and migrations
+
+No schema change is required.
+
+Existing tables remain valid:
+
+- `users`
+- `auth_tokens`
+- `friendships`
+- `invites`
+- `statuses`
+
+Existing users and tokens continue working. Existing open invite codes continue resolving because the code hash lookup is unchanged. Once this ships, an unaccepted old invite no longer creates a new account from the website; it must be accepted by an app identity.
+
+Add a release-note line:
+
+> Token-based setup is still available under Advanced. Invite links now connect two app-created identities instead of creating accounts on the web.
+
+## Client Implementation
+
+All files are under `client/Vibes/`.
 
 ### 1. Register the `vibes://` URL scheme
 
-- `client/Vibes/Info.plist`: add `CFBundleURLTypes` with a single `CFBundleURLSchemes = ["vibes"]` entry and a `CFBundleURLName` like `com.marcusvorwaller.vibes.invite`.
-- `client/Vibes/VibesApp.swift`: add `.onOpenURL { url in model.handleIncomingURL(url) }` to the `WindowGroup` scene. Bring the window to front on open.
+Update `Info.plist` with:
 
-### 2. Self-register replaces token entry
+- `CFBundleURLTypes`
+- one URL type with `CFBundleURLName = com.marcusvorwaller.vibes.invite`
+- `CFBundleURLSchemes = [vibes]`
 
-- `GitScanner.swift`: add `func register(handle:displayName:deviceLabel:) async throws -> RegisteredIdentity` calling `POST /api/register`, returning `{ handle, displayName, token }`. (Sibling to the existing `createInvite()` at `GitScanner.swift:159`.)
-- `AppModel.swift`: add `func register(handle:displayName:deviceLabel:)` that calls the relay, then reuses the existing `install(config:token:)` path (`AppModel.swift:104`) to persist config to disk + token to Keychain. The relay URL defaults to the bundled `https://vibes.opentangle.com` and is hidden behind an "Advanced" disclosure.
-- Keep `completeManualSetup` and `importConfigFile` available but demote them to an "Advanced / I already have a token" affordance — useful for re-installs and multi-device, not the default path.
+Update `VibesApp.swift`:
 
-### 3. Handle an incoming invite
+- Add `.onOpenURL { url in model.handleIncomingURL(url) }` to `ContentView()`.
+- Bring the app/window forward on URL open using `NSApp.activate(ignoringOtherApps: true)`.
+- Keep Sparkle and menu bar wiring unchanged.
 
-- `AppModel.swift`: `func handleIncomingURL(_ url: URL)`:
-  - Parse `vibes://invite/<CODE>` (host `invite`, first path component is the code). Ignore anything else.
-  - If not yet configured: stash the pending code, run onboarding first, then resume accept.
-  - If configured: set `pendingInvite = code` to drive a confirmation sheet.
-- `func acceptPendingInvite()` → `GitScanner.acceptInvite(code:)` → `POST /api/invites/<code>/accept`, then refresh the feed and show "Now friends with {inviter}."
-- `GitScanner.swift`: add `func acceptInvite(code:) async throws -> AcceptResult` (`POST /api/invites/\(code)/accept`).
+### 2. Replace default token setup with self-register
 
-### 4. Paste-a-code path (no-app friends)
+Add client models in `Models.swift` or near `RelayClient`:
 
-- In the **Add Friend** section, a small "Have an invite code?" field + Accept button that calls the same `acceptInvite(code:)`. This is what the downloaded-after-clicking friend uses.
+- `RegisterRequest`
+- `RegisteredIdentity`
+- `AcceptInviteResult`
 
-## Mac app UI sketches
+Add `RelayClient.register(displayName:deviceLabel:) async throws -> RegisteredIdentity`:
 
-The app window is fixed `460×620` (`ContentView.swift:14`). Three relevant screens.
+- `POST /api/register`
+- No bearer token required.
+- Decode `user.handle`, `user.display_name`, and `token`.
 
-### A. First-launch onboarding (replaces `SetupPanel`)
+Keep the existing `RelayClient` bearer behavior for authenticated routes. If the current `send` helper always adds `Authorization`, either:
 
-```
-┌──────────────────────────────────────────────────────┐
-│  vibes                                                 │
-│  private presence for coding friends                   │
-│                                                        │
-│  Let's set you up. This stays on your Mac.             │
-│                                                        │
-│  display name   ┌──────────────────────────────────┐  │
-│                 │ Marcus                           │  │
-│                 └──────────────────────────────────┘  │
-│  handle         ┌──────────────────────────────────┐  │
-│                 │ marcus                           │  │
-│                 └──────────────────────────────────┘  │
-│                 your friends see this on the feed      │
-│                                                        │
-│           ┌───────────────────────────┐               │
-│           │   ✓  Create my identity    │  ◄ accent     │
-│           └───────────────────────────┘               │
-│                                                        │
-│  ▸ Advanced  (relay url · I already have a token)      │
-│                                                        │
-│  ⚠ that handle is taken — try another                  │  ◄ error slot
-└──────────────────────────────────────────────────────┘
-```
+- add a second unauthenticated send helper for register, or
+- make auth header optional and only include it when `token` is non-empty.
 
-"Create my identity" → `POST /api/register` → on success, drops straight into the main panel. Device label is auto-filled from `Host.current().localizedName` (as today) and tucked under Advanced.
+Update `AppModel.swift`:
 
-### B. Main panel — "Friends" tab with Add Friend (evolves `InvitesSection`)
+- Add `register(displayName:deviceLabel:relayURLText:)`.
+- Normalize and validate relay URL with the existing rules.
+- Call `RelayClient(baseURL: relayURL, token: "").register(...)`.
+- Build `VibesConfig.firstLaunch(relayURL: relayURL, handle: returned.user.handle, displayName: returned.user.displayName, deviceLabel: label)`.
+- Save config and token through existing `install(config:token:)`.
+- Default relay URL to `https://vibes.opentangle.com`.
+- Keep `completeManualSetup` and `importConfigFile`, but move them behind Advanced and update their copy so they are not the default first-launch path.
 
-The segmented control changes from `feed · repos · invites` to `feed · repos · friends`.
+### 3. Handle incoming invite URLs
 
-```
-┌──────────────────────────────────────────────────────┐
-│  vibes                    Marcus      [ Broadcasting ▾]│
-│                                                        │
-│  [ feed ]  [ repos ]  [ friends ]                  ⟳   │
-│                                                        │
-│  Add a friend                                          │
-│  Send a one-time link. They tap it and you're connected.│
-│           ┌───────────────────────────┐               │
-│           │   🔗  Create invite link   │  ◄ accent     │
-│           └───────────────────────────┘               │
-│                                                        │
-│  ┌──────────────────────────────────────────────────┐ │
-│  │ https://vibes.opentangle.com/i/7Qm3-X2pK          │ │ ◄ selectable
-│  │            [ Copy link ]   [ Share… ]             │ │
-│  └──────────────────────────────────────────────────┘ │
-│                                                        │
-│  Have an invite code?                                  │
-│   ┌─────────────────────────┐  ┌──────────┐           │
-│   │ 7Qm3-X2pK               │  │  Accept  │           │
-│   └─────────────────────────┘  └──────────┘           │
-│                                                        │
-│  Pending invites                                       │
-│   • open       · expires in 7 days        [ Revoke ]   │
-│   • accepted   · by dana                                │
-└──────────────────────────────────────────────────────┘
+Add state to `AppModel.swift`:
+
+- `@Published var pendingInvite: PendingInvite?`
+- `@Published var inviteCodeInput: String = ""`
+- optional `@Published var successMessage: String?` if the existing footer/error pattern is not enough.
+
+Add:
+
+```swift
+func handleIncomingURL(_ url: URL)
+func acceptPendingInvite() async
+func acceptInvite(code: String) async
 ```
 
-Reuses the existing create/copy/list wiring (`createInvite`, `copyLatestInvite`, `invites`, `revokeInvite`). Adds the "Have an invite code?" field and a native Share button.
+Parsing rules:
 
-### C. Incoming invite confirmation (sheet, triggered by `vibes://`)
+- Accept only scheme `vibes`.
+- Accept only host `invite`.
+- Read the first non-empty path component as the code.
+- Trim whitespace.
+- Ignore unknown URLs without showing an error.
+- If not configured, store the code and show onboarding; after successful registration, surface the accept sheet.
+- If configured, set `pendingInvite` so the sheet appears.
+
+`vibes://invite/abc123` has:
+
+- scheme: `vibes`
+- host: `invite`
+- path component: `abc123`
+
+Do not parse the host as the code.
+
+Add `RelayClient.acceptInvite(code:) async throws -> AcceptInviteResult`:
+
+- `POST /api/invites/<code>/accept`
+- bearer token required.
+- Decode `{ inviter, friend }`.
+
+After accept:
+
+- clear pending/input code,
+- refresh feed and invites,
+- show "Now friends with {inviter.displayName}."
+
+### 4. Add paste-a-code path
+
+In the Friends section, add a compact "Have an invite code?" field and Accept button.
+
+- Reuse `acceptInvite(code:)`.
+- Disable Accept for empty/whitespace-only codes.
+- Show expired/used/self errors in the same existing error surface.
+- Keep the field visually quiet and use existing `Field`, `AccentButtonStyle`, and `PlainVibeButtonStyle`.
+
+### 5. Rename Invites to Friends
+
+Update `ContentView.swift`:
+
+- Change segmented control case from `invites` to `friends`.
+- Rename `InvitesSection` to `FriendsSection` or keep the struct name but expose "friends" in the UI. Prefer renaming for agent readability.
+- Keep existing create/copy/list/revoke invite wiring.
+- Add a native Share button if straightforward with AppKit `NSSharingServicePicker`; otherwise copy link is enough for this implementation pass.
+
+## Mac App UI Requirements
+
+The app window stays fixed at `460 x 620`. Maintain the current warm off-black/off-white palette and restrained accent. Use SF Symbols in buttons where icons are needed. Do not use emoji.
+
+### First-Launch Onboarding
+
+Default UI asks only for display name:
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                                                        │
-│              You've been invited                       │
-│                                                        │
-│        ┌────────┐                                      │
-│        │  D     │   Dana                               │
-│        └────────┘   wants to share their vibe with you │
-│                                                        │
-│      ┌─────────────────┐   ┌─────────────────┐         │
-│      │     Accept      │   │     Not now     │         │
-│      └─────────────────┘   └─────────────────┘         │
-│                                                        │
-│  Accepting lets you both see each other's presence.    │
-└──────────────────────────────────────────────────────┘
+vibes
+private presence for coding friends
+
+Let's set you up. This stays on your Mac.
+
+display name
+[ Marcus                                      ]
+
+[ checkmark icon ] Create my identity
+
+Advanced
+  relay url
+  I already have a token
+
+error slot
 ```
 
-"Accept" → `POST /api/invites/<code>/accept` → toast "Now friends with Dana" + feed refresh. Errors (expired/used/self) render in the same sheet with a single "OK."
+Behavior:
 
-## Website homepage changes
+- Display name required.
+- Device label auto-filled from `Host.current().localizedName ?? "Mac"`.
+- Server derives handle and returns it.
+- On success, go directly to main panel.
+- On error, keep input and show the relay error message.
 
-`server/src/routes/+page.svelte` — keep the current minimal layout and styling; only the "get started" steps change. Today (lines ~38–55):
+### Friends Tab
+
+The segmented control becomes `feed`, `repos`, `friends`.
 
 ```
+vibes                         Marcus     [ Broadcasting ]
+
+[ feed ] [ repos ] [ friends ]                         [ refresh icon ]
+
+Add a friend
+Send a one-time link. They tap it and you're connected.
+
+[ link icon ] Create invite link
+
+https://vibes.opentangle.com/i/7Qm3-X2pK
+[ copy icon ] Copy link        [ share icon ] Share
+
+Have an invite code?
+[ 7Qm3-X2pK                  ] [ Accept ]
+
+Pending invites
+open       expires in 7 days          [ Revoke ]
+accepted   by dana
+```
+
+### Incoming Invite Sheet
+
+Triggered by `vibes://invite/<code>`:
+
+```
+You've been invited
+
+Dana wants to share their vibe with you.
+
+[ Accept ] [ Not now ]
+
+Accepting lets you both see each other's presence.
+```
+
+If the app does not know the inviter name before accepting, use "Someone invited you to Vibes" and show the code in small muted text. Do not add an unauthenticated "preview invite" API unless needed; the web page already previews the inviter.
+
+On accept success, dismiss the sheet and show "Now friends with Dana" or "Now friends with Marcus" based on the `inviter` returned by the API.
+
+## Website Homepage Changes
+
+Update `server/src/routes/+page.svelte` only in the get-started copy.
+
+Current steps:
+
+```text
 1. Download and install Vibes for macOS.
-2. Get a relay token from the person running your group.   ← removed
+2. Get a relay token from the person running your group.
 3. Add the local Git repos you want summarized.
 4. Choose Broadcasting, Quiet, or Offline.
 ```
 
-New steps (still four, no token):
+New steps:
 
-```
+```text
 1. Download and install Vibes for macOS.
-2. Open it and pick a display name — your identity is created on your Mac.
-3. Tap "Add Friend" to send a one-time invite link (or accept one you were sent).
+2. Open it and enter a display name.
+3. Tap Add Friend to send a one-time invite link, or accept one you were sent.
 4. Add your local repos and choose Broadcasting, Quiet, or Offline.
 ```
 
-No layout, color, or component changes — just the `<li>` copy. The existing "Download for Mac" CTA stays. (Optional, only if it stays minimal: a one-line "Got an invite link? Click it on the Mac where Vibes is installed." under the steps — leave out unless it reads cleanly.)
+No layout, color, or component changes. The existing Download for Mac CTA stays.
 
-## Open questions
+## Tests and Verification
 
-1. **Display name only, or handle too?** Self-register needs a unique handle today (DB constraint). Simplest UX: ask for display name, auto-derive a handle (slugify + numeric suffix on collision) and let it be edited under Advanced. Decide before building screen A.
-2. **Link length / vanity.** `/i/<code>` keeps it short; do we want a custom domain or is `vibes.opentangle.com/i/...` fine? (Assume fine for v1.)
-3. **Multi-device.** A second Mac for the same person currently means a second identity. Out of scope here, but the "I already have a token" Advanced path covers the manual case.
-4. **Revoking a used invite** has no effect (already accepted = already friends). Confirm we don't also want a "remove friend" surface in the same screen (it exists in the API: `POST /api/friends/remove`).
+Because this plan changes code across server and client, the implementing agent must satisfy the repo Definition of Done.
 
-## Rollout
+### Server tests
 
-1. Backend: `registerUser` + `/api/register`; refactor `acceptInvite`; add `/api/invites/:code/accept`; rewrite invite hand-off page; remove web signup form + public accept route; add `/i/` alias.
-2. Client: `vibes://` scheme + `onOpenURL`; `register` flow + onboarding screen A; `handleIncomingURL` + confirmation sheet C; Add Friend screen B with paste-code field.
-3. Web: homepage steps copy.
-4. Verify end-to-end on two machines (or two identities): install → register → add friend → click link → deep-link accept; and the download-then-paste-code path.
-5. Note in release notes that old token-based setup still works via Advanced, and old invite links now create friendships rather than accounts.
+Update `server/tests/relay.test.js`:
+
+- `registerUser` creates a user and token in one transaction.
+- duplicate display names derive unique handles, e.g. `dana`, `dana-2`.
+- invalid/empty display names are rejected.
+- `acceptInvite` now requires an existing accepting user.
+- accepting creates two friendship rows and marks invite accepted.
+- self-accept returns `invite_self`.
+- second accept of same invite returns `invite_unusable`.
+- accepting when already friends is idempotent and does not duplicate rows.
+- raw invite codes and raw tokens are still never stored.
+
+Update `server/tests/admin.test.js` and seed scripts:
+
+- Any call to `acceptInvite(db, code, { handle, displayName })` must become:
+  - `const user = createUser(...)`
+  - optionally `createToken(...)`
+  - `acceptInvite(db, code, { acceptingUserId: user.id })`
+- Invite URL path expectations should accept `/i/<code>`.
+
+Add route-level tests if there is already a route-test pattern. If not, helper-level tests plus existing API smoke coverage are acceptable for this pass.
+
+Required server command:
+
+```bash
+make server-check
 ```
+
+### Client verification
+
+Required client command:
+
+```bash
+make client
+```
+
+Manual app proof:
+
+1. Run the relay locally or against a staging relay.
+2. Launch a clean app state with no config/token.
+3. Register with a display name only.
+4. Confirm config contains returned handle and Keychain contains token.
+5. Create a second identity, create an invite from the first, accept from the second.
+6. Confirm both feeds show each other.
+7. Test `vibes://invite/<code>` opens the app and shows the accept sheet.
+8. Test paste-code accept path.
+
+### Full check
+
+If both server and client changed, run:
+
+```bash
+make check
+```
+
+For UI changes, include a screenshot of the running app or clearly state why screenshot capture was not possible. Passing compile alone is not enough.
+
+## Implementation Order
+
+1. Backend helper changes:
+   - add `registerUser` and handle derivation,
+   - refactor `acceptInvite`,
+   - update tests and seed scripts for new helper signatures.
+2. Backend routes:
+   - add `/api/register`,
+   - add authenticated `/api/invites/[code]/accept`,
+   - remove old public `/invite/[code]/accept`,
+   - add `/i/[code]` redirect,
+   - rewrite invite hand-off page.
+3. Client network models:
+   - add register and accept invite response/request models,
+   - support unauthenticated register call,
+   - add authenticated accept invite call.
+4. Client app model:
+   - implement self-register,
+   - implement URL handling and pending invite state,
+   - implement paste-code accept.
+5. Client UI:
+   - replace default setup panel with display-name onboarding,
+   - move token setup under Advanced,
+   - rename Invites to Friends,
+   - add incoming invite sheet.
+6. Web copy:
+   - update homepage steps.
+7. Verification:
+   - run relevant checks,
+   - test deep link and paste-code flows,
+   - capture proof.
+
+## Agent Handoff Checklist
+
+- No default UI asks for a handle.
+- `/api/register` returns a user and raw token once.
+- User + token registration is atomic.
+- Derived handle collisions are handled without asking the user.
+- New invite URLs use `/i/<code>`.
+- Browser hand-off page never creates users or returns tokens.
+- The only invite accept endpoint is authenticated.
+- Old token setup remains available under Advanced.
+- Existing admin bootstrap paths still work.
+- Existing users/tokens remain valid.
+- No raw repo paths, branch names, commit messages, filenames, editor activity, process history, or transcripts are added to shared payloads.
+- No emoji are introduced in app or web UI.
+- `make check` passes when both client and server are touched.
