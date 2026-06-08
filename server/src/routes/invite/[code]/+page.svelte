@@ -2,12 +2,20 @@
   let { data } = $props();
 
   let copied = $state(false);
+  let copyTimer;
   const appURL = $derived(`vibes://invite/${encodeURIComponent(data.code ?? "")}`);
 
   async function copyCode() {
     if (!data.code) return;
-    await navigator.clipboard.writeText(data.code);
-    copied = true;
+    try {
+      await navigator.clipboard.writeText(data.code);
+      copied = true;
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => (copied = false), 2000);
+    } catch {
+      // Clipboard may be unavailable (blocked or insecure context). The code is
+      // selectable, so the user can still copy it manually.
+    }
   }
 </script>
 
