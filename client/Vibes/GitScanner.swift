@@ -144,6 +144,15 @@ struct RelayClient {
   var baseURL: URL
   var token: String
 
+  func register(displayName: String, deviceLabel: String) async throws -> RegisteredIdentity {
+    try await send(
+      path: "/api/register",
+      method: "POST",
+      body: RegisterRequest(displayName: displayName, deviceLabel: deviceLabel),
+      requiresAuth: false
+    )
+  }
+
   func publish(_ payload: StatusPayload) async throws {
     let _: PublishResponse = try await send(
       path: "/api/status",
@@ -158,6 +167,14 @@ struct RelayClient {
 
   func createInvite() async throws -> CreatedInvite {
     try await send(path: "/api/invites", method: "POST", body: EmptyBody())
+  }
+
+  func acceptInvite(code: String) async throws -> AcceptInviteResult {
+    try await send(
+      path: "/api/invites/\(code)/accept",
+      method: "POST",
+      body: Optional<String>.none
+    )
   }
 
   func listInvites() async throws -> InviteListResponse {
@@ -175,14 +192,17 @@ struct RelayClient {
   private func send<Response: Decodable, Body: Encodable>(
     path: String,
     method: String,
-    body: Body?
+    body: Body?,
+    requiresAuth: Bool = true
   ) async throws -> Response {
     guard baseURL.isAllowedRelayTransport else {
       throw RelayClientError.insecureRelayURL
     }
     var request = URLRequest(url: baseURL.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))))
     request.httpMethod = method
-    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    if requiresAuth {
+      request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
     request.setValue("application/json", forHTTPHeaderField: "Accept")
     if let body {
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")

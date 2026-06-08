@@ -262,6 +262,26 @@ struct UserSummary: Codable, Equatable, Identifiable {
   }
 }
 
+struct RegisterRequest: Codable, Equatable {
+  var displayName: String
+  var deviceLabel: String
+
+  enum CodingKeys: String, CodingKey {
+    case displayName = "display_name"
+    case deviceLabel = "device_label"
+  }
+}
+
+struct RegisteredIdentity: Codable, Equatable {
+  var user: UserSummary
+  var token: String
+}
+
+struct AcceptInviteResult: Codable, Equatable {
+  var inviter: UserSummary
+  var friend: UserSummary
+}
+
 struct MergedStatus: Codable, Equatable, Identifiable {
   var id: String { user.handle }
   var user: UserSummary
