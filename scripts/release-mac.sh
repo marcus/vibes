@@ -19,6 +19,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "${SCRIPT_DIR}")"
 cd "${REPO_ROOT}"
 
+# A VIBES_BUILD_DMG set in the environment (e.g. by the Makefile's mac-release
+# target) must win over .env.release; otherwise the file silently downgrades a
+# requested DMG build to a zip-only one.
+_env_build_dmg_set="${VIBES_BUILD_DMG+1}"
+_env_build_dmg="${VIBES_BUILD_DMG:-}"
+
 ENV_FILE="${RELEASE_ENV_FILE:-.env.release}"
 if [[ -f "${ENV_FILE}" ]]; then
   set -a
@@ -26,6 +32,8 @@ if [[ -f "${ENV_FILE}" ]]; then
   source "${ENV_FILE}"
   set +a
 fi
+
+[[ -n "${_env_build_dmg_set}" ]] && export VIBES_BUILD_DMG="${_env_build_dmg}"
 
 die() { echo "error: $*" >&2; exit 2; }
 note() { echo "==> $*"; }

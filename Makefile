@@ -25,4 +25,4 @@ deploy:
 mac-release:
 	VIBES_BUILD_DMG=1 scripts/release-mac.sh
 	scripts/generate-appcast.sh
-	scripts/publish-mac-release.sh
+	VIBES_BUILD_DMG=1 scripts/publish-mac-release.sh

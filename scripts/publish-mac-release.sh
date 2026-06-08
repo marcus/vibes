@@ -22,8 +22,16 @@ load_env_file() {
   fi
 }
 
+# A VIBES_BUILD_DMG set in the environment (e.g. by the Makefile's mac-release
+# target) must win over .env.release so a requested DMG release is not silently
+# rejected as zip-only.
+_env_build_dmg_set="${VIBES_BUILD_DMG+1}"
+_env_build_dmg="${VIBES_BUILD_DMG:-}"
+
 load_env_file "${DEPLOY_ENV_FILE:-.env.deploy}"
 load_env_file "${RELEASE_ENV_FILE:-.env.release}"
+
+[[ -n "${_env_build_dmg_set}" ]] && export VIBES_BUILD_DMG="${_env_build_dmg}"
 
 die() { echo "error: $*" >&2; exit 2; }
 note() { echo "==> $*"; }
