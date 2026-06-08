@@ -3,6 +3,18 @@
     <channel>
         <title>Vibes</title>
         <item>
+            <title>0.3.0</title>
+            <pubDate>Sun, 07 Jun 2026 22:38:57 -0700</pubDate>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://vibes.opentangle.com/downloads/Vibes-0.3.0.zip" length="3182911" type="application/octet-stream" sparkle:edSignature="76dZpUdxonNr6e4HDaS9hQRXsSIWANHpLu/XxQ5IfoI8nutrgR1e9O9DvmOQ9d04DxKD9mn+FQKfHUy0Kd7FDw=="/>
+            <sparkle:deltas>
+                <enclosure url="https://vibes.opentangle.com/downloads/Vibes4-3.delta" sparkle:deltaFrom="3" length="161154" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="ax4zwCN+jjueXTeYoVC//J/yGHloQNLt06D9dW8y4NFe1vZ2dOAJbijWLZTGOBw3qcd/FuB8QdUf6VAk+jG+Bg=="/>
+                <enclosure url="https://vibes.opentangle.com/downloads/Vibes4-2.delta" sparkle:deltaFrom="2" length="1511550" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="UjIi0Dwd7qfL06aTG2l8n+qL8LyFz0fXIQbgSYzVnuPidjUuTYH0Zl/+yT5FA7wG28XBZf7VxvcDdfWkXWGiBw=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.2.1</title>
             <pubDate>Sat, 06 Jun 2026 22:56:07 -0700</pubDate>
             <sparkle:version>3</sparkle:version>
