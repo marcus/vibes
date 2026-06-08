@@ -38,13 +38,13 @@
         <span>Download and install Vibes for macOS.</span>
       </li>
       <li>
-        <span>Get a relay token from the person running your group.</span>
+        <span>Open it and enter a display name.</span>
       </li>
       <li>
-        <span>Add the local Git repos you want summarized.</span>
+        <span>Tap Add Friend to send a one-time invite link, or accept one you were sent.</span>
       </li>
       <li>
-        <span>Choose Broadcasting, Quiet, or Offline.</span>
+        <span>Add your local repos and choose Broadcasting, Quiet, or Offline.</span>
       </li>
     </ol>
   </section>

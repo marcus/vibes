@@ -1,15 +1,15 @@
-import { redirect } from "@sveltejs/kit";
 import { getDb } from "$lib/server/db.js";
-import { getInviteByCode, inviteState } from "$lib/server/relay.js";
+import { getInviteByCode, getUserPublic, inviteState } from "$lib/server/relay.js";
 
 /** @type {import('./$types').PageServerLoad} */
 export function load({ params }) {
   const db = getDb();
   const invite = getInviteByCode(db, params.code);
-  if (!invite) return { state: "unusable", inviter: null };
+  if (!invite) return { state: "unusable", code: params.code, inviter: null };
 
   const state = inviteState(invite);
-  if (state !== "open") return { state: "unusable", inviter: null };
+  if (state !== "open") return { state: "unusable", code: params.code, inviter: null };
 
-  throw redirect(302, `vibes://invite/${encodeURIComponent(params.code)}`);
+  const inviter = getUserPublic(db, invite.creator_user_id);
+  return { state: "open", code: params.code, inviter: inviter?.display_name ?? null };
 }

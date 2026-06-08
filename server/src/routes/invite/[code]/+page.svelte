@@ -1,51 +1,19 @@
 <script>
-  import { enhance } from "$app/forms";
-
-  let { data, form } = $props();
+  let { data } = $props();
 
   let copied = $state(false);
+  const appURL = $derived(`vibes://invite/${encodeURIComponent(data.code ?? "")}`);
 
-  async function copyToken() {
-    if (!form?.token) return;
-    await navigator.clipboard.writeText(form.token);
+  async function copyCode() {
+    if (!data.code) return;
+    await navigator.clipboard.writeText(data.code);
     copied = true;
-  }
-
-  function downloadConfig() {
-    if (!form?.config) return;
-    const blob = new Blob([form.config], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "vibes-config.json";
-    link.click();
-    URL.revokeObjectURL(url);
   }
 </script>
 
 <main>
   <div class="card">
-    {#if form?.accepted}
-      <p class="eyebrow">welcome, {form.handle}</p>
-      <h1>You're in.</h1>
-      <p class="lede">
-        Copy your token now — it is shown once. Keep it somewhere safe, then add
-        it during first launch in the Vibes app.
-      </p>
-
-      <label class="field-label" for="token">your token</label>
-      <div class="token-row">
-        <code id="token" class="token">{form.token}</code>
-        <button type="button" onclick={copyToken}>{copied ? "copied" : "copy"}</button>
-      </div>
-
-      <details class="config">
-        <summary>config snippet</summary>
-        <pre>{form.config}</pre>
-      </details>
-
-      <button type="button" class="download" onclick={downloadConfig}>download config</button>
-    {:else if data.state !== "open"}
+    {#if data.state !== "open"}
       <h1>This invite can't be used.</h1>
       <p class="lede">
         It may have expired, already been used, or been revoked. Ask your friend
@@ -53,47 +21,25 @@
       </p>
     {:else}
       <p class="eyebrow">
-        {#if data.inviter}{data.inviter} invited you{:else}you're invited{/if}
+        {#if data.inviter}{data.inviter} invited you to Vibes{:else}you're invited to Vibes{/if}
       </p>
-      <h1>Join Vibes.</h1>
+      <h1>Open Vibes.</h1>
       <p class="lede">
-        Pick a handle your friends will see, then finish setup in the app.
+        If you have the app, open this invite there. If not, download Vibes and
+        paste the code in Friends after setup.
       </p>
 
-      {#if form?.error}
-        <p class="error">{form.error}</p>
-      {/if}
+      <div class="actions">
+        <a class="primary" href={appURL}>Open in Vibes</a>
+        <a href="/download">Download for Mac</a>
+      </div>
 
-      <form method="POST" use:enhance>
-        <label class="field-label" for="handle">handle</label>
-        <input
-          id="handle"
-          name="handle"
-          autocomplete="off"
-          autocapitalize="off"
-          spellcheck="false"
-          value={form?.handle ?? ""}
-          required
-        />
-
-        <label class="field-label" for="display_name">display name</label>
-        <input
-          id="display_name"
-          name="display_name"
-          value={form?.display_name ?? ""}
-          required
-        />
-
-        <label class="field-label" for="device_label">device <span class="optional">optional</span></label>
-        <input
-          id="device_label"
-          name="device_label"
-          placeholder="MacBook"
-          value={form?.device_label ?? ""}
-        />
-
-        <button type="submit" class="primary">Accept invite</button>
-      </form>
+      <label class="field-label" for="invite-code">invite code</label>
+      <div class="code-row">
+        <code id="invite-code">{data.code}</code>
+        <button type="button" onclick={copyCode}>{copied ? "copied" : "copy"}</button>
+      </div>
+      <p class="hint">After installing, paste this code in Friends.</p>
     {/if}
   </div>
 </main>
@@ -122,8 +68,12 @@
     text-transform: lowercase;
   }
 
-  h1 {
+  h1,
+  p {
     margin: 0;
+  }
+
+  h1 {
     font-size: var(--text-xl);
     font-weight: var(--weight-light);
     letter-spacing: var(--tracking-wide);
@@ -135,102 +85,59 @@
     font-weight: var(--weight-light);
   }
 
-  form {
+  .actions {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-8);
   }
 
-  .field-label {
-    font-size: var(--text-sm);
-    color: var(--muted);
-    margin-bottom: var(--space-2);
-    letter-spacing: var(--tracking-wide);
-  }
-
-  .optional {
-    color: var(--faint);
-  }
-
-  input {
-    background: var(--field-bg);
-    border: none;
-    border-radius: var(--radius-md);
-    color: var(--fg);
-    font-family: inherit;
-    font-size: var(--text-base);
-    padding: var(--space-3);
-    margin-bottom: var(--space-6);
-  }
-
-  input:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-  }
-
+  a,
   button {
     background: var(--field-bg);
     border: none;
     border-radius: var(--radius-md);
     color: var(--fg);
     cursor: pointer;
+    font: inherit;
     font-size: var(--text-sm);
-    padding: var(--space-3) var(--space-4);
     letter-spacing: var(--tracking-wide);
+    padding: var(--space-3) var(--space-4);
+    text-decoration: none;
   }
 
-  button.primary {
+  a.primary {
     background: var(--accent);
     color: var(--vibe-paper);
-    font-size: var(--text-base);
-    padding: var(--space-3);
   }
 
-  .token-row {
+  .field-label {
+    color: var(--muted);
+    font-size: var(--text-sm);
+    letter-spacing: var(--tracking-wide);
+    margin-bottom: var(--space-2);
+  }
+
+  .code-row {
     display: flex;
     gap: var(--space-2);
     align-items: stretch;
   }
 
-  .token {
+  code {
     flex: 1;
     background: var(--field-bg);
     border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
     padding: var(--space-3);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    word-break: break-all;
     user-select: all;
+    word-break: break-all;
   }
 
-  .config {
-    margin-top: var(--space-6);
-  }
-
-  .download {
-    margin-top: var(--space-4);
-    align-self: flex-start;
-  }
-
-  .config summary {
-    color: var(--muted);
-    cursor: pointer;
-    font-size: var(--text-sm);
-    letter-spacing: var(--tracking-wide);
-  }
-
-  .config pre {
-    background: var(--field-bg);
-    border-radius: var(--radius-md);
-    padding: var(--space-4);
+  .hint {
     margin-top: var(--space-3);
-    overflow-x: auto;
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-  }
-
-  .error {
-    margin: 0 0 var(--space-4);
-    color: var(--accent);
+    color: var(--muted);
     font-size: var(--text-sm);
   }
 </style>

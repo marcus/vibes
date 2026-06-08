@@ -147,28 +147,36 @@ describe("GET /i/[code]", () => {
       shortInviteRoute.GET({ params: { code: "abc_123-def" } });
       throw new Error("Expected redirect");
     } catch (err) {
-      expect(err.status).toBe(308);
+      expect(err.status).toBe(307);
       expect(err.location).toBe("/invite/abc_123-def");
     }
   });
 });
 
 describe("GET /invite/[code]", () => {
-  it("redirects open legacy invite pages to the app invite scheme", () => {
+  it("loads open invite hand-off data without creating accounts or tokens", () => {
     const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const invite = createInvite(db, creator.id);
 
-    try {
-      invitePageServer.load({ params: { code: invite.code } });
-      throw new Error("Expected redirect");
-    } catch (err) {
-      expect(err.status).toBe(302);
-      expect(err.location).toBe(`vibes://invite/${invite.code}`);
-    }
+    expect(invitePageServer.load({ params: { code: invite.code } })).toEqual({
+      state: "open",
+      code: invite.code,
+      inviter: "Marcus",
+    });
+    expect(db.prepare("SELECT count(*) AS n FROM users").get().n).toBe(1);
+    expect(db.prepare("SELECT count(*) AS n FROM auth_tokens").get().n).toBe(0);
   });
 
   it("does not expose the old unauthenticated accept action", () => {
     expect("actions" in invitePageServer).toBe(false);
+  });
+
+  it("omits inviter details for unknown or unusable invites", () => {
+    expect(invitePageServer.load({ params: { code: "missing" } })).toEqual({
+      state: "unusable",
+      code: "missing",
+      inviter: null,
+    });
   });
 });
 
