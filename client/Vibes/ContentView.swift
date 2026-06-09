@@ -2,11 +2,12 @@ import SwiftUI
 
 struct ContentView: View {
   @EnvironmentObject private var model: AppModel
+  @Binding var showInviteFriend: Bool
 
   var body: some View {
     Group {
       if model.isConfigured {
-        MainPanel()
+        MainPanel(showInviteFriend: $showInviteFriend)
       } else {
         SetupPanel()
       }
@@ -114,6 +115,7 @@ private struct SetupPanel: View {
 private struct MainPanel: View {
   @EnvironmentObject private var model: AppModel
   @Environment(\.openSettings) private var openSettings
+  @Binding var showInviteFriend: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -121,6 +123,10 @@ private struct MainPanel: View {
         Header(title: "vibes", subtitle: model.config?.identity.displayName ?? "")
         Spacer()
         HStack(spacing: 10) {
+          Button("Invite") {
+            showInviteFriend = true
+          }
+          .buttonStyle(PlainVibeButtonStyle())
           PresenceToggle(
             mode: model.mode,
             setMode: { model.setMode($0) }
@@ -135,13 +141,17 @@ private struct MainPanel: View {
         }
       }
 
-      HomeView()
+      HomeView(openInviteFriend: { showInviteFriend = true })
 
       Footer(openSettings: { openSettings() })
     }
     .padding(22)
     .sheet(item: $model.pendingInvite) { invite in
       InviteSheet(invite: invite)
+        .environmentObject(model)
+    }
+    .sheet(isPresented: $showInviteFriend) {
+      InviteFriendView()
         .environmentObject(model)
     }
   }
@@ -418,6 +428,7 @@ private struct EditableSettingField: View {
 // of FriendCards — "you" first, then each friend, EmptyState when none.
 private struct HomeView: View {
   @EnvironmentObject private var model: AppModel
+  var openInviteFriend: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -447,7 +458,11 @@ private struct HomeView: View {
           }
           let friends = model.feed?.friends ?? []
           if friends.isEmpty {
-            EmptyState(text: "No friends yet. Create one invite link and send it directly.")
+            EmptyState(
+              text: "No friends yet. Create one invite link and send it directly.",
+              actionTitle: "Invite",
+              action: openInviteFriend
+            )
           } else {
             ForEach(friends) { status in
               FriendCard(status: status, isYou: false)
@@ -587,15 +602,15 @@ private struct RepoRow: View {
   }
 }
 
-private struct FriendsSection: View {
+private struct InviteFriendView: View {
   @EnvironmentObject private var model: AppModel
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
+    VStack(alignment: .leading, spacing: 18) {
       VStack(alignment: .leading, spacing: 8) {
-        Text("Add a friend")
-          .font(.system(size: 18, weight: .light))
-        Text("Send a one-time link. They tap it and you're connected.")
+        Text("invite a friend")
+          .font(.system(size: 22, weight: .light))
+        Text("Send a one-time link. Each link connects one friend.")
           .font(.system(size: 13))
           .foregroundStyle(VibeColor.muted)
       }
@@ -603,9 +618,10 @@ private struct FriendsSection: View {
       Button {
         Task { await model.createInvite() }
       } label: {
-        Label("Create invite link", systemImage: "link")
+        Label("Create Invite Link", systemImage: "link")
       }
       .buttonStyle(AccentButtonStyle())
+      .disabled(model.isBusy)
 
       if let url = model.latestInviteURL {
         VStack(alignment: .leading, spacing: 8) {
@@ -617,6 +633,10 @@ private struct FriendsSection: View {
             model.copyLatestInvite()
           } label: {
             Label("Copy Link", systemImage: "doc.on.doc")
+          }
+          .buttonStyle(PlainVibeButtonStyle())
+          ShareLink(item: url) {
+            Label("Share", systemImage: "square.and.arrow.up")
           }
           .buttonStyle(PlainVibeButtonStyle())
         }
@@ -645,35 +665,41 @@ private struct FriendsSection: View {
         }
       }
 
-      Text("Pending invites")
+      Text("Open invites")
         .font(.caption)
         .foregroundStyle(VibeColor.muted)
         .padding(.top, 2)
 
       VStack(alignment: .leading, spacing: 10) {
-        if model.invites.isEmpty {
+        let openInvites = model.invites.filter { $0.state == "open" }
+        if openInvites.isEmpty {
           EmptyState(text: "Create an invite link when you're ready to connect with someone.")
         } else {
-          ForEach(model.invites) { invite in
+          ForEach(openInvites) { invite in
               HStack {
                 VStack(alignment: .leading) {
-                  Text(invite.state)
-                  Text(invite.acceptedBy.map { "accepted by \($0)" } ?? "expires \(relative(invite.expiresAt))")
+                  Text("Invite")
+                  Text("expires \(relative(invite.expiresAt))")
                     .font(.caption)
                     .foregroundStyle(VibeColor.muted)
                 }
                 Spacer()
-                if invite.state == "open" {
-                  Button("Revoke") {
-                    Task { await model.revokeInvite(invite) }
-                  }
-                  .buttonStyle(PlainVibeButtonStyle())
+                Button("Revoke") {
+                  Task { await model.revokeInvite(invite) }
                 }
+                .buttonStyle(PlainVibeButtonStyle())
               }
               .padding(.vertical, 8)
           }
         }
       }
+    }
+    .padding(24)
+    .frame(width: 420)
+    .background(VibeColor.background)
+    .foregroundStyle(VibeColor.foreground)
+    .task {
+      await model.refreshInvites()
     }
   }
 
@@ -813,14 +839,24 @@ private struct StatCell: View {
 
 private struct EmptyState: View {
   var text: String
+  var actionTitle: String?
+  var action: (() -> Void)?
 
   var body: some View {
-    Text(text)
-      .font(.system(size: 14))
-      .foregroundStyle(VibeColor.muted)
-      .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-      .multilineTextAlignment(.center)
-      .padding(.horizontal, 30)
+    VStack(spacing: 12) {
+      Text(text)
+        .font(.system(size: 14))
+        .foregroundStyle(VibeColor.muted)
+        .multilineTextAlignment(.center)
+      if let actionTitle, let action {
+        Button(actionTitle) {
+          action()
+        }
+        .buttonStyle(PlainVibeButtonStyle())
+      }
+    }
+    .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+    .padding(.horizontal, 30)
   }
 }
 
@@ -928,6 +964,6 @@ private extension NSAppearance {
 }
 
 #Preview {
-  ContentView()
+  ContentView(showInviteFriend: .constant(false))
     .environmentObject(AppModel())
 }

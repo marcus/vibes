@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct VibesApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @StateObject private var model = AppModel()
+  @State private var showInviteFriend = false
 
   // Owns the Sparkle updater for the app's lifetime; starts it immediately so
   // background checks run and `canCheckForUpdates` is observable.
@@ -34,7 +35,7 @@ struct VibesApp: App {
 
   var body: some Scene {
     WindowGroup {
-      ContentView()
+      ContentView(showInviteFriend: $showInviteFriend)
         .environmentObject(model)
         .onAppear {
           AppDelegate.model = model
@@ -59,6 +60,10 @@ struct VibesApp: App {
     MenuBarExtra("Vibes", systemImage: "dot.radiowaves.left.and.right") {
       Button("Show Vibes") {
         NSApp.activate(ignoringOtherApps: true)
+      }
+      Button("Invite a Friend...") {
+        NSApp.activate(ignoringOtherApps: true)
+        showInviteFriend = true
       }
       CheckForUpdatesView(updater: updaterController.updater)
       Divider()
