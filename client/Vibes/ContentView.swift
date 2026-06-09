@@ -632,7 +632,7 @@ private struct EmptyState: View {
   }
 }
 
-private enum VibeColor {
+enum VibeColor {
   static let ink = NSColor(red: 0.102, green: 0.090, blue: 0.078, alpha: 1)
   static let paper = NSColor(red: 0.949, green: 0.933, blue: 0.902, alpha: 1)
   static let accent = Color(red: 0.878, green: 0.325, blue: 0.122)
