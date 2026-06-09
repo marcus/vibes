@@ -33,7 +33,6 @@ enum FriendCardSize {
   var captionFont: Font {
     .system(size: self == .comfortable ? 12 : 11)
   }
-  var dotSize: CGFloat { self == .comfortable ? 14 : 10 }
   var chipFont: Font {
     .system(size: self == .comfortable ? 11 : 10, weight: .medium)
   }
@@ -81,12 +80,10 @@ struct FriendCard: View {
   // MARK: - Sections
 
   private var header: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 8) {
-      // Presence dot: "lit" green when online, "at-rest" neutral otherwise.
-      Circle()
-        .fill(isOnline ? VibeColor.online : VibeColor.controlAtRest)
-        .frame(width: size.dotSize, height: size.dotSize)
-        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+    HStack(alignment: .center, spacing: 8) {
+      // Circular avatar; presence is the ring around it ("lit" green when online,
+      // "at-rest" neutral otherwise) — replaces the old standalone dot.
+      AvatarView(status: status, size: size, isOnline: isOnline)
       Text(isYou ? "you" : status.user.displayName)
         .font(size.nameFont)
         .foregroundStyle(VibeColor.foreground)

@@ -203,6 +203,31 @@ struct RelayClient {
     try await send(path: "/api/me", method: "GET", body: Optional<String>.none)
   }
 
+  // Upload a freshly generated PNG as the current profile icon. The body is raw
+  // image bytes (not JSON), so this can't use the generic `send<>`; the short
+  // prompt/style ride along as headers since the body is binary.
+  func uploadAvatar(pngData: Data, prompt: String, style: String) async throws -> AvatarUploadResult {
+    try await sendRaw(
+      path: "/api/avatar",
+      method: "POST",
+      body: pngData,
+      contentType: "image/png",
+      headers: [
+        "X-Avatar-Prompt": prompt,
+        "X-Avatar-Style": style
+      ]
+    )
+  }
+
+  // Clear the current profile icon, reverting to initials.
+  func deleteAvatar() async throws {
+    let _: OKResponse = try await send(
+      path: "/api/avatar",
+      method: "DELETE",
+      body: Optional<String>.none
+    )
+  }
+
   func createInvite() async throws -> CreatedInvite {
     try await send(path: "/api/invites", method: "POST", body: EmptyBody())
   }
@@ -267,6 +292,52 @@ struct RelayClient {
     }
     return try JSONCoding.decoder.decode(Response.self, from: data)
   }
+
+  // Sibling of `send<>` for raw-byte request bodies (the generic one is JSON
+  // only). Same HTTPS guard, bearer auth, and error-envelope decoding; the body
+  // is posted verbatim with the given content type. Header values are sanitized
+  // to a header-safe ASCII subset so a stray newline/control char can't break
+  // the request.
+  private func sendRaw<Response: Decodable>(
+    path: String,
+    method: String,
+    body: Data,
+    contentType: String,
+    headers: [String: String] = [:]
+  ) async throws -> Response {
+    guard baseURL.isAllowedRelayTransport else {
+      throw RelayClientError.insecureRelayURL
+    }
+    var request = URLRequest(url: baseURL.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))))
+    request.httpMethod = method
+    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+    for (name, value) in headers {
+      request.setValue(value.headerSafe, forHTTPHeaderField: name)
+    }
+    request.httpBody = body
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard let http = response as? HTTPURLResponse else {
+      throw RelayClientError.invalidResponse
+    }
+    guard (200..<300).contains(http.statusCode) else {
+      if let error = try? JSONCoding.decoder.decode(ErrorEnvelope.self, from: data) {
+        throw RelayClientError.serverResponse(
+          message: error.error.message,
+          status: http.statusCode,
+          code: error.error.code
+        )
+      }
+      throw RelayClientError.serverResponse(
+        message: "Relay returned HTTP \(http.statusCode).",
+        status: http.statusCode,
+        code: nil
+      )
+    }
+    return try JSONCoding.decoder.decode(Response.self, from: data)
+  }
 }
 
 struct EmptyBody: Codable {}
@@ -275,6 +346,22 @@ struct OKResponse: Codable { var ok: Bool }
 
 struct AccountResponse: Codable {
   var user: UserSummary
+  var houseStyle: HouseStyle?
+
+  enum CodingKeys: String, CodingKey {
+    case user
+    case houseStyle = "house_style"
+  }
+}
+
+struct AvatarUploadResult: Codable {
+  var id: String
+  var avatarURL: String
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case avatarURL = "avatar_url"
+  }
 }
 
 struct CreatedInvite: Codable {
@@ -400,5 +487,13 @@ enum StatusBuilder {
 private extension String {
   var nilIfEmpty: String? {
     isEmpty ? nil : self
+  }
+
+  // Strip control characters (newlines, CR, etc.) so a user-typed prompt can be
+  // safely passed as an HTTP header value.
+  var headerSafe: String {
+    unicodeScalars.filter { $0 >= " " && $0 != "\u{7F}" }
+      .map(String.init)
+      .joined()
   }
 }

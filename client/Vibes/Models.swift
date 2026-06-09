@@ -326,12 +326,33 @@ struct UserSummary: Codable, Equatable, Identifiable {
   var handle: String
   var displayName: String
   var timezone: String?
+  var avatarUrl: String?
 
   enum CodingKeys: String, CodingKey {
     case id
     case handle
     case displayName = "display_name"
     case timezone
+    case avatarUrl = "avatar_url"
+  }
+}
+
+// Server-owned art-direction template for AI profile-icon generation, fetched as
+// part of `/api/me` (`house_style`). The client composes
+// `promptPrefix + userPrompt + promptSuffix`, picks the first `styles` entry that
+// the on-device ImageCreator actually offers, and renders a square
+// `imageSize`×`imageSize` PNG. Tunable server-side without an app release.
+struct HouseStyle: Codable, Equatable {
+  var promptPrefix: String
+  var promptSuffix: String
+  var styles: [String]
+  var imageSize: Int
+
+  enum CodingKeys: String, CodingKey {
+    case promptPrefix = "prompt_prefix"
+    case promptSuffix = "prompt_suffix"
+    case styles
+    case imageSize = "image_size"
   }
 }
 

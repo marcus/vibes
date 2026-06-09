@@ -1,12 +1,17 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { migrate, openDb } from "../src/lib/server/db.js";
 import { checkRateLimit, readJson } from "../src/lib/server/http.js";
+import { getAvatarStore, resetAvatarStore } from "../src/lib/server/avatarStore.js";
 import {
+  HOUSE_STYLE,
   RelayError,
   acceptInvite,
   authenticateToken,
+  avatarUrlFor,
   createInvite,
   createToken,
   createUser,
@@ -15,12 +20,30 @@ import {
   getInviteByCode,
   inviteState,
   listInvites,
+  newShortId,
   registerUser,
   removeFriend,
   revokeInvite,
   revokeToken,
+  setUserAvatar,
   upsertStatus,
+  validatePng,
 } from "../src/lib/server/relay.js";
+
+/**
+ * Smallest bytes that pass validatePng: the 8-byte signature followed by an
+ * IHDR chunk whose width/height live at offsets 16 and 20. We do not need a
+ * decodable image, only valid signature + IHDR dimensions.
+ */
+function fakePng(width = 512, height = 512) {
+  const buf = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(buf, 0);
+  buf.writeUInt32BE(13, 8); // IHDR length
+  buf.write("IHDR", 12, "ascii");
+  buf.writeUInt32BE(width, 16);
+  buf.writeUInt32BE(height, 20);
+  return buf;
+}
 
 /** @type {import('better-sqlite3').Database} */
 let db;
@@ -60,6 +83,28 @@ describe("migrations", () => {
     }
     const columns = db.prepare("PRAGMA table_info(users)").all().map((row) => row.name);
     expect(columns).toContain("timezone");
+  });
+
+  it("applies migration v4 (avatars table + users.avatar_id)", () => {
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all()
+      .map((row) => row.name);
+    expect(tables).toContain("avatars");
+
+    const userColumns = db.prepare("PRAGMA table_info(users)").all().map((row) => row.name);
+    expect(userColumns).toContain("avatar_id");
+
+    const avatarColumns = db.prepare("PRAGMA table_info(avatars)").all().map((row) => row.name);
+    for (const c of ["id", "user_id", "store", "content_type", "width", "height", "byte_size", "prompt", "style", "created_at"]) {
+      expect(avatarColumns).toContain(c);
+    }
+
+    const versions = db
+      .prepare("SELECT version FROM schema_migrations")
+      .all()
+      .map((row) => row.version);
+    expect(versions).toContain(4);
   });
 
   it("is idempotent when run again", () => {
@@ -578,11 +623,142 @@ describe("statuses and feed", () => {
   });
 });
 
+describe("avatars", () => {
+  let avatarDir;
+  const savedEnv = {};
+
+  beforeEach(() => {
+    for (const key of ["VIBES_AVATAR_STORE", "VIBES_AVATAR_DIR", "VIBES_AVATAR_BASE_URL"]) {
+      savedEnv[key] = process.env[key];
+    }
+    avatarDir = mkdtempSync(join(tmpdir(), "vibes-avatars-"));
+    process.env.VIBES_AVATAR_STORE = "filesystem";
+    process.env.VIBES_AVATAR_DIR = avatarDir;
+    process.env.VIBES_AVATAR_BASE_URL = "https://vibes.test/avatars";
+    resetAvatarStore();
+  });
+
+  afterEach(() => {
+    rmSync(avatarDir, { recursive: true, force: true });
+    for (const key of ["VIBES_AVATAR_STORE", "VIBES_AVATAR_DIR", "VIBES_AVATAR_BASE_URL"]) {
+      if (savedEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = savedEnv[key];
+    }
+    resetAvatarStore();
+  });
+
+  it("newShortId mints unique url-safe slugs", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const ids = new Set();
+    for (let i = 0; i < 50; i += 1) {
+      const id = newShortId(db);
+      expect(id).toMatch(/^[-_a-zA-Z0-9]+$/);
+      expect(ids.has(id)).toBe(false);
+      ids.add(id);
+      // Persist the slug so the next call must avoid it (exercises collision check).
+      db.prepare(
+        `INSERT INTO avatars (id, user_id, store, content_type, width, height, byte_size, created_at)
+         VALUES (?, ?, 'filesystem', 'image/png', 1, 1, 1, '2026-01-01T00:00:00.000Z')`,
+      ).run(id, user.id);
+    }
+  });
+
+  it("FilesystemAvatarStore writes <id>.png and builds an immutable URL", () => {
+    const store = getAvatarStore();
+    expect(store.kind).toBe("filesystem");
+    store.put("abc123", fakePng(), "image/png");
+    expect(existsSync(join(avatarDir, "abc123.png"))).toBe(true);
+    expect(store.urlFor("abc123")).toBe("https://vibes.test/avatars/abc123.png");
+    store.remove("abc123");
+    expect(existsSync(join(avatarDir, "abc123.png"))).toBe(false);
+  });
+
+  it("validatePng accepts a PNG and reads dimensions; rejects non-PNG and oversized", () => {
+    expect(validatePng(fakePng(640, 480))).toMatchObject({
+      width: 640,
+      height: 480,
+      byteSize: 33,
+    });
+    expectRelayError(() => validatePng(Buffer.from("not a png")), "invalid_image", 400);
+    expectRelayError(() => validatePng(Buffer.alloc(0)), "invalid_image", 400);
+    expectRelayError(() => validatePng(fakePng(2048, 2048)), "invalid_image", 400);
+    const huge = fakePng();
+    Object.defineProperty(huge, "length", { value: 2_000_000 });
+    expectRelayError(() => validatePng(huge), "payload_too_large", 413);
+  });
+
+  it("setUserAvatar stores bytes, records a row, and points users.avatar_id", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const result = setUserAvatar(db, user, {
+      bytes: fakePng(),
+      contentType: "image/png",
+      width: 512,
+      height: 512,
+      prompt: "a sleepy fox with headphones",
+      style: "illustration",
+    });
+
+    expect(result.id).toMatch(/^[-_a-zA-Z0-9]+$/);
+    expect(result.avatar_url).toBe(`https://vibes.test/avatars/${result.id}.png`);
+    expect(existsSync(join(avatarDir, `${result.id}.png`))).toBe(true);
+
+    const row = db.prepare("SELECT * FROM avatars WHERE id = ?").get(result.id);
+    expect(row).toMatchObject({
+      user_id: user.id,
+      store: "filesystem",
+      content_type: "image/png",
+      width: 512,
+      height: 512,
+      byte_size: 33,
+      prompt: "a sleepy fox with headphones",
+      style: "illustration",
+    });
+    expect(db.prepare("SELECT avatar_id FROM users WHERE id = ?").get(user.id).avatar_id).toBe(
+      result.id,
+    );
+
+    expect(avatarUrlFor({ avatar_id: result.id })).toBe(result.avatar_url);
+    expect(avatarUrlFor({ avatar_id: null })).toBeNull();
+  });
+
+  it("surfaces avatar_url for the viewer and friends in getFeed", () => {
+    const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    const invite = createInvite(db, marcus.id);
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
+
+    const mine = setUserAvatar(db, marcus, {
+      bytes: fakePng(),
+      contentType: "image/png",
+      width: 512,
+      height: 512,
+    });
+    const theirs = setUserAvatar(db, ken, {
+      bytes: fakePng(),
+      contentType: "image/png",
+      width: 512,
+      height: 512,
+    });
+
+    const feed = getFeed(db, marcus);
+    expect(feed.you.user.avatar_url).toBe(mine.avatar_url);
+    expect(feed.friends[0].user.avatar_url).toBe(theirs.avatar_url);
+  });
+
+  it("HOUSE_STYLE exposes a tunable server-owned template", () => {
+    expect(HOUSE_STYLE.styles).toEqual(["illustration", "animation", "sketch"]);
+    expect(HOUSE_STYLE.image_size).toBe(512);
+    expect(typeof HOUSE_STYLE.prompt_prefix).toBe("string");
+    expect(typeof HOUSE_STYLE.prompt_suffix).toBe("string");
+  });
+});
+
 describe("contract fixtures", () => {
   it("keeps the shared JSON examples parseable", () => {
     expect(fixture("status-online").mode).toBe("online");
     expect(fixture("feed-response").you.user.handle).toBe("marcus");
     expect(fixture("error").error.code).toBe("unauthorized");
+    expect(fixture("avatar-response").avatar_url).toMatch(/\/avatars\/[^/]+\.png$/);
   });
 });
 

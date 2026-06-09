@@ -167,6 +167,11 @@ struct SettingsView: View {
           Label("General", systemImage: "gearshape")
         }
 
+      ProfileIconSettingsPane()
+        .tabItem {
+          Label("Profile Icon", systemImage: "person.crop.circle")
+        }
+
       RepositoriesSettingsPane()
         .tabItem {
           Label("Repositories", systemImage: "folder")
@@ -272,6 +277,154 @@ private struct RepositoriesSettingsPane: View {
       )
       ReposSection()
     }
+  }
+}
+
+// Settings → Profile Icon. Generates a personal avatar from a short prompt using
+// on-device Apple Intelligence (ImageCreator), previews it, and uploads via
+// `uploadAvatar` (or clears via DELETE). When the device can't generate, the
+// controls are disabled with an explanation — never a crash.
+private struct ProfileIconSettingsPane: View {
+  @EnvironmentObject private var model: AppModel
+  @State private var prompt = ""
+
+  private let previewDiameter: CGFloat = 96
+
+  var body: some View {
+    SettingsPane {
+      SettingsHeading(
+        title: "profile icon",
+        detail: "Generate a personal icon from a short prompt with on-device Apple Intelligence. A shared house style keeps everyone's icons consistent."
+      )
+
+      if model.avatarSupported == false {
+        unavailableNote
+      }
+
+      preview
+
+      VStack(alignment: .leading, spacing: 6) {
+        Text("prompt")
+          .font(.caption)
+          .foregroundStyle(VibeColor.muted)
+        TextField("a sleepy fox with headphones", text: $prompt)
+          .textFieldStyle(.plain)
+          .padding(10)
+          .background(VibeColor.field)
+          .clipShape(RoundedRectangle(cornerRadius: 4))
+          .disabled(!canGenerate)
+          .onSubmit { generate() }
+      }
+
+      HStack(spacing: 10) {
+        Button {
+          generate()
+        } label: {
+          Label(model.avatarPreviewPNG == nil ? "Generate" : "Regenerate", systemImage: "sparkles")
+        }
+        .buttonStyle(PlainVibeButtonStyle())
+        .disabled(!canGenerate || isWorking)
+
+        if model.avatarPreviewPNG != nil {
+          Button {
+            Task { await model.useGeneratedAvatar() }
+          } label: {
+            Label("Use this", systemImage: "checkmark")
+          }
+          .buttonStyle(PlainVibeButtonStyle())
+          .disabled(isWorking)
+        }
+
+        Button {
+          Task { await model.removeAvatar() }
+        } label: {
+          Label("Remove", systemImage: "trash")
+        }
+        .buttonStyle(PlainVibeButtonStyle())
+        .disabled(isWorking || !hasCurrentAvatar)
+
+        if isWorking {
+          ProgressView()
+            .controlSize(.small)
+        }
+      }
+
+      if let status = workingStatus {
+        Text(status)
+          .font(.system(size: 12))
+          .foregroundStyle(VibeColor.muted)
+      }
+
+      if let error = model.avatarError {
+        Text(error)
+          .font(.system(size: 12))
+          .foregroundStyle(VibeColor.accent)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .task {
+      await model.prepareAvatarSettings()
+    }
+  }
+
+  // The generated-but-unuploaded PNG takes precedence; otherwise show the current
+  // avatar (or initials) for "you" via the shared AvatarView.
+  @ViewBuilder
+  private var preview: some View {
+    HStack {
+      Spacer()
+      if let png = model.avatarPreviewPNG, let image = NSImage(data: png) {
+        Image(nsImage: image)
+          .resizable()
+          .scaledToFill()
+          .frame(width: previewDiameter, height: previewDiameter)
+          .clipShape(Circle())
+          .overlay(Circle().strokeBorder(VibeColor.cardBorder, lineWidth: 1))
+      } else if let you = model.feed?.you {
+        AvatarView(status: you, size: .comfortable, isOnline: you.mode == .online)
+          .scaleEffect(previewDiameter / AvatarView.outerDiameter(for: .comfortable))
+          .frame(width: previewDiameter, height: previewDiameter)
+      } else {
+        Circle()
+          .fill(VibeColor.controlAtRest)
+          .frame(width: previewDiameter, height: previewDiameter)
+      }
+      Spacer()
+    }
+  }
+
+  private var unavailableNote: some View {
+    Text("On-device image generation isn't available on this Mac. It requires an Apple-Intelligence-capable Mac on the latest macOS, with the models downloaded. You can still remove an existing icon.")
+      .font(.system(size: 13))
+      .foregroundStyle(VibeColor.muted)
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(12)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(VibeColor.field)
+      .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+
+  private var canGenerate: Bool {
+    model.avatarSupported == true && model.houseStyle != nil
+  }
+
+  private var isWorking: Bool {
+    model.isGeneratingAvatar || model.isUploadingAvatar
+  }
+
+  private var hasCurrentAvatar: Bool {
+    if let raw = model.feed?.you.user.avatarUrl, !raw.isEmpty { return true }
+    return false
+  }
+
+  private var workingStatus: String? {
+    if model.isGeneratingAvatar { return "Generating on device..." }
+    if model.isUploadingAvatar { return "Uploading..." }
+    return nil
+  }
+
+  private func generate() {
+    Task { await model.generateAvatar(prompt: prompt) }
   }
 }
 

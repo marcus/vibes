@@ -261,6 +261,28 @@ Do not try to make Sparkle force-install an older build number over a newer bad
 install. That is not a normal rollback path and risks leaving users stranded on
 an update channel they cannot verify.
 
+## Profile-Icon Storage
+
+Generated avatars are stored by the relay's filesystem store and served by the
+nginx `/avatars/` alias (outside the deployed `server/` tree, like `releases/`).
+Two runtime env vars control this; the templated systemd unit sets them beside
+`VIBES_DB_PATH`:
+
+- `VIBES_AVATAR_DIR` — on-disk dir the relay writes PNGs to. Defaults in the unit
+  to `${DEPLOY_PATH}/avatars`, the dir the deploy script `mkdir -p`s and nginx
+  serves.
+- `VIBES_AVATAR_BASE_URL` — public URL prefix the slug is appended to. Defaults
+  in the unit to `https://${DEPLOY_DOMAIN}/avatars`.
+
+If both are unset in production the relay falls back to dev-only defaults
+(`data/avatars` + a `http://localhost:3136/avatars` URL) and logs a warning at
+startup; uploaded avatars then land where nginx does not serve them and every
+client's image load 404s. Keep the unit's `Environment=` lines in place (or set
+the vars in `server/.env.local`) on a fresh VPS.
+
+The `s3` store (`VIBES_AVATAR_STORE=s3`) is a stub until R2/S3 credentials are
+wired.
+
 ## Admin Area
 
 The relay has a password-gated web admin at `/admin` for a single superuser:

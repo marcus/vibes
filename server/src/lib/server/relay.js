@@ -1,9 +1,28 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { writeTx } from "./db.js";
+import { getAvatarStore } from "./avatarStore.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_HANDLE_LENGTH = 32;
 const MAX_STATUS_BYTES = 32 * 1024;
+// Avatar uploads are 512px PNGs; cap raw bytes and dimensions defensively.
+const MAX_AVATAR_BYTES = 1_500_000;
+const MAX_AVATAR_DIMENSION = 1024;
+const MAX_AVATAR_PROMPT_LENGTH = 240;
+const MAX_AVATAR_STYLE_LENGTH = 64;
+
+/**
+ * Server-owned house-style template for client-side Apple Intelligence
+ * generation. Served via /api/me so art direction is tunable without an app
+ * release. The client composes prefix + user prompt + suffix and picks the
+ * first of `styles` present in the device's available ImagePlayground styles.
+ */
+export const HOUSE_STYLE = {
+  prompt_prefix: "A friendly minimalist avatar of ",
+  prompt_suffix: ", centered, simple solid background, soft palette",
+  styles: ["illustration", "animation", "sketch"],
+  image_size: 512,
+};
 const MODES = new Set(["online", "offline"]);
 const MODE_RANK = { offline: 0, online: 1 };
 // A friend reports `online` only if they are sharing and have published within
@@ -34,14 +53,33 @@ const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 /** Raw tokens and invite codes are never stored; only their hashes are. */
 const newSecret = (bytes) => randomBytes(bytes).toString("base64url");
 
+/**
+ * Public URL for a user's current avatar, or null when none is set. Reads only
+ * `user.avatar_id`; the byte store builds the immutable URL from the slug.
+ * @param {{ avatar_id?: string | null } | null | undefined} user
+ */
+export function avatarUrlFor(user) {
+  if (!user?.avatar_id) return null;
+  return getAvatarStore().urlFor(user.avatar_id);
+}
+
 function publicUser(user) {
   if (!user) return null;
-  return { handle: user.handle, display_name: user.display_name };
+  return {
+    handle: user.handle,
+    display_name: user.display_name,
+    avatar_url: avatarUrlFor(user),
+  };
 }
 
 function feedUser(user) {
   if (!user) return null;
-  return { id: user.id, handle: user.handle, display_name: user.display_name };
+  return {
+    id: user.id,
+    handle: user.handle,
+    display_name: user.display_name,
+    avatar_url: avatarUrlFor(user),
+  };
 }
 
 function registeredUser(user) {
@@ -50,6 +88,7 @@ function registeredUser(user) {
     handle: user.handle,
     display_name: user.display_name,
     timezone: user.timezone ?? null,
+    avatar_url: avatarUrlFor(user),
   };
 }
 
@@ -678,7 +717,7 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
     viewer,
     ...db
       .prepare(
-        `SELECT users.id, users.handle, users.display_name, users.timezone
+        `SELECT users.id, users.handle, users.display_name, users.timezone, users.avatar_id
          FROM friendships
          JOIN users ON users.id = friendships.friend_user_id
          WHERE friendships.user_id = ? AND friendships.state = 'accepted'
@@ -693,13 +732,17 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
      WHERE user_id = ?
      ORDER BY updated_at DESC`,
   );
-  const viewerWithTimezone =
-    viewer.timezone == null
+  // The authenticated viewer object carries no avatar_id, so re-read the row to
+  // surface the viewer's own avatar_url.
+  const viewerRow =
+    viewer.avatar_id === undefined
       ? db
-          .prepare("SELECT id, handle, display_name, timezone FROM users WHERE id = ?")
+          .prepare(
+            "SELECT id, handle, display_name, timezone, avatar_id FROM users WHERE id = ?",
+          )
           .get(viewer.id) ?? viewer
       : viewer;
-  const merged = [viewerWithTimezone, ...users.slice(1)].map((user) =>
+  const merged = [viewerRow, ...users.slice(1)].map((user) =>
     mergeUserStatuses(user, statusQuery.all(user.id), nowMs),
   );
   return { you: merged[0], friends: merged.slice(1) };
@@ -752,4 +795,175 @@ function getUserIdentity(db, userId) {
   return db
     .prepare("SELECT id, handle, display_name FROM users WHERE id = ?")
     .get(userId);
+}
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/**
+ * Validate raw upload bytes as a PNG and read its pixel dimensions from the
+ * IHDR chunk — pure JS, no native deps. Enforces the PNG signature, a byte
+ * cap, and a sane max dimension. Returns `{ width, height, byteSize }`.
+ * @param {Buffer | Uint8Array} input
+ * @returns {{ width: number, height: number, byteSize: number }}
+ */
+export function validatePng(input) {
+  const bytes = Buffer.isBuffer(input) ? input : Buffer.from(input);
+  if (bytes.length === 0) {
+    throw new RelayError("invalid_image", "Image body is empty.", 400);
+  }
+  if (bytes.length > MAX_AVATAR_BYTES) {
+    throw new RelayError("payload_too_large", "Image is too large.", 413);
+  }
+  // 8-byte signature, then the first chunk must be IHDR (length 13).
+  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    throw new RelayError("invalid_image", "Image must be a PNG.", 400);
+  }
+  // Chunk layout: [4 len][4 type][...data][4 crc]. IHDR starts at offset 8.
+  if (bytes.toString("ascii", 12, 16) !== "IHDR") {
+    throw new RelayError("invalid_image", "Image must be a PNG.", 400);
+  }
+  const width = bytes.readUInt32BE(16);
+  const height = bytes.readUInt32BE(20);
+  if (
+    width < 1 ||
+    height < 1 ||
+    width > MAX_AVATAR_DIMENSION ||
+    height > MAX_AVATAR_DIMENSION
+  ) {
+    throw new RelayError("invalid_image", "Image dimensions are out of range.", 400);
+  }
+  return { width, height, byteSize: bytes.length };
+}
+
+// Chunks worth keeping when rebuilding a PNG. We drop everything else — text
+// (tEXt/iTXt/zTXt), EXIF (eXIf), timestamps (tIME), and any unknown/appended
+// chunks — so an untrusted client cannot smuggle arbitrary bytes into a file we
+// serve. Includes the core image chunks plus the rendering-critical ancillary
+// ones (palette, transparency, gamma/color) needed to display correctly.
+const PNG_KEEP_CHUNKS = new Set([
+  "IHDR",
+  "PLTE",
+  "IDAT",
+  "IEND",
+  "tRNS",
+  "gAMA",
+  "cHRM",
+  "sRGB",
+  "iCCP",
+  "sBIT",
+  "bKGD",
+]);
+
+/**
+ * Rebuild a validated PNG from only its essential chunks, dropping metadata and
+ * any trailing/unknown bytes — pure JS, no native deps. The input must already
+ * have passed {@link validatePng}; malformed chunk framing throws invalid_image.
+ * @param {Buffer | Uint8Array} input
+ * @returns {Buffer}
+ */
+export function sanitizePng(input) {
+  const bytes = Buffer.isBuffer(input) ? input : Buffer.from(input);
+  const out = [Buffer.from(PNG_SIGNATURE)];
+  let offset = PNG_SIGNATURE.length;
+  let sawIend = false;
+  while (offset + 8 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const dataStart = offset + 8;
+    const chunkEnd = dataStart + length + 4; // data + 4-byte CRC
+    if (chunkEnd > bytes.length) {
+      throw new RelayError("invalid_image", "Image is malformed.", 400);
+    }
+    const type = bytes.toString("ascii", offset + 4, offset + 8);
+    if (PNG_KEEP_CHUNKS.has(type)) {
+      out.push(bytes.subarray(offset, chunkEnd));
+    }
+    offset = chunkEnd;
+    if (type === "IEND") {
+      sawIend = true;
+      break; // anything after IEND is appended payload; discard it
+    }
+  }
+  if (!sawIend) {
+    throw new RelayError("invalid_image", "Image is malformed.", 400);
+  }
+  return Buffer.concat(out);
+}
+
+/**
+ * Mint a short, URL-safe slug for an avatar asset, retried on the rare PK
+ * collision. ~12 chars from 9 random bytes (base64url, no padding).
+ * @param {import('better-sqlite3').Database} db
+ * @param {number} [bytes]
+ * @returns {string}
+ */
+export function newShortId(db, bytes = 9) {
+  for (let i = 0; i < 5; i += 1) {
+    const id = randomBytes(bytes).toString("base64url");
+    const hit = db.prepare("SELECT 1 FROM avatars WHERE id = ?").get(id);
+    if (!hit) return id;
+  }
+  throw new RelayError("internal", "Could not allocate avatar id.", 500);
+}
+
+/**
+ * Store a generated avatar for a user: mint a slug, write the bytes via the
+ * storage adapter, record the row, and point users.avatar_id at it. The old
+ * row/asset is kept as immutable history (no delete on regenerate), so the
+ * minted URL is safe to cache `immutable`.
+ * @param {import('better-sqlite3').Database} db
+ * @param {{ id: string }} user
+ * @param {{ bytes: Buffer | Uint8Array, contentType: string, width: number, height: number, prompt?: string | null, style?: string | null }} input
+ * @returns {{ id: string, avatar_url: string }}
+ */
+export function setUserAvatar(db, user, { bytes, contentType, width, height, prompt = null, style = null }) {
+  const store = getAvatarStore();
+  const cleanPrompt =
+    prompt == null ? null : String(prompt).trim().slice(0, MAX_AVATAR_PROMPT_LENGTH) || null;
+  const cleanStyle =
+    style == null ? null : String(style).trim().slice(0, MAX_AVATAR_STYLE_LENGTH) || null;
+
+  return writeTx(db, () => {
+    const id = newShortId(db);
+    // Write bytes first; if the row insert fails the orphaned file is harmless
+    // (it is unreferenced and overwritten only by a future slug, which is unique).
+    store.put(id, bytes, contentType);
+    db.prepare(
+      `INSERT INTO avatars (
+         id, user_id, store, content_type, width, height, byte_size, prompt, style, created_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      user.id,
+      store.kind,
+      contentType,
+      width,
+      height,
+      bytes.length,
+      cleanPrompt,
+      cleanStyle,
+      now(),
+    );
+    db.prepare("UPDATE users SET avatar_id = ?, updated_at = ? WHERE id = ?").run(
+      id,
+      now(),
+      user.id,
+    );
+    return { id, avatar_url: store.urlFor(id) };
+  });
+}
+
+/**
+ * Clear a user's current avatar pointer (revert to initials). History rows are
+ * retained.
+ * @param {import('better-sqlite3').Database} db
+ * @param {{ id: string }} user
+ * @returns {{ ok: true }}
+ */
+export function clearUserAvatar(db, user) {
+  db.prepare("UPDATE users SET avatar_id = NULL, updated_at = ? WHERE id = ?").run(
+    now(),
+    user.id,
+  );
+  return { ok: true };
 }

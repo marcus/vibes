@@ -265,16 +265,26 @@ struct AvatarGenerator {
 
 ### 4. UI
 
-- **Settings → Profile Icon** (the native Settings scene from the in-flight
-  `native-settings-and-friend-invite-ui.md` plan, or the current settings sheet):
-  prompt text field, "Generate" button, preview, "Use this" / "Regenerate" /
-  "Remove". Show progress + the unavailable state when `AvatarGenerator` isn't
-  supported.
+- **Settings → Profile Icon** (a pane in the now-implemented native Settings
+  scene): prompt text field, "Generate" button, circular preview, "Use this" /
+  "Regenerate" / "Remove". Show progress + the unavailable state when
+  `AvatarGenerator` isn't supported.
+- **Circular avatar with presence ring** — a reusable `AvatarView` (new
+  `client/Vibes/AvatarView.swift`):
+  - `AsyncImage(url: status.user.avatarUrl)` clipped to a `Circle`; fall back to
+    initials (first letters of `displayName`) on a `VibeColor` fill when
+    `avatarUrl` is nil or the load fails.
+  - **Presence is the ring around the circle, not a separate dot.** A
+    `Circle().strokeBorder(ringColor, lineWidth: ringWidth)` overlaid (or an
+    inset stroked ring with a small gap from the image): `VibeColor.online` (lit
+    green) when online, `VibeColor.controlAtRest` (neutral) when offline. This
+    replaces the standalone presence dot in `FriendCard.header`.
+  - Size-driven dimensions (reuse the existing `size` enum on `FriendCard`):
+    avatar diameter, ring width, and gap scale with card size. Keep all colors as
+    `VibeColor` tokens.
 - **FriendCard** (`client/Vibes/FriendCard.swift` `header`): replace the bare
-  presence dot with an avatar: `AsyncImage(url: status.user.avatarUrl)` clipped to
-  a `Circle`, with the presence dot as a small overlay badge; fall back to
-  initials (first letters of `displayName`) when `avatarUrl` is nil or load
-  fails. Keep `VibeColor` tokens and existing sizing (`size.dotSize`).
+  presence `Circle()` dot with `AvatarView(status:size:isOnline:)`; the name/last-
+  seen layout stays. Remove the now-redundant standalone dot.
 
 ---
 
