@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct VibesApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+  @Environment(\.openWindow) private var openWindow
   @StateObject private var model = AppModel()
   @State private var showInviteFriend = false
 
@@ -34,7 +35,7 @@ struct VibesApp: App {
   )
 
   var body: some Scene {
-    WindowGroup {
+    WindowGroup("Vibes", id: "main") {
       ContentView(showInviteFriend: $showInviteFriend)
         .environmentObject(model)
         .onAppear {
@@ -61,9 +62,11 @@ struct VibesApp: App {
     MenuBarExtra("Vibes", systemImage: "dot.radiowaves.left.and.right") {
       Button("Show Vibes") {
         NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "main")
       }
       Button("Invite a Friend...") {
         NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "main")
         showInviteFriend = true
       }
       CheckForUpdatesView(updater: updaterController.updater)
