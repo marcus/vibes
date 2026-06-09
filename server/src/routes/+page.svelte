@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import AuroraMockup from '$lib/components/AuroraMockup.svelte';
 
   // Seconds to hold on the last frame before the clip replays.
   const LOOP_PAUSE_MS = 10000;
@@ -152,13 +153,8 @@
   </section>
 
   <figure class="product-visual">
-    <img
-      src="/images/vibes-aspirational-screenshot.png"
-      alt="Stylized mockup of the Vibes Mac app showing a feed of which friends are online and coding."
-      width="1536"
-      height="1024"
-    />
-    <figcaption>Concept mockup, not a screenshot of the current app.</figcaption>
+    <AuroraMockup siteTheme={theme} />
+    <figcaption>Interactive mockup of the Vibes Mac app. Try toggling light and dark mode on the window or website.</figcaption>
   </figure>
 
   <section class="steps" aria-labelledby="steps-title">
