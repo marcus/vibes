@@ -56,6 +56,7 @@ struct VibesApp: App {
       SettingsView()
         .environmentObject(model)
     }
+    .windowResizability(.contentSize)
 
     MenuBarExtra("Vibes", systemImage: "dot.radiowaves.left.and.right") {
       Button("Show Vibes") {

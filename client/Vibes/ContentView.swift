@@ -138,6 +138,7 @@ private struct MainPanel: View {
           }
           .buttonStyle(IconButtonStyle())
           .disabled(model.isBusy)
+          .accessibilityLabel("Scan Now")
         }
       }
 
@@ -582,6 +583,7 @@ private struct RepoRow: View {
           Image(systemName: "minus")
         }
         .buttonStyle(IconButtonStyle())
+        .accessibilityLabel("Remove Repository")
       }
       Text(repo.path)
         .font(.caption)
@@ -776,6 +778,7 @@ private struct Footer: View {
         Image(systemName: "gearshape")
       }
       .buttonStyle(IconButtonStyle())
+      .accessibilityLabel("Open Settings")
     }
     .font(.caption)
   }

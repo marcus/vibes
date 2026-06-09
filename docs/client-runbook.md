@@ -25,12 +25,12 @@ xcodebuild -project client/Vibes.xcodeproj -scheme Vibes -configuration Debug -d
 ## Core Features Implemented
 
 1. **First-Launch Setup Panel**: Connection screen allows importing a JSON configuration file or inputting settings manually (relay URL, token, handle, display name, and device label).
-2. **Settings/Config Store**: Configuration is persisted locally at `~/Library/Application Support/Vibes/config.json`. Repository aliases, sharing preferences, and display details are stored here.
+2. **Native Settings Window**: Configuration is edited through the macOS Settings scene (`Vibes → Settings...` / `Cmd-,`) with General, Repositories, Sharing, and Advanced panes. Settings are persisted locally at `~/Library/Application Support/Vibes/config.json`.
 3. **Secure Auth Storage**: Authentication tokens are stored securely in the macOS Keychain (`Vibes Relay` service) rather than in the configuration file.
 4. **Git Scanner Service**: Scans uncommitted and committed changes for the account-level Vibes day across all tracked repositories, aggregating commits, files changed, insertions, and deletions without publishing repo paths or code-origin attribution.
 5. **Feed & Status Update**: Centralized state manager publishes local status updates and retrieves the merged feed (the user's status and friends' statuses) periodically.
 6. **Presence**: Two states — online and offline — derived from recent activity. You are online when you have published within the recency window and have not hidden yourself; a one-tap Offline toggle hides you immediately. Stale online presence reads as "online … ago" from the last update.
-7. **Invite Link Management**: Users can generate new single-use invite URLs, copy them to the clipboard, list pending invites, and revoke open invites directly from the app interface.
+7. **Invite Friend Sheet**: Users can generate new single-use invite URLs, copy or share them, accept invite codes, list open invites, and revoke open invites from the main-window Invite action, empty feed state, or menu bar companion.
 8. **Periodic Refresh Loop**: Background synchronizer scans, publishes, and fetches the feed every 3 minutes, with an immediate manual refresh trigger in the header.
 
 ## Core Architecture
@@ -38,7 +38,7 @@ xcodebuild -project client/Vibes.xcodeproj -scheme Vibes -configuration Debug -d
 - [AppModel.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/AppModel.swift): Central `@MainActor` class managing app state, background loops, settings mutations, and Keychain interactions.
 - [ConfigStore.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/ConfigStore.swift): Manages saving/loading configuration JSON profiles.
 - [GitScanner.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/GitScanner.swift): Executes shell commands to scan repository changes inside the account Vibes day window.
-- [ContentView.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/ContentView.swift): Holds the primary user interface screens (`SetupPanel`, `MainPanel` with Feed, Repos, and Invites tabs).
+- [ContentView.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/ContentView.swift): Holds the primary user interface screens (`SetupPanel`, `MainPanel` with feed/status controls, native Settings panes, and the Invite Friend sheet).
 - [Models.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/Models.swift): Holds model types corresponding to the API contract.
 
 ## Config Direction
