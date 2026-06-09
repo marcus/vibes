@@ -356,14 +356,74 @@ private struct ProfileIconSettingsPane: View {
       }
 
       if let error = model.avatarError {
-        Text(error)
-          .font(.system(size: 12))
-          .foregroundStyle(VibeColor.accent)
-          .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+          if model.avatarMaySetupNeeded {
+            Text("Apple Intelligence may still be setting up image generation. Open Image Playground once to finish the download, then try again.")
+              .font(.system(size: 12))
+              .foregroundStyle(VibeColor.muted)
+              .fixedSize(horizontal: false, vertical: true)
+            Button {
+              model.openImagePlayground()
+            } label: {
+              Label("Open Image Playground", systemImage: "arrow.up.forward.app")
+            }
+            .buttonStyle(PlainVibeButtonStyle())
+          } else {
+            Text(error)
+              .font(.system(size: 12))
+              .foregroundStyle(VibeColor.accent)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
       }
+
+      Divider()
+        .overlay(VibeColor.cardBorder)
+
+      gradientSection
     }
     .task {
       await model.prepareAvatarSettings()
+    }
+  }
+
+  // Gradient fallback — two native ColorPickers, a live circular preview, and a
+  // "Use gradient" button. Works regardless of Apple-Intelligence availability.
+  @ViewBuilder
+  private var gradientSection: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("gradient")
+        .font(.caption)
+        .foregroundStyle(VibeColor.muted)
+
+      HStack(spacing: 16) {
+        Circle()
+          .fill(
+            LinearGradient(
+              colors: [model.gradientStart, model.gradientEnd],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            )
+          )
+          .frame(width: 72, height: 72)
+          .overlay(Circle().strokeBorder(VibeColor.cardBorder, lineWidth: 1))
+
+        VStack(alignment: .leading, spacing: 8) {
+          ColorPicker("Start", selection: $model.gradientStart, supportsOpacity: false)
+          ColorPicker("End", selection: $model.gradientEnd, supportsOpacity: false)
+        }
+        .font(.system(size: 13))
+
+        Spacer()
+      }
+
+      Button {
+        Task { await model.setGradientAvatar() }
+      } label: {
+        Label("Use gradient", systemImage: "circle.lefthalf.filled")
+      }
+      .buttonStyle(PlainVibeButtonStyle())
+      .disabled(isWorking)
     }
   }
 
@@ -413,7 +473,9 @@ private struct ProfileIconSettingsPane: View {
   }
 
   private var hasCurrentAvatar: Bool {
-    if let raw = model.feed?.you.user.avatarUrl, !raw.isEmpty { return true }
+    guard let user = model.feed?.you.user else { return false }
+    if let raw = user.avatarUrl, !raw.isEmpty { return true }
+    if user.avatarKind == "gradient" { return true }
     return false
   }
 

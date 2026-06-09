@@ -4,7 +4,9 @@
       "id": "user-marcus",
       "handle": "marcus",
       "display_name": "Marcus",
-      "avatar_url": null
+      "avatar_url": null,
+      "avatar_kind": null,
+      "avatar_gradient": null
     },
     "mode": "online",
     "manual_status": "working on Vibes",

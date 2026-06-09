@@ -16,6 +16,7 @@ const [
   invitesRoute,
   inviteAcceptRoute,
   avatarRoute,
+  avatarGradientRoute,
   shortInviteRoute,
   invitePageServer,
   relay,
@@ -26,6 +27,7 @@ const [
   import("../src/routes/api/invites/+server.js"),
   import("../src/routes/api/invites/[code]/accept/+server.js"),
   import("../src/routes/api/avatar/+server.js"),
+  import("../src/routes/api/avatar/gradient/+server.js"),
   import("../src/routes/i/[code]/+server.js"),
   import("../src/routes/invite/[code]/+page.server.js"),
   import("../src/lib/server/relay.js"),
@@ -180,6 +182,8 @@ describe("GET /api/me", () => {
           display_name: "Dana Scully",
           timezone: "America/Los_Angeles",
           avatar_url: null,
+          avatar_kind: null,
+          avatar_gradient: null,
         },
         house_style: {
           styles: ["illustration", "animation", "sketch"],
@@ -304,6 +308,89 @@ describe("POST /api/avatar", () => {
     expect(
       db.prepare("SELECT avatar_id FROM users WHERE id = ?").get(user.id).avatar_id,
     ).toBeNull();
+  });
+});
+
+describe("PUT /api/avatar/gradient", () => {
+  function gradientEvent(body, { token = null } = {}) {
+    const headers = new Headers({ "content-type": "application/json" });
+    if (token) headers.set("authorization", `Bearer ${token}`);
+    const request = new Request("https://vibes.test/api/avatar/gradient", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(body),
+    });
+    return { request, url: new URL(request.url), getClientAddress: () => "203.0.113.22" };
+  }
+
+  it("stores a gradient and returns the updated avatar fields", async () => {
+    const { user, token } = registerUser(db, { displayName: "Dana", deviceLabel: "Mac" });
+    const response = await avatarGradientRoute.PUT(
+      gradientEvent({ start: "#FF6B6B", end: "#4D96FF" }, { token: token.token }),
+    );
+    const { status, body } = await responseJson(response);
+
+    expect(status).toBe(200);
+    expect(body).toEqual({
+      avatar_kind: "gradient",
+      avatar_gradient: { start: "#FF6B6B", end: "#4D96FF" },
+      avatar_url: null,
+    });
+    const row = db
+      .prepare("SELECT avatar_kind, avatar_gradient_start, avatar_gradient_end FROM users WHERE id = ?")
+      .get(user.id);
+    expect(row).toMatchObject({
+      avatar_kind: "gradient",
+      avatar_gradient_start: "#FF6B6B",
+      avatar_gradient_end: "#4D96FF",
+    });
+  });
+
+  it("rejects an invalid hex color", async () => {
+    const { token } = registerUser(db, { displayName: "Dana", deviceLabel: "Mac" });
+    const response = await avatarGradientRoute.PUT(
+      gradientEvent({ start: "red", end: "#4D96FF" }, { token: token.token }),
+    );
+    expect(await responseJson(response)).toMatchObject({
+      status: 400,
+      body: { error: { code: "invalid_color" } },
+    });
+  });
+
+  it("requires authentication", async () => {
+    const response = await avatarGradientRoute.PUT(
+      gradientEvent({ start: "#FF6B6B", end: "#4D96FF" }),
+    );
+    expect(await responseJson(response)).toMatchObject({
+      status: 401,
+      body: { error: { code: "unauthorized" } },
+    });
+  });
+
+  it("surfaces a set gradient via GET /api/me", async () => {
+    const { token } = registerUser(db, { displayName: "Dana", deviceLabel: "Mac" });
+    await avatarGradientRoute.PUT(
+      gradientEvent({ start: "#FF6B6B", end: "#4D96FF" }, { token: token.token }),
+    );
+    const meRequest = new Request("https://vibes.test/api/me", {
+      method: "GET",
+      headers: { authorization: `Bearer ${token.token}` },
+    });
+    const response = await meRoute.GET({
+      request: meRequest,
+      url: new URL(meRequest.url),
+      getClientAddress: () => "203.0.113.22",
+    });
+    expect(await responseJson(response)).toMatchObject({
+      status: 200,
+      body: {
+        user: {
+          avatar_kind: "gradient",
+          avatar_gradient: { start: "#FF6B6B", end: "#4D96FF" },
+          avatar_url: null,
+        },
+      },
+    });
   });
 });
 
@@ -468,8 +555,20 @@ describe("POST /api/invites/[code]/accept", () => {
 
     expect(status).toBe(200);
     expect(body).toEqual({
-      inviter: { handle: "marcus", display_name: "Marcus", avatar_url: null },
-      friend: { handle: "ken", display_name: "Ken", avatar_url: null },
+      inviter: {
+        handle: "marcus",
+        display_name: "Marcus",
+        avatar_url: null,
+        avatar_kind: null,
+        avatar_gradient: null,
+      },
+      friend: {
+        handle: "ken",
+        display_name: "Ken",
+        avatar_url: null,
+        avatar_kind: null,
+        avatar_gradient: null,
+      },
     });
     expect(db.prepare("SELECT count(*) AS n FROM friendships").get().n).toBe(2);
   });

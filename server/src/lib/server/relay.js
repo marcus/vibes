@@ -50,15 +50,48 @@ export class RelayError extends Error {
 const now = () => new Date().toISOString();
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * Validate a `#RRGGBB` hex color, throwing the single error envelope on bad
+ * input. Returns the normalized value (trimmed) for storage.
+ * @param {unknown} value
+ * @param {string} label Field name surfaced in the error message.
+ * @returns {string}
+ */
+export function validateHexColor(value, label = "Color") {
+  const text = String(value ?? "").trim();
+  if (!HEX_COLOR_RE.test(text)) {
+    throw new RelayError("invalid_color", `${label} must be a #RRGGBB hex value.`, 400);
+  }
+  return text;
+}
+
+/**
+ * The gradient pair for a user, or null unless `avatar_kind = 'gradient'`. Reads
+ * only the row columns so it works for any user/feed/viewer row read.
+ * @param {{ avatar_kind?: string | null, avatar_gradient_start?: string | null, avatar_gradient_end?: string | null } | null | undefined} user
+ * @returns {{ start: string, end: string } | null}
+ */
+export function avatarGradientFor(user) {
+  if (!user || user.avatar_kind !== "gradient") return null;
+  if (!user.avatar_gradient_start || !user.avatar_gradient_end) return null;
+  return { start: user.avatar_gradient_start, end: user.avatar_gradient_end };
+}
+
 /** Raw tokens and invite codes are never stored; only their hashes are. */
 const newSecret = (bytes) => randomBytes(bytes).toString("base64url");
 
 /**
- * Public URL for a user's current avatar, or null when none is set. Reads only
- * `user.avatar_id`; the byte store builds the immutable URL from the slug.
- * @param {{ avatar_id?: string | null } | null | undefined} user
+ * Public URL for a user's current avatar image, or null when the current
+ * avatar is not an image. `avatar_kind` is the single source of truth: a
+ * non-image kind (e.g. `'gradient'`) returns null even when `avatar_id` still
+ * points at a superseded image kept as history. The byte store builds the
+ * immutable URL from the slug.
+ * @param {{ avatar_id?: string | null, avatar_kind?: string | null } | null | undefined} user
  */
 export function avatarUrlFor(user) {
+  if (user?.avatar_kind && user.avatar_kind !== "image") return null;
   if (!user?.avatar_id) return null;
   return getAvatarStore().urlFor(user.avatar_id);
 }
@@ -69,6 +102,8 @@ function publicUser(user) {
     handle: user.handle,
     display_name: user.display_name,
     avatar_url: avatarUrlFor(user),
+    avatar_kind: user.avatar_kind ?? null,
+    avatar_gradient: avatarGradientFor(user),
   };
 }
 
@@ -79,6 +114,8 @@ function feedUser(user) {
     handle: user.handle,
     display_name: user.display_name,
     avatar_url: avatarUrlFor(user),
+    avatar_kind: user.avatar_kind ?? null,
+    avatar_gradient: avatarGradientFor(user),
   };
 }
 
@@ -89,6 +126,8 @@ function registeredUser(user) {
     display_name: user.display_name,
     timezone: user.timezone ?? null,
     avatar_url: avatarUrlFor(user),
+    avatar_kind: user.avatar_kind ?? null,
+    avatar_gradient: avatarGradientFor(user),
   };
 }
 
@@ -717,7 +756,8 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
     viewer,
     ...db
       .prepare(
-        `SELECT users.id, users.handle, users.display_name, users.timezone, users.avatar_id
+        `SELECT users.id, users.handle, users.display_name, users.timezone, users.avatar_id,
+                users.avatar_kind, users.avatar_gradient_start, users.avatar_gradient_end
          FROM friendships
          JOIN users ON users.id = friendships.friend_user_id
          WHERE friendships.user_id = ? AND friendships.state = 'accepted'
@@ -732,13 +772,15 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
      WHERE user_id = ?
      ORDER BY updated_at DESC`,
   );
-  // The authenticated viewer object carries no avatar_id, so re-read the row to
-  // surface the viewer's own avatar_url.
+  // The authenticated viewer object carries no avatar columns, so re-read the row
+  // to surface the viewer's own avatar_url / avatar_kind / gradient.
   const viewerRow =
     viewer.avatar_id === undefined
       ? db
           .prepare(
-            "SELECT id, handle, display_name, timezone, avatar_id FROM users WHERE id = ?",
+            `SELECT id, handle, display_name, timezone, avatar_id,
+                    avatar_kind, avatar_gradient_start, avatar_gradient_end
+             FROM users WHERE id = ?`,
           )
           .get(viewer.id) ?? viewer
       : viewer;
@@ -944,26 +986,63 @@ export function setUserAvatar(db, user, { bytes, contentType, width, height, pro
       cleanStyle,
       now(),
     );
-    db.prepare("UPDATE users SET avatar_id = ?, updated_at = ? WHERE id = ?").run(
-      id,
-      now(),
-      user.id,
-    );
+    db.prepare(
+      "UPDATE users SET avatar_id = ?, avatar_kind = 'image', updated_at = ? WHERE id = ?",
+    ).run(id, now(), user.id);
     return { id, avatar_url: store.urlFor(id) };
   });
 }
 
 /**
- * Clear a user's current avatar pointer (revert to initials). History rows are
- * retained.
+ * Set a user's avatar to a two-color gradient (rendered client-side; no asset
+ * stored). Selecting a gradient supersedes any AI image — `avatar_kind` becomes
+ * the explicit selector and `avatar_id` is left intact but no longer consulted.
+ * @param {import('better-sqlite3').Database} db
+ * @param {{ id: string }} user
+ * @param {{ start: unknown, end: unknown }} input
+ * @returns {{ avatar_kind: string, avatar_gradient: { start: string, end: string }, avatar_url: string | null }}
+ */
+export function setUserGradient(db, user, { start, end }) {
+  const cleanStart = validateHexColor(start, "Gradient start");
+  const cleanEnd = validateHexColor(end, "Gradient end");
+
+  return writeTx(db, () => {
+    db.prepare(
+      `UPDATE users
+       SET avatar_kind = 'gradient',
+           avatar_gradient_start = ?,
+           avatar_gradient_end = ?,
+           updated_at = ?
+       WHERE id = ?`,
+    ).run(cleanStart, cleanEnd, now(), user.id);
+    const row = db
+      .prepare("SELECT avatar_id, avatar_kind, avatar_gradient_start, avatar_gradient_end FROM users WHERE id = ?")
+      .get(user.id);
+    return {
+      avatar_kind: row.avatar_kind,
+      avatar_gradient: avatarGradientFor(row),
+      avatar_url: avatarUrlFor(row),
+    };
+  });
+}
+
+/**
+ * Clear a user's current avatar (revert to initials): drops the image pointer,
+ * the kind selector, and any gradient colors in one write. Avatar history rows
+ * are retained.
  * @param {import('better-sqlite3').Database} db
  * @param {{ id: string }} user
  * @returns {{ ok: true }}
  */
 export function clearUserAvatar(db, user) {
-  db.prepare("UPDATE users SET avatar_id = NULL, updated_at = ? WHERE id = ?").run(
-    now(),
-    user.id,
-  );
+  db.prepare(
+    `UPDATE users
+     SET avatar_id = NULL,
+         avatar_kind = NULL,
+         avatar_gradient_start = NULL,
+         avatar_gradient_end = NULL,
+         updated_at = ?
+     WHERE id = ?`,
+  ).run(now(), user.id);
   return { ok: true };
 }

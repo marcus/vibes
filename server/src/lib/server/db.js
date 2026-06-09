@@ -119,6 +119,15 @@ const MIGRATIONS = [
       ALTER TABLE users ADD COLUMN avatar_id TEXT REFERENCES avatars(id);
     `,
   },
+  {
+    version: 5,
+    name: "avatar_kind",
+    sql: `
+      ALTER TABLE users ADD COLUMN avatar_kind TEXT;            -- 'image' | 'gradient' | NULL
+      ALTER TABLE users ADD COLUMN avatar_gradient_start TEXT;  -- '#RRGGBB'
+      ALTER TABLE users ADD COLUMN avatar_gradient_end TEXT;    -- '#RRGGBB'
+    `,
+  },
 ];
 
 /**

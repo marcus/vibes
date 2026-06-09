@@ -11,7 +11,9 @@ import {
   RelayError,
   acceptInvite,
   authenticateToken,
+  avatarGradientFor,
   avatarUrlFor,
+  clearUserAvatar,
   createInvite,
   createToken,
   createUser,
@@ -26,7 +28,9 @@ import {
   revokeInvite,
   revokeToken,
   setUserAvatar,
+  setUserGradient,
   upsertStatus,
+  validateHexColor,
   validatePng,
 } from "../src/lib/server/relay.js";
 
@@ -105,6 +109,19 @@ describe("migrations", () => {
       .all()
       .map((row) => row.version);
     expect(versions).toContain(4);
+  });
+
+  it("applies migration v5 (avatar_kind + gradient columns)", () => {
+    const userColumns = db.prepare("PRAGMA table_info(users)").all().map((row) => row.name);
+    for (const c of ["avatar_kind", "avatar_gradient_start", "avatar_gradient_end"]) {
+      expect(userColumns).toContain(c);
+    }
+
+    const versions = db
+      .prepare("SELECT version FROM schema_migrations")
+      .all()
+      .map((row) => row.version);
+    expect(versions).toContain(5);
   });
 
   it("is idempotent when run again", () => {
@@ -751,6 +768,125 @@ describe("avatars", () => {
     expect(typeof HOUSE_STYLE.prompt_prefix).toBe("string");
     expect(typeof HOUSE_STYLE.prompt_suffix).toBe("string");
   });
+
+  it("validateHexColor accepts #RRGGBB and rejects bad input", () => {
+    expect(validateHexColor("#FF6B6B")).toBe("#FF6B6B");
+    expect(validateHexColor("  #4d96ff  ")).toBe("#4d96ff");
+    for (const bad of ["red", "#xyz", "#fff", "#1234567", "ff6b6b", "", null]) {
+      expectRelayError(() => validateHexColor(bad), "invalid_color", 400);
+    }
+  });
+
+  it("setUserGradient stores both colors and sets avatar_kind='gradient'", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const result = setUserGradient(db, user, { start: "#FF6B6B", end: "#4D96FF" });
+
+    expect(result).toEqual({
+      avatar_kind: "gradient",
+      avatar_gradient: { start: "#FF6B6B", end: "#4D96FF" },
+      avatar_url: null,
+    });
+    const row = db
+      .prepare(
+        "SELECT avatar_kind, avatar_gradient_start, avatar_gradient_end FROM users WHERE id = ?",
+      )
+      .get(user.id);
+    expect(row).toMatchObject({
+      avatar_kind: "gradient",
+      avatar_gradient_start: "#FF6B6B",
+      avatar_gradient_end: "#4D96FF",
+    });
+    expect(avatarGradientFor(row)).toEqual({ start: "#FF6B6B", end: "#4D96FF" });
+  });
+
+  it("setUserGradient rejects invalid colors before writing", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    expectRelayError(
+      () => setUserGradient(db, user, { start: "red", end: "#4D96FF" }),
+      "invalid_color",
+      400,
+    );
+    expectRelayError(
+      () => setUserGradient(db, user, { start: "#FF6B6B", end: "#xyz" }),
+      "invalid_color",
+      400,
+    );
+    expect(
+      db.prepare("SELECT avatar_kind FROM users WHERE id = ?").get(user.id).avatar_kind,
+    ).toBeNull();
+  });
+
+  it("transitions kind across image -> gradient -> cleared", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+
+    const image = setUserAvatar(db, user, {
+      bytes: fakePng(),
+      contentType: "image/png",
+      width: 512,
+      height: 512,
+    });
+    let row = db
+      .prepare(
+        "SELECT avatar_id, avatar_kind, avatar_gradient_start, avatar_gradient_end FROM users WHERE id = ?",
+      )
+      .get(user.id);
+    expect(row.avatar_kind).toBe("image");
+    expect(row.avatar_id).toBe(image.id);
+    expect(avatarUrlFor(row)).toBe(image.avatar_url);
+    expect(avatarGradientFor(row)).toBeNull();
+
+    setUserGradient(db, user, { start: "#FF6B6B", end: "#4D96FF" });
+    row = db
+      .prepare(
+        "SELECT avatar_id, avatar_kind, avatar_gradient_start, avatar_gradient_end FROM users WHERE id = ?",
+      )
+      .get(user.id);
+    expect(row.avatar_kind).toBe("gradient");
+    expect(avatarGradientFor(row)).toEqual({ start: "#FF6B6B", end: "#4D96FF" });
+    // avatar_id remains but is no longer surfaced as a gradient.
+    expect(row.avatar_id).toBe(image.id);
+    // The superseded image URL is not emitted once the kind is gradient.
+    expect(avatarUrlFor(row)).toBeNull();
+
+    clearUserAvatar(db, user);
+    row = db
+      .prepare(
+        "SELECT avatar_id, avatar_kind, avatar_gradient_start, avatar_gradient_end FROM users WHERE id = ?",
+      )
+      .get(user.id);
+    expect(row).toMatchObject({
+      avatar_id: null,
+      avatar_kind: null,
+      avatar_gradient_start: null,
+      avatar_gradient_end: null,
+    });
+    expect(avatarGradientFor(row)).toBeNull();
+    expect(avatarUrlFor(row)).toBeNull();
+  });
+
+  it("surfaces avatar_kind + avatar_gradient for the viewer and friends in getFeed", () => {
+    const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    const invite = createInvite(db, marcus.id);
+    acceptInvite(db, invite.code, { acceptingUserId: ken.id });
+
+    setUserGradient(db, marcus, { start: "#FF6B6B", end: "#4D96FF" });
+    const theirs = setUserAvatar(db, ken, {
+      bytes: fakePng(),
+      contentType: "image/png",
+      width: 512,
+      height: 512,
+    });
+
+    const feed = getFeed(db, marcus);
+    expect(feed.you.user.avatar_kind).toBe("gradient");
+    expect(feed.you.user.avatar_gradient).toEqual({ start: "#FF6B6B", end: "#4D96FF" });
+    expect(feed.you.user.avatar_url).toBeNull();
+
+    expect(feed.friends[0].user.avatar_kind).toBe("image");
+    expect(feed.friends[0].user.avatar_gradient).toBeNull();
+    expect(feed.friends[0].user.avatar_url).toBe(theirs.avatar_url);
+  });
 });
 
 describe("contract fixtures", () => {
@@ -759,6 +895,14 @@ describe("contract fixtures", () => {
     expect(fixture("feed-response").you.user.handle).toBe("marcus");
     expect(fixture("error").error.code).toBe("unauthorized");
     expect(fixture("avatar-response").avatar_url).toMatch(/\/avatars\/[^/]+\.png$/);
+    expect(fixture("feed-response").you.user.avatar_kind).toBeNull();
+    expect(fixture("feed-response").you.user.avatar_gradient).toBeNull();
+    const gradient = fixture("avatar-gradient-response");
+    expect(gradient.avatar_kind).toBe("gradient");
+    expect(gradient.avatar_gradient).toMatchObject({
+      start: expect.stringMatching(/^#[0-9a-fA-F]{6}$/),
+      end: expect.stringMatching(/^#[0-9a-fA-F]{6}$/),
+    });
   });
 });
 

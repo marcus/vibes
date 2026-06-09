@@ -219,6 +219,18 @@ struct RelayClient {
     )
   }
 
+  // Set a two-color gradient profile icon (rendered client-side; no PNG upload).
+  // PUTs JSON `{ start, end }` as "#RRGGBB" hex; the server validates, stores, and
+  // returns the updated avatar fields. Reuses the JSON `send<>` (it already takes
+  // an arbitrary method).
+  func setAvatarGradient(start: String, end: String) async throws -> AvatarGradientResult {
+    try await send(
+      path: "/api/avatar/gradient",
+      method: "PUT",
+      body: AvatarGradientRequest(start: start, end: end)
+    )
+  }
+
   // Clear the current profile icon, reverting to initials.
   func deleteAvatar() async throws {
     let _: OKResponse = try await send(
@@ -360,6 +372,25 @@ struct AvatarUploadResult: Codable {
 
   enum CodingKeys: String, CodingKey {
     case id
+    case avatarURL = "avatar_url"
+  }
+}
+
+struct AvatarGradientRequest: Codable {
+  var start: String
+  var end: String
+}
+
+// The updated avatar fields the server echoes back after setting a gradient.
+// Decoded loosely (all optional) so future field additions don't break decoding.
+struct AvatarGradientResult: Codable {
+  var avatarKind: String?
+  var avatarGradient: AvatarGradient?
+  var avatarURL: String?
+
+  enum CodingKeys: String, CodingKey {
+    case avatarKind = "avatar_kind"
+    case avatarGradient = "avatar_gradient"
     case avatarURL = "avatar_url"
   }
 }
