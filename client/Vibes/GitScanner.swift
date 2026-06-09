@@ -8,9 +8,7 @@ struct GitScanner {
       let stats = scanRepo(repo: repo, dayWindow: dayWindow, now: now)
       if stats.hasActivity {
         total.reposTouched += 1
-        if repo.shareAlias {
-          total.repoAliases.append(repo.alias)
-        }
+        total.repoAliases.append(repo.alias)
       }
       total.commits += stats.commits
       total.filesChanged += stats.filesChanged
@@ -461,43 +459,40 @@ enum StatusBuilder {
       now: now,
       timezone: config.identity.timezone ?? TimeZone.current.identifier
     )
-    let cards = mode == .online ? buildCards(config: config, stats: stats) : []
     return StatusPayload(
       deviceID: config.device.id,
       deviceLabel: config.device.label,
       mode: mode,
-      manualStatus: mode == .online ? manualStatus.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty : nil,
+      manualStatus: manualStatus.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
       day: window.day,
       dayTimezone: window.timezone,
       dayStartAt: window.startAt,
       dayEndAt: window.endAt,
       updatedAt: now,
-      cards: cards
+      cards: buildCards(stats: stats)
     )
   }
 
-  private static func buildCards(config: VibesConfig, stats: DailyGitStats) -> [StatusCard] {
+  private static func buildCards(stats: DailyGitStats) -> [StatusCard] {
     var cards: [StatusCard] = []
-    if config.sharing.cards.gitStats {
-      cards.append(
-        StatusCard(
-          type: "git_stats",
-          enabled: true,
-          summary: stats.summary,
-          data: [
-            "commits": .int(stats.commits),
-            "files_changed": .int(stats.filesChanged),
-            "insertions": .int(stats.insertions),
-            "deletions": .int(stats.deletions),
-            "uncommitted_insertions": .int(stats.uncommittedInsertions),
-            "uncommitted_deletions": .int(stats.uncommittedDeletions),
-            "repos_touched": .int(stats.reposTouched)
-          ]
-        )
+    cards.append(
+      StatusCard(
+        type: "git_stats",
+        enabled: true,
+        summary: stats.summary,
+        data: [
+          "commits": .int(stats.commits),
+          "files_changed": .int(stats.filesChanged),
+          "insertions": .int(stats.insertions),
+          "deletions": .int(stats.deletions),
+          "uncommitted_insertions": .int(stats.uncommittedInsertions),
+          "uncommitted_deletions": .int(stats.uncommittedDeletions),
+          "repos_touched": .int(stats.reposTouched)
+        ]
       )
-    }
+    )
 
-    if config.sharing.cards.repoAliases && !stats.repoAliases.isEmpty {
+    if !stats.repoAliases.isEmpty {
       cards.append(
         StatusCard(
           type: "repo_aliases",

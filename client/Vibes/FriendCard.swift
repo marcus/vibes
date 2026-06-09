@@ -118,7 +118,7 @@ struct FriendCard: View {
   private var isOnline: Bool { status.mode == .online }
 
   private var manualNote: String? {
-    guard isOnline, let note = status.manualStatus, !note.isEmpty else { return nil }
+    guard let note = status.manualStatus, !note.isEmpty else { return nil }
     return note
   }
 
@@ -145,13 +145,12 @@ struct FriendCard: View {
     return []
   }
 
-  // Reused from StatusRow.presenceText:
-  // online → "online"; offline-but-recent → "online {relative} ago";
-  // offline-no-timestamp → "offline".
+  // online -> "online"; offline with a snapshot -> "offline, synced {relative}";
+  // offline with no timestamp -> "offline".
   private var presenceText: String {
     if isOnline { return "online" }
     guard let updatedAt = status.updatedAt else { return "offline" }
-    return "online \(updatedAt.formatted(.relative(presentation: .numeric)))"
+    return "offline, synced \(updatedAt.formatted(.relative(presentation: .numeric)))"
   }
 
   private var lastSeen: String {

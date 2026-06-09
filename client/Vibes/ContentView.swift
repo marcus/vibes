@@ -120,7 +120,7 @@ private struct MainPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       HStack(alignment: .top) {
-        Header(title: "vibes", subtitle: model.config?.identity.displayName ?? "")
+        Header(title: "vibes")
         Spacer()
         HStack(spacing: 10) {
           PresenceToggle(
@@ -273,7 +273,7 @@ private struct RepositoriesSettingsPane: View {
     SettingsPane {
       SettingsHeading(
         title: "repositories",
-        detail: "Choose local Git repos to scan. Raw paths stay on this Mac."
+        detail: "Added repos contribute the repo name and daily activity to your friends' feed."
       )
       ReposSection()
     }
@@ -509,13 +509,11 @@ private struct ProfileIconSettingsPane: View {
 }
 
 private struct SharingSettingsPane: View {
-  @EnvironmentObject private var model: AppModel
-
   var body: some View {
     SettingsPane {
       SettingsHeading(
         title: "sharing",
-        detail: "Aggregate activity can leave the Mac. Paths, branches, commits, filenames, editor activity, and assistant attribution do not."
+        detail: "Optional cards will appear here as they become available."
       )
 
       VStack(alignment: .leading, spacing: 12) {
@@ -523,78 +521,46 @@ private struct SharingSettingsPane: View {
           .font(.caption)
           .foregroundStyle(VibeColor.muted)
 
-        cardToggle("Git stats", keyPath: \.gitStats)
-        cardToggle("Repo aliases", keyPath: \.repoAliases)
-        cardToggle("Spotify", keyPath: \.spotify)
-        cardToggle("Weather", keyPath: \.weather)
-      }
-
-      VStack(alignment: .leading, spacing: 12) {
-        Text("redactions")
-          .font(.caption)
-          .foregroundStyle(VibeColor.muted)
-
-        redactionToggle("Repo paths", keyPath: \.repoPaths)
-        redactionToggle("Branch names", keyPath: \.branchNames)
-        redactionToggle("Commit messages", keyPath: \.commitMessages)
-        redactionToggle("Filenames", keyPath: \.fileNames)
-        redactionToggle("Editor activity", keyPath: \.editorActivity)
-        redactionToggle("Assistant attribution", keyPath: \.assistantAttribution)
+        UnavailableCardRow(title: "Spotify", detail: "Not available yet")
+        UnavailableCardRow(title: "Weather", detail: "Not available yet")
       }
     }
-  }
-
-  private func cardToggle(
-    _ label: String,
-    keyPath: WritableKeyPath<SharingCardsConfig, Bool>
-  ) -> some View {
-    Toggle(label, isOn: Binding(
-      get: { model.config?.sharing.cards[keyPath: keyPath] ?? false },
-      set: { model.setCard(keyPath, enabled: $0) }
-    ))
-  }
-
-  private func redactionToggle(
-    _ label: String,
-    keyPath: WritableKeyPath<SharingRedactionsConfig, Bool>
-  ) -> some View {
-    Toggle("Redact \(label.lowercased())", isOn: Binding(
-      get: { model.config?.sharing.redactions[keyPath: keyPath] ?? true },
-      set: { model.setRedaction(keyPath, enabled: $0) }
-    ))
   }
 }
 
 private struct AdvancedSettingsPane: View {
-  @EnvironmentObject private var model: AppModel
-  @State private var copied = false
-
   var body: some View {
     SettingsPane {
       SettingsHeading(
-        title: "advanced",
-        detail: "Use this local summary when reasoning about Vibes settings. It redacts secrets and raw repo paths."
+        title: "advanced"
       )
+    }
+  }
+}
 
-      VStack(alignment: .leading, spacing: 8) {
-        Text("diagnostics")
-          .font(.caption)
-          .foregroundStyle(VibeColor.muted)
-        Text(model.diagnosticSummary())
+private struct UnavailableCardRow: View {
+  var title: String
+  var detail: String
+
+  var body: some View {
+    HStack {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(title)
+          .font(.system(size: 14, weight: .regular))
+        Text(detail)
           .font(.system(size: 12))
           .foregroundStyle(VibeColor.muted)
-          .textSelection(.enabled)
-          .fixedSize(horizontal: false, vertical: true)
       }
-
-      Button {
-        model.copyDiagnosticSummary()
-        copied = true
-      } label: {
-        Label(copied ? "Copied" : "Copy Summary", systemImage: "doc.on.doc")
-      }
-      .buttonStyle(PlainVibeButtonStyle())
+      Spacer()
+      Text("Soon")
+        .font(.caption)
+        .foregroundStyle(VibeColor.muted)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(VibeColor.field)
+        .clipShape(Capsule())
     }
+    .padding(.vertical, 8)
   }
 }
 
@@ -683,7 +649,10 @@ private struct HomeView: View {
         }
       }
 
-      LocalStatsView(stats: model.stats)
+      LocalStatsView(
+        stats: model.stats,
+        isSyncing: model.lastSyncedAt == nil && model.isBusy
+      )
 
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
@@ -749,13 +718,23 @@ private struct PresenceToggle: View {
 
 private struct LocalStatsView: View {
   var stats: DailyGitStats
+  var isSyncing: Bool
 
   var body: some View {
-    HStack(spacing: 18) {
-      StatCell(value: "\(stats.reposTouched)", label: "repos")
-      StatCell(value: "\(stats.commits)", label: "commits")
-      StatCell(value: "+\(stats.insertions)", label: "added")
-      StatCell(value: "-\(stats.deletions)", label: "removed")
+    Group {
+      if isSyncing {
+        Text("syncing activity")
+          .font(.system(size: 13))
+          .foregroundStyle(VibeColor.muted)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      } else {
+        HStack(spacing: 18) {
+          StatCell(value: "\(stats.reposTouched)", label: "repos")
+          StatCell(value: "\(stats.commits)", label: "commits")
+          StatCell(value: "+\(stats.insertions)", label: "added")
+          StatCell(value: "-\(stats.deletions)", label: "removed")
+        }
+      }
     }
     .padding(.vertical, 8)
   }
@@ -788,11 +767,6 @@ private struct ReposSection: View {
       } else {
         EmptyState(text: "Add local Git repositories to share aggregate daily activity.")
       }
-
-      Toggle("share Git stats", isOn: Binding(
-        get: { model.config?.sharing.cards.gitStats ?? true },
-        set: { _ in model.toggleCard(\.gitStats) }
-      ))
     }
   }
 }
@@ -804,7 +778,7 @@ private struct RepoRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        TextField("alias", text: $repo.alias)
+        TextField("repo name", text: $repo.alias)
           .textFieldStyle(.plain)
           .onSubmit { model.updateRepo(repo) }
         Spacer()
@@ -821,15 +795,6 @@ private struct RepoRow: View {
         .foregroundStyle(VibeColor.muted)
         .lineLimit(1)
         .truncationMode(.middle)
-      HStack {
-        Toggle("share alias", isOn: Binding(
-          get: { repo.shareAlias },
-          set: {
-            repo.shareAlias = $0
-            model.updateRepo(repo)
-          }
-        ))
-      }
     }
     .padding(.vertical, 8)
   }
@@ -1026,15 +991,17 @@ private struct Footer: View {
 
 private struct Header: View {
   var title: String
-  var subtitle: String
+  var subtitle: String? = nil
 
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
       Text(title)
         .font(.system(size: 34, weight: .light))
-      Text(subtitle)
-        .font(.system(size: 13, weight: .regular))
-        .foregroundStyle(VibeColor.muted)
+      if let subtitle, !subtitle.isEmpty {
+        Text(subtitle)
+          .font(.system(size: 13, weight: .regular))
+          .foregroundStyle(VibeColor.muted)
+      }
     }
   }
 }

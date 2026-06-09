@@ -71,7 +71,7 @@ struct RepoConfig: Codable, Equatable, Identifiable {
   var alias: String
   var shareAlias: Bool
 
-  init(id: UUID = UUID(), path: String, alias: String, shareAlias: Bool = false) {
+  init(id: UUID = UUID(), path: String, alias: String, shareAlias: Bool = true) {
     self.id = id
     self.path = path
     self.alias = alias

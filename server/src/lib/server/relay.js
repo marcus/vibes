@@ -509,9 +509,8 @@ function normalizeStatusPayload(authUser, input, receivedAt) {
   const cards = Array.isArray(input?.cards)
     ? input.cards.map(sanitizeCard).filter(Boolean).filter((card) => card.enabled)
     : [];
-  const sharedCards = mode === "online" ? cards : [];
   const manualStatus =
-    mode === "online" && input?.manual_status != null
+    input?.manual_status != null
       ? String(input.manual_status).trim().slice(0, 160) || null
       : null;
 
@@ -527,7 +526,7 @@ function normalizeStatusPayload(authUser, input, receivedAt) {
     ...(dayStartAt ? { day_start_at: dayStartAt } : {}),
     ...(dayEndAt ? { day_end_at: dayEndAt } : {}),
     updated_at: updatedAt,
-    cards: sharedCards,
+    cards,
   };
   assertStatusPayloadSize(payload);
   return { payload, mode, clientDay, updatedAt };
@@ -640,7 +639,7 @@ function mergeGitStats(rows, chosenDay, chosenTimezone) {
   };
   let found = false;
   for (const row of rows) {
-    if (row.mode !== "online" || row.client_day !== chosenDay) continue;
+    if (row.client_day !== chosenDay) continue;
     if (chosenTimezone && row.payload.day_timezone && row.payload.day_timezone !== chosenTimezone) {
       continue;
     }
@@ -706,27 +705,15 @@ function mergeUserStatuses(user, statusRows, nowMs) {
   const { day: latestDay, timezone: chosenTimezone } = chooseVibesDay(user, online, source, nowMs);
   const cardSource = newestOnlineRowForDay(online, latestDay, chosenTimezone) ?? source;
 
-  // Effective presence: the user is sharing (`online`) only counts as live if
-  // they have published within the recency window. Otherwise they read as
-  // offline, but we still surface the last timestamp so the client can render
-  // "online … ago". A user who toggled themselves offline surfaces no timestamp.
+  // Effective presence: the user is live (`online`) only if they have published
+  // within the recency window. Offline/stale views still carry the last shared
+  // cards so the feed can show the latest snapshot instead of zeroing activity.
   const lastSharedAt = online
     .map((row) => row.updated_at)
     .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  const snapshotAt = lastSharedAt ?? source.updated_at ?? null;
   const isFresh =
     strongest.mode === "online" && nowMs - Date.parse(lastSharedAt) <= ONLINE_WINDOW_MS;
-
-  if (!isFresh) {
-    return {
-      user: feedUser(user),
-      mode: "offline",
-      manual_status: null,
-      day: strongest.mode === "online" ? latestDay : null,
-      // online-but-stale surfaces a last-seen timestamp; offline-by-toggle does not.
-      updated_at: strongest.mode === "online" ? lastSharedAt : null,
-      cards: [],
-    };
-  }
 
   const cards = [];
   const gitStats = mergeGitStats(rows, latestDay, chosenTimezone);
@@ -734,6 +721,17 @@ function mergeUserStatuses(user, statusRows, nowMs) {
   for (const type of ["repo_aliases", "spotify", "weather"]) {
     const card = getCard(cardSource.payload, type);
     if (card) cards.push(card);
+  }
+
+  if (!isFresh) {
+    return {
+      user: feedUser(user),
+      mode: "offline",
+      manual_status: cardSource.payload.manual_status ?? null,
+      day: latestDay,
+      updated_at: snapshotAt,
+      cards,
+    };
   }
 
   return {

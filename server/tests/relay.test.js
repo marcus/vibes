@@ -402,23 +402,21 @@ describe("statuses and feed", () => {
     );
   });
 
-  it("offline replaces share cards and surfaces no last-seen time", () => {
+  it("offline preserves the latest shared snapshot", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const payload = fixture("status-online");
     upsertStatus(db, user, payload);
     upsertStatus(db, user, {
       ...payload,
       mode: "offline",
-      manual_status: "do not leak",
       updated_at: "2026-06-06T18:05:00.000Z",
     });
 
     const feed = getFeed(db, user, FEED_NOW);
     expect(feed.you.mode).toBe("offline");
-    expect(feed.you.manual_status).toBeNull();
-    expect(feed.you.cards).toEqual([]);
-    // Toggled offline → hidden, no "online … ago" timestamp leaks.
-    expect(feed.you.updated_at).toBeNull();
+    expect(feed.you.manual_status).toBe("working on Vibes");
+    expect(feed.you.updated_at).toBe("2026-06-06T18:05:00.000Z");
+    expect(feed.you.cards.find((card) => card.type === "git_stats").data.commits).toBe(7);
   });
 
   it("reports a fresh online row as online and a stale one as offline with a last-seen time", () => {
@@ -434,10 +432,9 @@ describe("statuses and feed", () => {
 
     const stale = getFeed(db, user, updatedAt + 30 * 60 * 1000);
     expect(stale.you.mode).toBe("offline");
-    // Sharing but idle → last-seen timestamp preserved for "online … ago".
     expect(stale.you.updated_at).toBe(payload.updated_at);
-    expect(stale.you.cards).toEqual([]);
-    expect(stale.you.manual_status).toBeNull();
+    expect(stale.you.cards.find((card) => card.type === "git_stats").data.commits).toBe(7);
+    expect(stale.you.manual_status).toBe("working on Vibes");
   });
 
   it("merges multi-device stats for the newest shared client day without exposing legacy agent cards", () => {

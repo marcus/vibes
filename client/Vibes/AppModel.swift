@@ -18,7 +18,11 @@ final class AppModel: ObservableObject {
   @Published var inviteCodeInput: String = ""
   @Published var isBusy = false
   @Published var lastError: String?
-  @Published var successMessage: String?
+  @Published var successMessage: String? {
+    didSet {
+      scheduleSuccessMessageDismissal()
+    }
+  }
   @Published var lastSyncedAt: Date?
 
   // AI profile-icon state. `houseStyle` is the server-owned art-direction
@@ -48,6 +52,7 @@ final class AppModel: ObservableObject {
   private let keychain = KeychainStore()
   private let scanner = GitScanner()
   private var loopTask: Task<Void, Never>?
+  private var successMessageDismissTask: Task<Void, Never>?
 
   var isConfigured: Bool {
     config != nil && !token.isEmpty
@@ -250,7 +255,7 @@ final class AppModel: ObservableObject {
       inviteCodeInput = ""
       await refreshFeedOnly()
       await refreshInvites()
-      successMessage = "Now friends with \(result.inviter.displayName)."
+      showSuccess("Now friends with \(result.inviter.displayName).")
     } catch {
       lastError = error.localizedDescription
     }
@@ -530,7 +535,7 @@ final class AppModel: ObservableObject {
         gradient: result.avatarGradient ?? AvatarGradient(start: gradientStart.hexRGB, end: gradientEnd.hexRGB),
         url: nil
       )
-      successMessage = "Profile icon updated."
+      showSuccess("Profile icon updated.")
       await refreshFeedOnly()
     } catch {
       avatarError = error.localizedDescription
@@ -556,7 +561,7 @@ final class AppModel: ObservableObject {
       )
       avatarPreviewPNG = nil
       applyAvatarToYou(kind: "image", gradient: nil, url: result.avatarURL)
-      successMessage = "Profile icon updated."
+      showSuccess("Profile icon updated.")
       await refreshFeedOnly()
     } catch {
       avatarError = error.localizedDescription
@@ -575,7 +580,7 @@ final class AppModel: ObservableObject {
       try await client(for: config).deleteAvatar()
       avatarPreviewPNG = nil
       applyAvatarToYou(kind: nil, gradient: nil, url: nil)
-      successMessage = "Profile icon removed."
+      showSuccess("Profile icon removed.")
       await refreshFeedOnly()
     } catch {
       avatarError = error.localizedDescription
@@ -638,15 +643,13 @@ final class AppModel: ObservableObject {
   }
 
   func publishOfflineForQuit() async {
-    mode = .offline
-    persistPresence()
     guard let config, isConfigured else { return }
     do {
       let payload = StatusBuilder.payload(
         config: config,
         mode: .offline,
-        manualStatus: "",
-        stats: DailyGitStats(),
+        manualStatus: manualStatus,
+        stats: stats,
         now: Date()
       )
       try await client(for: config).publish(payload)
@@ -721,6 +724,23 @@ final class AppModel: ObservableObject {
   private func persistPresence() {
     mutateConfig { config in
       config.presence = PresenceConfig(mode: mode, manualStatus: manualStatus)
+    }
+  }
+
+  private func showSuccess(_ message: String) {
+    successMessage = message
+  }
+
+  private func scheduleSuccessMessageDismissal() {
+    successMessageDismissTask?.cancel()
+    guard let message = successMessage else {
+      successMessageDismissTask = nil
+      return
+    }
+    successMessageDismissTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(60))
+      guard !Task.isCancelled, self?.successMessage == message else { return }
+      self?.successMessage = nil
     }
   }
 
