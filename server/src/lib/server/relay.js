@@ -454,40 +454,6 @@ function mergeGitStats(rows, latestDay) {
   };
 }
 
-function mergeAgentMix(rows, latestDay) {
-  /** @type {Record<string, number>} */
-  const counts = {};
-  let total = 0;
-  for (const row of rows) {
-    if (row.mode !== "broadcasting" || row.client_day !== latestDay) continue;
-    const raw = getCard(row.payload, "agent_mix")?.data?.commit_counts;
-    if (!raw || typeof raw !== "object") continue;
-    for (const [agent, count] of Object.entries(raw)) {
-      const n = Number(count);
-      if (!Number.isFinite(n) || n <= 0) continue;
-      counts[agent] = (counts[agent] ?? 0) + n;
-      total += n;
-    }
-  }
-  if (!total) return null;
-
-  const shares = Object.fromEntries(
-    Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([agent, count]) => [agent, Number((count / total).toFixed(4))]),
-  );
-  const summary = Object.entries(shares)
-    .slice(0, 3)
-    .map(([agent, share]) => `${agent.replaceAll("_", " ")} ${Math.round(share * 100)}%`)
-    .join(", ");
-  return {
-    type: "agent_mix",
-    enabled: true,
-    summary,
-    data: { ...shares, commit_counts: counts },
-  };
-}
-
 function mergeUserStatuses(user, statusRows) {
   if (!statusRows.length) {
     return {
@@ -516,11 +482,9 @@ function mergeUserStatuses(user, statusRows) {
       : rows.filter((row) => row.mode === strongest.mode);
   const cards = [];
   const gitStats = strongest.mode === "broadcasting" ? mergeGitStats(rows, latestDay) : null;
-  const agentMix = strongest.mode === "broadcasting" ? mergeAgentMix(rows, latestDay) : null;
   if (gitStats) cards.push(gitStats);
-  if (agentMix) cards.push(agentMix);
   if (strongest.mode === "broadcasting") {
-    for (const type of ["repo_aliases", "spotify", "weather", "harness"]) {
+    for (const type of ["repo_aliases", "spotify", "weather"]) {
       const card = getCard(source.payload, type);
       if (card) cards.push(card);
     }

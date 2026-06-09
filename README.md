@@ -14,7 +14,7 @@ Fully functional implementation. The repository includes a SwiftUI macOS client 
 - `server/`: SvelteKit relay (API + web signup) backed by SQLite.
 - `deploy/`: nginx and systemd templates for a relay host.
 - `scripts/`: local and server deployment helpers.
-- `docs/plans/active/spec-v1.md`: product and implementation plan.
+- `docs/plans/active/spec-v2.md`: product and implementation plan.
 
 ## Requirements
 

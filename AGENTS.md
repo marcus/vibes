@@ -21,7 +21,7 @@ Core v1 flow:
 - `assets/`: brand assets. `assets/icon.png` is the canonical app mark.
 - `deploy/`: nginx and systemd config.
 - `scripts/`: deployment helpers.
-- `docs/plans/active/spec-v1.md`: current product plan.
+- `docs/plans/active/spec-v2.md`: current product plan.
 - `docs/client-runbook.md`: client setup and build notes.
 - `docs/server-runbook.md`: relay deployment notes.
 
@@ -46,7 +46,6 @@ Default shared payloads may include:
 - derived vibe label
 - aggregate daily stats
 - last updated timestamp
-- optional agent mix
 - optional repo aliases
 
 Default shared payloads must avoid:
@@ -57,7 +56,8 @@ Default shared payloads must avoid:
 - filenames
 - exact editor or window activity
 - detailed process history
-- raw agent transcripts
+- raw agent/tool transcripts
+- coding-tool, editor, assistant, or human-vs-AI attribution
 
 ## Visual Style
 

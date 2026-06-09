@@ -16,34 +16,6 @@ enum PresenceMode: String, Codable, CaseIterable, Identifiable {
   }
 }
 
-enum AgentLabel: String, Codable, CaseIterable, Identifiable {
-  case codex
-  case claudeCode = "claude_code"
-  case gemini
-  case grokBuild = "grok_build"
-  case cursor
-  case aider
-  case openCode = "opencode"
-  case human
-  case unknown
-
-  var id: String { rawValue }
-
-  var label: String {
-    switch self {
-    case .codex: "Codex"
-    case .claudeCode: "Claude Code"
-    case .gemini: "Gemini"
-    case .grokBuild: "Grok Build"
-    case .cursor: "Cursor"
-    case .aider: "Aider"
-    case .openCode: "OpenCode"
-    case .human: "Human"
-    case .unknown: "Unknown"
-    }
-  }
-}
-
 struct IdentityConfig: Codable, Equatable {
   var handle: String
   var displayName: String
@@ -83,14 +55,12 @@ struct RepoConfig: Codable, Equatable, Identifiable {
   var path: String
   var alias: String
   var shareAlias: Bool
-  var agent: AgentLabel
 
-  init(id: UUID = UUID(), path: String, alias: String, shareAlias: Bool = false, agent: AgentLabel = .unknown) {
+  init(id: UUID = UUID(), path: String, alias: String, shareAlias: Bool = false) {
     self.id = id
     self.path = path
     self.alias = alias
     self.shareAlias = shareAlias
-    self.agent = agent
   }
 
   enum CodingKeys: String, CodingKey {
@@ -98,34 +68,47 @@ struct RepoConfig: Codable, Equatable, Identifiable {
     case path
     case alias
     case shareAlias = "share_alias"
-    case agent
   }
 }
 
 struct SharingCardsConfig: Codable, Equatable {
   var gitStats: Bool
-  var agentMix: Bool
   var repoAliases: Bool
   var spotify: Bool
   var weather: Bool
-  var harness: Bool
 
   static let defaults = SharingCardsConfig(
     gitStats: true,
-    agentMix: true,
     repoAliases: true,
     spotify: false,
-    weather: false,
-    harness: false
+    weather: false
   )
+
+  init(
+    gitStats: Bool,
+    repoAliases: Bool,
+    spotify: Bool,
+    weather: Bool
+  ) {
+    self.gitStats = gitStats
+    self.repoAliases = repoAliases
+    self.spotify = spotify
+    self.weather = weather
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    gitStats = try container.decodeIfPresent(Bool.self, forKey: .gitStats) ?? Self.defaults.gitStats
+    repoAliases = try container.decodeIfPresent(Bool.self, forKey: .repoAliases) ?? Self.defaults.repoAliases
+    spotify = try container.decodeIfPresent(Bool.self, forKey: .spotify) ?? Self.defaults.spotify
+    weather = try container.decodeIfPresent(Bool.self, forKey: .weather) ?? Self.defaults.weather
+  }
 
   enum CodingKeys: String, CodingKey {
     case gitStats = "git_stats"
-    case agentMix = "agent_mix"
     case repoAliases = "repo_aliases"
     case spotify
     case weather
-    case harness
   }
 }
 
@@ -177,7 +160,6 @@ struct DailyGitStats: Codable, Equatable {
   var reposTouched: Int = 0
   var latestActivity: Date?
   var repoAliases: [String] = []
-  var agentCommitCounts: [String: Int] = [:]
 
   var hasActivity: Bool {
     commits > 0 || insertions > 0 || deletions > 0 || uncommittedInsertions > 0 || uncommittedDeletions > 0

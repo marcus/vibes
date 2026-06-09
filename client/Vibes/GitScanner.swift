@@ -18,9 +18,6 @@ struct GitScanner {
       total.deletions += stats.deletions
       total.uncommittedInsertions += stats.uncommittedInsertions
       total.uncommittedDeletions += stats.uncommittedDeletions
-      if stats.commits > 0 {
-        total.agentCommitCounts[repo.agent.rawValue, default: 0] += stats.commits
-      }
       if let activity = stats.latestActivity,
          total.latestActivity == nil || activity > total.latestActivity! {
         total.latestActivity = activity
@@ -313,21 +310,6 @@ enum StatusBuilder {
           ]
         )
       )
-    }
-
-    if config.sharing.cards.agentMix && !stats.agentCommitCounts.isEmpty {
-      let total = max(stats.agentCommitCounts.values.reduce(0, +), 1)
-      var data: [String: JSONValue] = [:]
-      for (agent, count) in stats.agentCommitCounts {
-        data[agent] = .double(Double(count) / Double(total))
-      }
-      data["commit_counts"] = .object(stats.agentCommitCounts.mapValues { .int($0) })
-      let summary = stats.agentCommitCounts
-        .sorted { $0.value > $1.value }
-        .prefix(3)
-        .map { agent, count in "\(agent.replacingOccurrences(of: "_", with: " ")) \(Int((Double(count) / Double(total)) * 100))%" }
-        .joined(separator: ", ")
-      cards.append(StatusCard(type: "agent_mix", enabled: true, summary: summary, data: data))
     }
 
     if config.sharing.cards.repoAliases && !stats.repoAliases.isEmpty {

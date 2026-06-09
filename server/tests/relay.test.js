@@ -314,7 +314,7 @@ describe("statuses and feed", () => {
     expect(feed.you.cards).toEqual([]);
   });
 
-  it("merges multi-device stats for the newest shared client day", () => {
+  it("merges multi-device stats for the newest shared client day without exposing legacy agent cards", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const payload = fixture("status-broadcasting");
     upsertStatus(db, user, payload);
@@ -349,10 +349,9 @@ describe("statuses and feed", () => {
 
     const feed = getFeed(db, user);
     const stats = feed.you.cards.find((card) => card.type === "git_stats").data;
-    const mix = feed.you.cards.find((card) => card.type === "agent_mix").data;
     expect(stats.commits).toBe(9);
     expect(stats.insertions).toBe(1258);
-    expect(mix.commit_counts.claude_code).toBe(7);
+    expect(feed.you.cards.find((card) => card.type === "agent_mix")).toBeUndefined();
   });
 
   it("does not expose device identifiers or labels in merged feed output", () => {

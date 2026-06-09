@@ -22,21 +22,6 @@
       }
     },
     {
-      "type": "agent_mix",
-      "enabled": true,
-      "summary": "Codex 65%, Claude Code 25%, Grok Build 10%",
-      "data": {
-        "codex": 0.65,
-        "claude_code": 0.25,
-        "grok_build": 0.1,
-        "commit_counts": {
-          "codex": 13,
-          "claude_code": 5,
-          "grok_build": 2
-        }
-      }
-    },
-    {
       "type": "repo_aliases",
       "enabled": true,
       "summary": "Vibes, Braid",
@@ -46,4 +31,3 @@
     }
   ]
 }
-

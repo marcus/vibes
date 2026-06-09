@@ -312,7 +312,7 @@ ssh "$DEPLOY_USER@$DEPLOY_HOST" "systemctl status ${SERVICE_NAME} --no-pager -l"
 
 ## API Direction
 
-The full contract lives in `docs/plans/active/spec-v1.md` (API Contract section).
+The full contract lives in `docs/plans/active/spec-v2.md` (API Contract section).
 
 Implemented so far:
 

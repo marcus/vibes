@@ -47,3 +47,10 @@ release/appcast/*.html
 release/appcast/*.md
 release/release-notes/*.html
 *.xcarchive
+.sidecar/
+.sidecar-agent
+.sidecar-task
+.sidecar-pr
+.sidecar-start.sh
+.sidecar-base
+.td-root

@@ -354,10 +354,6 @@ private struct ReposSection: View {
         get: { model.config?.sharing.cards.gitStats ?? true },
         set: { _ in model.toggleCard(\.gitStats) }
       ))
-      Toggle("share agent mix", isOn: Binding(
-        get: { model.config?.sharing.cards.agentMix ?? true },
-        set: { _ in model.toggleCard(\.agentMix) }
-      ))
     }
   }
 }
@@ -393,19 +389,6 @@ private struct RepoRow: View {
             model.updateRepo(repo)
           }
         ))
-        Picker("agent", selection: Binding(
-          get: { repo.agent },
-          set: {
-            repo.agent = $0
-            model.updateRepo(repo)
-          }
-        )) {
-          ForEach(AgentLabel.allCases) { agent in
-            Text(agent.label).tag(agent)
-          }
-        }
-        .labelsHidden()
-        .frame(width: 150)
       }
     }
     .padding(.vertical, 8)
