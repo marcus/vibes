@@ -147,156 +147,270 @@ private struct MainPanel: View {
   }
 }
 
-// Temporary native Settings content. Phase 2 will split this into settings
-// panes and move friend invites out of Settings.
 struct SettingsView: View {
   @EnvironmentObject private var model: AppModel
-  @Environment(\.dismiss) private var dismiss
-  @State private var showLLMEditor = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      HStack {
-        Text("settings")
-          .font(.system(size: 22, weight: .light))
-        Spacer()
-        Button("Done") { dismiss() }
-          .buttonStyle(AccentButtonStyle())
-      }
-      .padding(.horizontal, 24)
-      .padding(.top, 22)
-      .padding(.bottom, 16)
-
-      ScrollView {
-        VStack(alignment: .leading, spacing: 28) {
-          ReposSection()
-          Divider()
-          FriendsSection()
-          Divider()
-          AdvancedSettingsSection(showLLMEditor: $showLLMEditor)
+    TabView {
+      GeneralSettingsPane()
+        .tabItem {
+          Label("General", systemImage: "gearshape")
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
-      }
+
+      RepositoriesSettingsPane()
+        .tabItem {
+          Label("Repositories", systemImage: "folder")
+        }
+
+      SharingSettingsPane()
+        .tabItem {
+          Label("Sharing", systemImage: "hand.raised")
+        }
+
+      AdvancedSettingsPane()
+        .tabItem {
+          Label("Advanced", systemImage: "wrench.and.screwdriver")
+        }
     }
-    .frame(width: 460, height: 620)
+    .frame(width: 560, height: 500)
     .background(VibeColor.background)
     .foregroundStyle(VibeColor.foreground)
-    .sheet(isPresented: $showLLMEditor) {
-      LLMSettingsEditor(dismiss: { showLLMEditor = false })
-        .environmentObject(model)
+  }
+}
+
+private struct GeneralSettingsPane: View {
+  @EnvironmentObject private var model: AppModel
+  @State private var displayName = ""
+  @State private var handle = ""
+  @State private var deviceLabel = ""
+  @State private var relayURL = ""
+
+  var body: some View {
+    SettingsPane {
+      SettingsHeading(
+        title: "general",
+        detail: "Account and relay details for this Mac."
+      )
+
+      EditableSettingField(
+        label: "display name",
+        prompt: "Marcus",
+        text: $displayName,
+        save: { model.updateDisplayName(displayName) }
+      )
+
+      EditableSettingField(
+        label: "handle",
+        prompt: "marcus",
+        text: $handle,
+        save: { model.updateHandle(handle) }
+      )
+
+      EditableSettingField(
+        label: "device label",
+        prompt: "MacBook",
+        text: $deviceLabel,
+        save: { model.updateDeviceLabel(deviceLabel) }
+      )
+
+      EditableSettingField(
+        label: "relay url",
+        prompt: "https://vibes.opentangle.com",
+        text: $relayURL,
+        save: { model.updateRelayURL(relayURL) }
+      )
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("local identifiers")
+          .font(.caption)
+          .foregroundStyle(VibeColor.muted)
+        Text("Device ID: \(displayDeviceID)")
+          .font(.system(size: 12))
+          .foregroundStyle(VibeColor.muted)
+          .textSelection(.enabled)
+        Text("Timezone: \(model.config?.identity.timezone ?? TimeZone.current.identifier)")
+          .font(.system(size: 12))
+          .foregroundStyle(VibeColor.muted)
+      }
+    }
+    .onAppear(perform: populate)
+  }
+
+  private func populate() {
+    displayName = model.config?.identity.displayName ?? ""
+    handle = model.config?.identity.handle ?? ""
+    deviceLabel = model.config?.device.label ?? ""
+    relayURL = model.config?.server.relayURL.absoluteString ?? ""
+  }
+
+  private var displayDeviceID: String {
+    guard let id = model.config?.device.id.trimmingCharacters(in: .whitespacesAndNewlines),
+          !id.isEmpty
+    else {
+      return "unconfigured"
+    }
+    return id
+  }
+}
+
+private struct RepositoriesSettingsPane: View {
+  var body: some View {
+    SettingsPane {
+      SettingsHeading(
+        title: "repositories",
+        detail: "Choose local Git repos to scan. Raw paths stay on this Mac."
+      )
+      ReposSection()
     }
   }
 }
 
-private struct AdvancedSettingsSection: View {
-  @Binding var showLLMEditor: Bool
+private struct SharingSettingsPane: View {
+  @EnvironmentObject private var model: AppModel
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      Text("advanced")
-        .font(.caption)
-        .foregroundStyle(VibeColor.muted)
-      Text("Edit any setting by chatting with an LLM, then pasting its reply back. No need to hand-edit files.")
-        .font(.system(size: 13))
-        .foregroundStyle(VibeColor.muted)
+    SettingsPane {
+      SettingsHeading(
+        title: "sharing",
+        detail: "Aggregate activity can leave the Mac. Paths, branches, commits, filenames, editor activity, and assistant attribution do not."
+      )
+
+      VStack(alignment: .leading, spacing: 12) {
+        Text("cards")
+          .font(.caption)
+          .foregroundStyle(VibeColor.muted)
+
+        cardToggle("Git stats", keyPath: \.gitStats)
+        cardToggle("Repo aliases", keyPath: \.repoAliases)
+        cardToggle("Spotify", keyPath: \.spotify)
+        cardToggle("Weather", keyPath: \.weather)
+      }
+
+      VStack(alignment: .leading, spacing: 12) {
+        Text("redactions")
+          .font(.caption)
+          .foregroundStyle(VibeColor.muted)
+
+        redactionToggle("Repo paths", keyPath: \.repoPaths)
+        redactionToggle("Branch names", keyPath: \.branchNames)
+        redactionToggle("Commit messages", keyPath: \.commitMessages)
+        redactionToggle("Filenames", keyPath: \.fileNames)
+        redactionToggle("Editor activity", keyPath: \.editorActivity)
+        redactionToggle("Assistant attribution", keyPath: \.assistantAttribution)
+      }
+    }
+  }
+
+  private func cardToggle(
+    _ label: String,
+    keyPath: WritableKeyPath<SharingCardsConfig, Bool>
+  ) -> some View {
+    Toggle(label, isOn: Binding(
+      get: { model.config?.sharing.cards[keyPath: keyPath] ?? false },
+      set: { model.setCard(keyPath, enabled: $0) }
+    ))
+  }
+
+  private func redactionToggle(
+    _ label: String,
+    keyPath: WritableKeyPath<SharingRedactionsConfig, Bool>
+  ) -> some View {
+    Toggle("Redact \(label.lowercased())", isOn: Binding(
+      get: { model.config?.sharing.redactions[keyPath: keyPath] ?? true },
+      set: { model.setRedaction(keyPath, enabled: $0) }
+    ))
+  }
+}
+
+private struct AdvancedSettingsPane: View {
+  @EnvironmentObject private var model: AppModel
+  @State private var copied = false
+
+  var body: some View {
+    SettingsPane {
+      SettingsHeading(
+        title: "advanced",
+        detail: "Use this local summary when reasoning about Vibes settings. It redacts secrets and raw repo paths."
+      )
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("diagnostics")
+          .font(.caption)
+          .foregroundStyle(VibeColor.muted)
+        Text(model.diagnosticSummary())
+          .font(.system(size: 12))
+          .foregroundStyle(VibeColor.muted)
+          .textSelection(.enabled)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
       Button {
-        showLLMEditor = true
+        model.copyDiagnosticSummary()
+        copied = true
       } label: {
-        Label("Edit settings with an LLM", systemImage: "wand.and.stars")
+        Label(copied ? "Copied" : "Copy Summary", systemImage: "doc.on.doc")
       }
       .buttonStyle(PlainVibeButtonStyle())
     }
   }
 }
 
-// Paste-back-and-validate pop-out: copy a prompt to take to any LLM, then paste
-// the returned JSON here to validate + persist. The user never hand-edits
-// config.json. Backed by AppModel.copySettingsPrompt / applyPastedConfig.
-private struct LLMSettingsEditor: View {
-  @EnvironmentObject private var model: AppModel
-  var dismiss: () -> Void
-
-  @State private var pastedJSON = ""
-  @State private var validationError: String?
-  @State private var didSave = false
-  @State private var didCopy = false
+private struct SettingsPane<Content: View>: View {
+  @ViewBuilder var content: Content
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      HStack {
-        Text("edit settings with an llm")
-          .font(.system(size: 22, weight: .light))
-        Spacer()
-        Button("Done") { dismiss() }
-          .buttonStyle(AccentButtonStyle())
+    ScrollView {
+      VStack(alignment: .leading, spacing: 22) {
+        content
       }
-      .padding(.horizontal, 24)
-      .padding(.top, 22)
-      .padding(.bottom, 16)
+      .padding(28)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .scrollContentBackground(.hidden)
+    .background(VibeColor.background)
+  }
+}
 
-      ScrollView {
-        VStack(alignment: .leading, spacing: 18) {
-          VStack(alignment: .leading, spacing: 8) {
-            Text("1 · copy the prompt")
-              .font(.caption)
-              .foregroundStyle(VibeColor.muted)
-            Text("Copy this prompt and paste it to your LLM. Describe the change you want, then bring its JSON reply back here.")
-              .font(.system(size: 13))
-              .foregroundStyle(VibeColor.muted)
-            Button {
-              model.copySettingsPrompt()
-              didCopy = true
-            } label: {
-              Label(didCopy ? "Prompt copied" : "Copy prompt", systemImage: "doc.on.doc")
-            }
-            .buttonStyle(PlainVibeButtonStyle())
-          }
+private struct SettingsHeading: View {
+  var title: String
+  var detail: String
 
-          VStack(alignment: .leading, spacing: 8) {
-            Text("2 · paste the reply")
-              .font(.caption)
-              .foregroundStyle(VibeColor.muted)
-            Text("Paste your LLM's JSON reply below, then validate and save.")
-              .font(.system(size: 13))
-              .foregroundStyle(VibeColor.muted)
-            TextEditor(text: $pastedJSON)
-              .font(.system(size: 12, design: .monospaced))
-              .scrollContentBackground(.hidden)
-              .padding(8)
-              .frame(height: 220)
-              .background(VibeColor.field)
-              .clipShape(RoundedRectangle(cornerRadius: 4))
-          }
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(title)
+        .font(.system(size: 22, weight: .light))
+      Text(detail)
+        .font(.system(size: 13))
+        .foregroundStyle(VibeColor.muted)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+}
 
-          if let validationError {
-            Text(validationError)
-              .font(.system(size: 13))
-              .foregroundStyle(VibeColor.accent)
-              .fixedSize(horizontal: false, vertical: true)
-          } else if didSave {
-            Text("Settings validated and saved.")
-              .font(.system(size: 13))
-              .foregroundStyle(VibeColor.online)
-          }
+private struct EditableSettingField: View {
+  var label: String
+  var prompt: String
+  @Binding var text: String
+  var save: () -> Void
 
-          Button {
-            didSave = false
-            let error = model.applyPastedConfig(pastedJSON)
-            validationError = error
-            didSave = (error == nil)
-          } label: {
-            Label("Validate & Save", systemImage: "checkmark.seal")
-          }
-          .buttonStyle(AccentButtonStyle())
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(label)
+        .font(.caption)
+        .foregroundStyle(VibeColor.muted)
+      HStack(spacing: 8) {
+        TextField(prompt, text: $text)
+          .textFieldStyle(.plain)
+          .padding(10)
+          .background(VibeColor.field)
+          .clipShape(RoundedRectangle(cornerRadius: 4))
+          .onSubmit(save)
+        Button("Save") {
+          save()
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
+        .buttonStyle(PlainVibeButtonStyle())
       }
     }
-    .frame(width: 460, height: 620)
-    .background(VibeColor.background)
-    .foregroundStyle(VibeColor.foreground)
   }
 }
 

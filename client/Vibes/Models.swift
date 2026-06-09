@@ -125,10 +125,80 @@ struct SharingCardsConfig: Codable, Equatable {
   }
 }
 
+struct SharingRedactionsConfig: Codable, Equatable {
+  var repoPaths: Bool
+  var branchNames: Bool
+  var commitMessages: Bool
+  var fileNames: Bool
+  var editorActivity: Bool
+  var assistantAttribution: Bool
+
+  static let defaults = SharingRedactionsConfig(
+    repoPaths: true,
+    branchNames: true,
+    commitMessages: true,
+    fileNames: true,
+    editorActivity: true,
+    assistantAttribution: true
+  )
+
+  init(
+    repoPaths: Bool,
+    branchNames: Bool,
+    commitMessages: Bool,
+    fileNames: Bool,
+    editorActivity: Bool,
+    assistantAttribution: Bool
+  ) {
+    self.repoPaths = repoPaths
+    self.branchNames = branchNames
+    self.commitMessages = commitMessages
+    self.fileNames = fileNames
+    self.editorActivity = editorActivity
+    self.assistantAttribution = assistantAttribution
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    repoPaths = try container.decodeIfPresent(Bool.self, forKey: .repoPaths) ?? Self.defaults.repoPaths
+    branchNames = try container.decodeIfPresent(Bool.self, forKey: .branchNames) ?? Self.defaults.branchNames
+    commitMessages = try container.decodeIfPresent(Bool.self, forKey: .commitMessages) ?? Self.defaults.commitMessages
+    fileNames = try container.decodeIfPresent(Bool.self, forKey: .fileNames) ?? Self.defaults.fileNames
+    editorActivity = try container.decodeIfPresent(Bool.self, forKey: .editorActivity) ?? Self.defaults.editorActivity
+    assistantAttribution = try container.decodeIfPresent(Bool.self, forKey: .assistantAttribution) ?? Self.defaults.assistantAttribution
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case repoPaths = "repo_paths"
+    case branchNames = "branch_names"
+    case commitMessages = "commit_messages"
+    case fileNames = "file_names"
+    case editorActivity = "editor_activity"
+    case assistantAttribution = "assistant_attribution"
+  }
+}
+
 struct SharingConfig: Codable, Equatable {
   var cards: SharingCardsConfig
+  var redactions: SharingRedactionsConfig
 
-  static let defaults = SharingConfig(cards: .defaults)
+  static let defaults = SharingConfig(cards: .defaults, redactions: .defaults)
+
+  init(cards: SharingCardsConfig, redactions: SharingRedactionsConfig = .defaults) {
+    self.cards = cards
+    self.redactions = redactions
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    cards = try container.decodeIfPresent(SharingCardsConfig.self, forKey: .cards) ?? .defaults
+    redactions = try container.decodeIfPresent(SharingRedactionsConfig.self, forKey: .redactions) ?? .defaults
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case cards
+    case redactions
+  }
 }
 
 struct PresenceConfig: Codable, Equatable {

@@ -29,6 +29,10 @@ final class AppModel: ObservableObject {
     config != nil && !token.isEmpty
   }
 
+  var configPath: String {
+    configStore.configURL.path
+  }
+
   init() {
     loadLocalState()
   }
@@ -315,11 +319,74 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func toggleCard(_ keyPath: WritableKeyPath<SharingCardsConfig, Bool>) {
+  func updateDisplayName(_ value: String) {
+    let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else {
+      lastError = "Display name is required."
+      return
+    }
     mutateConfig { config in
-      config.sharing.cards[keyPath: keyPath].toggle()
+      config.identity.displayName = clean
+    }
+  }
+
+  func updateHandle(_ value: String) {
+    let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else {
+      lastError = "Handle is required."
+      return
+    }
+    mutateConfig { config in
+      config.identity.handle = clean
+    }
+  }
+
+  func updateDeviceLabel(_ value: String) {
+    let clean = value.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+      ?? Host.current().localizedName
+      ?? "Mac"
+    mutateConfig { config in
+      config.device.label = clean
+    }
+  }
+
+  func updateRelayURL(_ value: String) {
+    guard let relayURL = normalizeRelayURL(value) else {
+      lastError = "Use HTTPS for hosted relays. HTTP is only allowed for localhost."
+      return
+    }
+    mutateConfig { config in
+      config.server.relayURL = relayURL
+    }
+    Task { await refreshAll() }
+  }
+
+  func toggleCard(_ keyPath: WritableKeyPath<SharingCardsConfig, Bool>) {
+    guard let current = config?.sharing.cards[keyPath: keyPath] else { return }
+    setCard(keyPath, enabled: !current)
+  }
+
+  func setCard(_ keyPath: WritableKeyPath<SharingCardsConfig, Bool>, enabled: Bool) {
+    mutateConfig { config in
+      config.sharing.cards[keyPath: keyPath] = enabled
     }
     Task { await scanPublishAndFetch() }
+  }
+
+  func toggleRedaction(_ keyPath: WritableKeyPath<SharingRedactionsConfig, Bool>) {
+    guard let current = config?.sharing.redactions[keyPath: keyPath] else { return }
+    setRedaction(keyPath, enabled: !current)
+  }
+
+  func setRedaction(_ keyPath: WritableKeyPath<SharingRedactionsConfig, Bool>, enabled: Bool) {
+    mutateConfig { config in
+      config.sharing.redactions[keyPath: keyPath] = enabled
+    }
+  }
+
+  func copyDiagnosticSummary() {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(diagnosticSummary(), forType: .string)
   }
 
   func createInvite() async {
@@ -358,105 +425,22 @@ final class AppModel: ObservableObject {
     NSPasteboard.general.setString(latestInviteURL.absoluteString, forType: .string)
   }
 
-  // Builds a copy-to-clipboard prompt that hands the current config.json, its
-  // schema, and instructions to an LLM so the user can edit settings via chat
-  // and paste the result back into the pop-out. The user never hand-edits JSON.
-  func buildSettingsPrompt() -> String {
-    let currentJSON: String
-    if let config, let data = try? JSONCoding.encoder.encode(config),
-       let text = String(data: data, encoding: .utf8) {
-      currentJSON = text
-    } else {
-      currentJSON = "{}"
-    }
+  func diagnosticSummary() -> String {
+    let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+    let cards = enabledSharingCards().joined(separator: ", ")
     return """
-    You are helping me edit the settings file for a macOS app called Vibes.
-    Below is my current configuration as JSON, followed by the schema. I will \
-    describe the changes I want; you must reply with ONLY the complete, updated, \
-    valid JSON for this config — no prose, no markdown fences, nothing else.
-
-    Schema (all keys are exactly as shown; snake_case is required):
-    - identity: { handle: string, display_name: string, timezone: string (IANA, e.g. "America/Denver") }
-    - device: { id: string, label: string }
-    - server: { relay_url: string (must be https unless localhost) }
-    - repos: array of { id: string (uuid), path: string (absolute local path), alias: string, share_alias: bool }
-    - sharing: { cards: { git_stats: bool, repo_aliases: bool, spotify: bool, weather: bool } }
-    - presence: { mode: "online" | "offline", manual_status: string }
-
-    Rules:
-    - Preserve every field. Do not add or remove top-level keys.
-    - Keep existing ids unless I explicitly ask to change them.
-    - Output must be a single JSON object that parses cleanly.
-
-    Current config.json:
-    \(currentJSON)
+    Vibes diagnostics
+    App: \(appVersion) (\(build))
+    Config path: \(configPath)
+    Relay URL: \(config?.server.relayURL.absoluteString ?? "unconfigured")
+    Handle: \(config?.identity.handle ?? "unconfigured")
+    Device: \(config?.device.label ?? "unconfigured")
+    Last sync: \(lastSyncedAt?.formatted(date: .numeric, time: .standard) ?? "never")
+    Sharing cards: \(cards.isEmpty ? "none" : cards)
+    Repos: \(config?.repos.count ?? 0) configured (paths redacted)
+    Token: stored in Keychain (redacted)
     """
-  }
-
-  // Copies the LLM editing prompt to the pasteboard (mirrors copyLatestInvite).
-  func copySettingsPrompt() {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(buildSettingsPrompt(), forType: .string)
-  }
-
-  // Paste-back-and-validate: decode the pasted JSON with the SAME decoder used
-  // by ConfigStore, persist + hot-reload on success, return a human-readable
-  // error WITHOUT persisting on failure.
-  @discardableResult
-  func applyPastedConfig(_ pastedJSON: String) -> String? {
-    let trimmed = pastedJSON.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else {
-      return "Paste the JSON your LLM returned before saving."
-    }
-    guard let data = trimmed.data(using: .utf8) else {
-      return "The pasted text could not be read as UTF-8."
-    }
-    let next: VibesConfig
-    do {
-      next = try JSONCoding.decoder.decode(VibesConfig.self, from: data)
-    } catch {
-      return decodeErrorMessage(error)
-    }
-    guard isAllowedRelayURL(next.server.relayURL) else {
-      return "relay_url must use HTTPS unless it is localhost."
-    }
-    do {
-      try configStore.save(next)
-    } catch {
-      return error.localizedDescription
-    }
-    // Hot-reload in-memory state (mirrors install / mutateConfig).
-    config = next
-    mode = next.presence.mode
-    manualStatus = next.presence.manualStatus
-    Task { await scanPublishAndFetch() }
-    return nil
-  }
-
-  private func decodeErrorMessage(_ error: Error) -> String {
-    guard let error = error as? DecodingError else {
-      return "Invalid config: \(error.localizedDescription)"
-    }
-    switch error {
-    case let .keyNotFound(key, context):
-      return "Missing required field \"\(key.stringValue)\"\(pathSuffix(context))."
-    case let .typeMismatch(_, context):
-      return "Wrong type\(pathSuffix(context)): \(context.debugDescription)"
-    case let .valueNotFound(_, context):
-      return "Missing value\(pathSuffix(context)): \(context.debugDescription)"
-    case let .dataCorrupted(context):
-      let path = context.codingPath.map(\.stringValue).joined(separator: ".")
-      return path.isEmpty
-        ? "The JSON is not valid: \(context.debugDescription)"
-        : "Invalid value at \(path): \(context.debugDescription)"
-    @unknown default:
-      return "Invalid config: \(error.localizedDescription)"
-    }
-  }
-
-  private func pathSuffix(_ context: DecodingError.Context) -> String {
-    let path = context.codingPath.map(\.stringValue).joined(separator: ".")
-    return path.isEmpty ? "" : " at \(path)"
   }
 
   func publishOfflineForQuit() async {
@@ -485,6 +469,16 @@ final class AppModel: ObservableObject {
         await self?.scanPublishAndFetch()
       }
     }
+  }
+
+  private func enabledSharingCards() -> [String] {
+    guard let cards = config?.sharing.cards else { return [] }
+    var enabled: [String] = []
+    if cards.gitStats { enabled.append("git_stats") }
+    if cards.repoAliases { enabled.append("repo_aliases") }
+    if cards.spotify { enabled.append("spotify") }
+    if cards.weather { enabled.append("weather") }
+    return enabled
   }
 
   private func client(for config: VibesConfig) -> RelayClient {
