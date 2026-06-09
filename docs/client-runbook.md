@@ -35,11 +35,11 @@ xcodebuild -project client/Vibes.xcodeproj -scheme Vibes -configuration Debug -d
 
 ## Core Architecture
 
-- [AppModel.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/AppModel.swift): Central `@MainActor` class managing app state, background loops, settings mutations, and Keychain interactions.
-- [ConfigStore.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/ConfigStore.swift): Manages saving/loading configuration JSON profiles.
-- [GitScanner.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/GitScanner.swift): Executes shell commands to scan repository changes inside the account Vibes day window.
-- [ContentView.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/ContentView.swift): Holds the primary user interface screens (`SetupPanel`, `MainPanel` with feed/status controls, native Settings panes, and the Invite Friend sheet).
-- [Models.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/Models.swift): Holds model types corresponding to the API contract.
+- [AppModel.swift](file:///Users/marcus/code/vibes/client/Vibes/AppModel.swift): Central `@MainActor` class managing app state, background loops, settings mutations, and Keychain interactions.
+- [ConfigStore.swift](file:///Users/marcus/code/vibes/client/Vibes/ConfigStore.swift): Manages saving/loading configuration JSON profiles.
+- [GitScanner.swift](file:///Users/marcus/code/vibes/client/Vibes/GitScanner.swift): Executes shell commands to scan repository changes inside the account Vibes day window.
+- [ContentView.swift](file:///Users/marcus/code/vibes/client/Vibes/ContentView.swift): Holds the primary user interface screens (`SetupPanel`, `MainPanel` with feed/status controls, native Settings panes, and the Invite Friend sheet).
+- [Models.swift](file:///Users/marcus/code/vibes/client/Vibes/Models.swift): Holds model types corresponding to the API contract.
 
 ## Config Direction
 
@@ -63,7 +63,7 @@ Keep the checked-in project buildable with `make client`.
 
 ## Signed Release & Notarization
 
-Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app with in-app updates via Sparkle (integrated; see [docs/plans/active/client-auto-update.md](plans/active/client-auto-update.md)). Sparkle 2.x is added as a SwiftPM dependency (`Package.resolved` is committed), the updater is wired in [VibesApp.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/VibesApp.swift) / [UpdaterController.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/UpdaterController.swift), and the Sparkle keys live in `Info.plist`.
+Vibes ships outside the Mac App Store as a Developer ID–signed, notarized app with in-app updates via Sparkle (integrated; see [docs/plans/active/client-auto-update.md](plans/active/client-auto-update.md)). Sparkle 2.x is added as a SwiftPM dependency (`Package.resolved` is committed), the updater is wired in [VibesApp.swift](file:///Users/marcus/code/vibes/client/Vibes/VibesApp.swift) / [UpdaterController.swift](file:///Users/marcus/code/vibes/client/Vibes/UpdaterController.swift), and the Sparkle keys live in `Info.plist`.
 
 ### One-time setup (requires your Apple Developer account)
 
