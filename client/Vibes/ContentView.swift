@@ -113,6 +113,7 @@ private struct SetupPanel: View {
 
 private struct MainPanel: View {
   @EnvironmentObject private var model: AppModel
+  @State private var showSettings = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -136,13 +137,54 @@ private struct MainPanel: View {
 
       HomeView()
 
-      Footer()
+      Footer(openSettings: { showSettings = true })
     }
     .padding(22)
     .sheet(item: $model.pendingInvite) { invite in
       InviteSheet(invite: invite)
         .environmentObject(model)
     }
+    .sheet(isPresented: $showSettings) {
+      SettingsView(dismiss: { showSettings = false })
+        .environmentObject(model)
+    }
+  }
+}
+
+// Dedicated Settings screen reached from the footer gear. Contains the
+// repositories UI and the outgoing add-friend / invite-management flow,
+// clearly sectioned, with a Done button back to Home. (The incoming-invite
+// sheet stays on MainPanel.)
+private struct SettingsView: View {
+  @EnvironmentObject private var model: AppModel
+  var dismiss: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        Text("settings")
+          .font(.system(size: 22, weight: .light))
+        Spacer()
+        Button("Done") { dismiss() }
+          .buttonStyle(AccentButtonStyle())
+      }
+      .padding(.horizontal, 24)
+      .padding(.top, 22)
+      .padding(.bottom, 16)
+
+      ScrollView {
+        VStack(alignment: .leading, spacing: 28) {
+          ReposSection()
+          Divider()
+          FriendsSection()
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+      }
+    }
+    .frame(width: 460, height: 620)
+    .background(VibeColor.background)
+    .foregroundStyle(VibeColor.foreground)
   }
 }
 
@@ -265,11 +307,9 @@ private struct ReposSection: View {
       }
 
       if let repos = model.config?.repos, !repos.isEmpty {
-        ScrollView {
-          LazyVStack(spacing: 12) {
-            ForEach(repos) { repo in
-              RepoRow(repo: repo)
-            }
+        VStack(spacing: 12) {
+          ForEach(repos) { repo in
+            RepoRow(repo: repo)
           }
         }
       } else {
@@ -384,12 +424,11 @@ private struct FriendsSection: View {
         .foregroundStyle(VibeColor.muted)
         .padding(.top, 2)
 
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 10) {
-          if model.invites.isEmpty {
-            EmptyState(text: "Create an invite link when you're ready to connect with someone.")
-          } else {
-            ForEach(model.invites) { invite in
+      VStack(alignment: .leading, spacing: 10) {
+        if model.invites.isEmpty {
+          EmptyState(text: "Create an invite link when you're ready to connect with someone.")
+        } else {
+          ForEach(model.invites) { invite in
               HStack {
                 VStack(alignment: .leading) {
                   Text(invite.state)
@@ -406,7 +445,6 @@ private struct FriendsSection: View {
                 }
               }
               .padding(.vertical, 8)
-            }
           }
         }
       }
@@ -463,6 +501,7 @@ private struct InviteSheet: View {
 
 private struct Footer: View {
   @EnvironmentObject private var model: AppModel
+  var openSettings: () -> Void
 
   var body: some View {
     HStack {
@@ -480,7 +519,7 @@ private struct Footer: View {
       }
       Spacer()
       Button {
-        model.openConfigFolder()
+        openSettings()
       } label: {
         Image(systemName: "gearshape")
       }
