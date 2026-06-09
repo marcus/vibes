@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vibes — friend list design mockups</title>
+<style>
+  /* ============================================================
+     EXPERIMENT — not part of the shipping app.
+     Four design directions for the main Vibes screen.
+     ============================================================ */
+
+  :root {
+    --page-bg: #1c1a17;
+    --page-ink: #e8e4dd;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    background: var(--page-bg);
+    color: var(--page-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- page chrome (tabs + notes) ---------- */
+  .chrome {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 24px 64px;
+  }
+  .chrome h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .chrome .sub { color: #9a948a; font-size: 13px; margin-top: 4px; }
+  .tabs {
+    display: flex; gap: 8px; margin: 20px 0 8px; flex-wrap: wrap;
+  }
+  .tabs button {
+    font: inherit; font-size: 13px; font-weight: 500;
+    color: #b5afa4; background: #2a2723; border: 1px solid #3a362f;
+    padding: 7px 14px; border-radius: 99px; cursor: pointer;
+  }
+  .tabs button:hover { color: #e8e4dd; }
+  .tabs button.active { background: #e8e4dd; color: #1c1a17; border-color: #e8e4dd; }
+  .stage {
+    display: flex; gap: 32px; align-items: flex-start; margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  .notes {
+    flex: 1 1 280px; max-width: 380px; font-size: 13.5px; line-height: 1.55;
+    color: #b5afa4; padding-top: 8px;
+  }
+  .notes h2 { font-size: 14px; color: #e8e4dd; margin-bottom: 8px; }
+  .notes ul { margin: 10px 0 0 18px; }
+  .notes li { margin-bottom: 7px; }
+  .notes em { color: #d8d2c6; font-style: normal; font-weight: 600; }
+
+  /* ---------- shared mac window shell ---------- */
+  .mac-window {
+    width: 420px; flex: 0 0 auto;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 24px 70px rgba(0,0,0,.5), 0 0 0 .5px rgba(255,255,255,.12);
+  }
+  .titlebar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 14px;
+  }
+  .titlebar .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .titlebar .dot.r { background: #ff5f57; } .titlebar .dot.y { background: #febc2e; } .titlebar .dot.g { background: #c8c6c0; }
+  .titlebar .title { flex: 1; text-align: center; font-size: 13px; font-weight: 600; margin-right: 52px; }
+  .panel { display: none; }
+  .panel.active { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+
+  .avatar { border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; flex: 0 0 auto; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+  }
+
+  /* ============================================================
+     DESIGN A — "Hearth"  (warm evolution of the current look)
+     ============================================================ */
+  .d-hearth { background: #f3efe7; color: #2b2620; }
+  .d-hearth .titlebar { background: #faf7f1; border-bottom: 1px solid #e7e1d5; color: #2b2620; }
+  .d-hearth .body { padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+  .d-hearth .me {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border-radius: 14px;
+    background: #faf7f1; border: 1px solid #e7e1d5;
+  }
+  .d-hearth .me .who { flex: 1; min-width: 0; }
+  .d-hearth .me .name { font-weight: 700; font-size: 14px; }
+  .d-hearth .me .status { font-size: 12px; color: #8a8276; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-hearth .me .numbers { display: flex; gap: 12px; font-size: 12px; color: #6f675b; font-variant-numeric: tabular-nums; }
+  .d-hearth .me .numbers b { color: #2b2620; font-size: 14px; display: block; }
+  .d-hearth .section-label {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: #a39a8b; margin: 6px 4px 0;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .d-hearth .section-label .count { font-weight: 600; letter-spacing: 0; text-transform: none; color: #b9b0a0; }
+
+  /* online card: subtle flowing gradient wash */
+  .d-hearth .card {
+    position: relative; border-radius: 16px; padding: 14px;
+    background: #fdfbf6; border: 1px solid #e7e1d5;
+    overflow: hidden;
+  }
+  .d-hearth .card .flow {
+    position: absolute; inset: -40%;
+    background:
+      radial-gradient(40% 50% at 30% 30%, var(--c1, #f97316) 0%, transparent 70%),
+      radial-gradient(45% 55% at 70% 70%, var(--c2, #fbbf24) 0%, transparent 70%);
+    opacity: .07;
+    animation: hearthFlow 14s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+  @keyframes hearthFlow {
+    0%   { transform: translate(-4%, -3%) rotate(0deg) scale(1); }
+    100% { transform: translate(4%, 3%) rotate(8deg) scale(1.08); }
+  }
+  .d-hearth .card .row { position: relative; display: flex; align-items: center; gap: 12px; }
+  .d-hearth .card .avatar { width: 44px; height: 44px; font-size: 16px; }
+  .d-hearth .pulse-ring { position: relative; flex: 0 0 auto; }
+  .d-hearth .pulse-ring::after {
+    content: ""; position: absolute; inset: -4px; border-radius: 50%;
+    border: 2px solid var(--c1, #34a06c);
+    opacity: .55;
+    animation: breathe 3.4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); opacity: .55; }
+    50%      { transform: scale(1.09); opacity: .2; }
+  }
+  .d-hearth .card .who { flex: 1; min-width: 0; }
+  .d-hearth .card .name { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 7px; }
+  .d-hearth .live {
+    font-size: 10px; font-weight: 700; letter-spacing: .05em;
+    color: #1f7a4d; background: #ddeee2; padding: 2px 7px; border-radius: 99px;
+  }
+  .d-hearth .card .status { font-size: 12.5px; color: #8a8276; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-hearth .card .stats {
+    position: relative; display: flex; gap: 14px; margin-top: 12px;
+    font-size: 12px; color: #6f675b; font-variant-numeric: tabular-nums;
+  }
+  .d-hearth .card .stats b { font-size: 16px; color: #2b2620; display: block; font-weight: 800; }
+  .d-hearth .card .stats .plus b { color: #1f7a4d; }
+  .d-hearth .card .stats .minus b { color: #b3503e; }
+  .d-hearth .card .repos { position: relative; display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .d-hearth .chip {
+    font-size: 11px; font-weight: 600; color: #6f675b;
+    background: #efe9dd; border-radius: 7px; padding: 3px 8px;
+  }
+  .d-hearth .when { font-size: 11px; color: #b9b0a0; white-space: nowrap; }
+
+  /* offline rows: compact, calm */
+  .d-hearth .off-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: 12px;
+    background: rgba(255,255,255,.4); border: 1px solid #ebe5d9;
+  }
+  .d-hearth .off-row .avatar { width: 28px; height: 28px; font-size: 11px; filter: saturate(.35); opacity: .75; }
+  .d-hearth .off-row .who { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+  .d-hearth .off-row .name { font-weight: 600; font-size: 13px; color: #6f675b; }
+  .d-hearth .off-row .recent { font-size: 11.5px; color: #a39a8b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-hearth .off-row .when { font-size: 11px; color: #b9b0a0; }
+
+  /* ============================================================
+     DESIGN B — "Aurora"  (dark, ambient, glowing presence)
+     ============================================================ */
+  .d-aurora { background: #14151a; color: #e9eaf0; }
+  .d-aurora .titlebar { background: #1a1c22; border-bottom: 1px solid #262932; color: #e9eaf0; }
+  .d-aurora .body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  .d-aurora .me {
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+    border-radius: 14px; background: #1c1e25; border: 1px solid #2a2d37;
+  }
+  .d-aurora .me .who { flex: 1; min-width: 0; }
+  .d-aurora .me .name { font-weight: 700; font-size: 14px; }
+  .d-aurora .me .status { font-size: 12px; color: #8e93a3; margin-top: 1px; }
+  .d-aurora .me .numbers { display: flex; gap: 12px; font-size: 11px; color: #8e93a3; font-variant-numeric: tabular-nums; }
+  .d-aurora .me .numbers b { display: block; font-size: 14px; color: #e9eaf0; }
+
+  .d-aurora .card {
+    position: relative; border-radius: 18px; padding: 15px 16px;
+    background: #1c1e25; overflow: hidden;
+    border: 1px solid #2a2d37;
+  }
+  .d-aurora .card .aurora {
+    position: absolute; inset: -60% -30%;
+    background:
+      radial-gradient(45% 60% at 25% 35%, var(--c1) 0%, transparent 65%),
+      radial-gradient(50% 65% at 75% 65%, var(--c2) 0%, transparent 65%);
+    opacity: .16; filter: blur(18px);
+    animation: auroraDrift 18s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+  @keyframes auroraDrift {
+    0%   { transform: translate(-5%, -4%) rotate(-4deg); }
+    100% { transform: translate(5%, 4%) rotate(6deg); }
+  }
+  .d-aurora .card .row { position: relative; display: flex; align-items: center; gap: 12px; }
+  .d-aurora .avatar { box-shadow: 0 0 0 1.5px rgba(255,255,255,.18); }
+  .d-aurora .card .avatar { width: 42px; height: 42px; font-size: 15px; }
+  .d-aurora .glowdot { position: relative; flex: 0 0 auto; }
+  .d-aurora .glowdot::after {
+    content: ""; position: absolute; right: -1px; bottom: -1px;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #4ade80; border: 2.5px solid #1c1e25;
+    box-shadow: 0 0 8px 1px rgba(74,222,128,.7);
+    animation: glowPulse 2.8s ease-in-out infinite;
+  }
+  @keyframes glowPulse {
+    0%, 100% { box-shadow: 0 0 6px 0 rgba(74,222,128,.55); }
+    50%      { box-shadow: 0 0 11px 3px rgba(74,222,128,.85); }
+  }
+  .d-aurora .card .who { flex: 1; min-width: 0; }
+  .d-aurora .card .name { font-size: 15px; font-weight: 700; }
+  .d-aurora .card .status { font-size: 12.5px; color: #a7acbd; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-aurora .when { font-size: 11px; color: #6c7180; white-space: nowrap; }
+  .d-aurora .card .meter { position: relative; margin-top: 13px; }
+  .d-aurora .card .meter .bar {
+    height: 4px; border-radius: 99px; background: #2a2d37; overflow: hidden;
+  }
+  .d-aurora .card .meter .fill {
+    height: 100%; border-radius: 99px;
+    background: linear-gradient(90deg, var(--c1), var(--c2));
+    background-size: 200% 100%;
+    animation: shimmer 6s linear infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }
+  .d-aurora .card .meter .legend {
+    display: flex; justify-content: space-between; margin-top: 7px;
+    font-size: 11.5px; color: #8e93a3; font-variant-numeric: tabular-nums;
+  }
+  .d-aurora .card .meter .legend b { color: #e9eaf0; font-weight: 700; }
+  .d-aurora .divider {
+    display: flex; align-items: center; gap: 10px; margin: 8px 2px 0;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #5b6070;
+  }
+  .d-aurora .divider::after { content: ""; flex: 1; height: 1px; background: #262932; }
+  .d-aurora .off-grid { display: flex; flex-direction: column; gap: 6px; }
+  .d-aurora .off-row {
+    display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+    border-radius: 11px; background: rgba(255,255,255,.025);
+  }
+  .d-aurora .off-row .avatar { width: 26px; height: 26px; font-size: 10px; filter: saturate(.3) brightness(.8); }
+  .d-aurora .off-row .name { font-size: 12.5px; font-weight: 600; color: #8e93a3; }
+  .d-aurora .off-row .recent { flex: 1; font-size: 11.5px; color: #5b6070; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ============================================================
+     DESIGN C — "Campfire"  (playful bubbles, friends as presence)
+     ============================================================ */
+  .d-campfire { background: linear-gradient(170deg, #faf6ee 0%, #f2ecdf 100%); color: #2b2620; }
+  .d-campfire .titlebar { background: rgba(255,255,255,.55); border-bottom: 1px solid #e7e1d5; color: #2b2620; }
+  .d-campfire .body { padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; }
+
+  .d-campfire .cluster {
+    display: flex; justify-content: center; align-items: flex-end; gap: 18px;
+    padding: 14px 8px 6px; flex-wrap: wrap;
+  }
+  .d-campfire .bubble { text-align: center; width: 86px; }
+  .d-campfire .bubble .orb {
+    position: relative; margin: 0 auto; width: 64px; height: 64px;
+    animation: bob 5.5s ease-in-out infinite;
+  }
+  .d-campfire .bubble:nth-child(2) .orb { animation-delay: -1.8s; }
+  .d-campfire .bubble:nth-child(3) .orb { animation-delay: -3.6s; }
+  .d-campfire .bubble:nth-child(4) .orb { animation-delay: -2.7s; }
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-5px); }
+  }
+  .d-campfire .bubble .orb::before {
+    content: ""; position: absolute; inset: -7px; border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--c1), var(--c2), var(--c1));
+    opacity: .5; filter: blur(6px);
+    animation: spinSlow 12s linear infinite;
+  }
+  @keyframes spinSlow { to { transform: rotate(360deg); } }
+  .d-campfire .bubble .avatar {
+    position: relative; width: 64px; height: 64px; font-size: 22px;
+    box-shadow: 0 0 0 3px #faf6ee;
+  }
+  .d-campfire .bubble .badge {
+    position: absolute; right: -2px; top: -2px; z-index: 1;
+    min-width: 22px; height: 22px; padding: 0 6px; border-radius: 99px;
+    background: #d96b3f; color: #fff; font-size: 11px; font-weight: 800;
+    display: grid; place-items: center;
+    box-shadow: 0 0 0 2.5px #faf6ee;
+    font-variant-numeric: tabular-nums;
+  }
+  .d-campfire .bubble .name { margin-top: 9px; font-size: 12.5px; font-weight: 700; }
+  .d-campfire .bubble .doing {
+    font-size: 10.5px; color: #8a8276; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .d-campfire .you-strip {
+    display: flex; align-items: center; gap: 10px; justify-content: center;
+    font-size: 12px; color: #6f675b;
+    background: rgba(255,255,255,.6); border: 1px solid #e7e1d5;
+    border-radius: 99px; padding: 8px 16px; margin: 0 24px;
+    font-variant-numeric: tabular-nums;
+  }
+  .d-campfire .you-strip .avatar { width: 22px; height: 22px; font-size: 9px; }
+  .d-campfire .you-strip b { color: #2b2620; }
+  .d-campfire .you-strip .sep { color: #cfc7b8; }
+  .d-campfire .ember-label {
+    text-align: center; font-size: 10.5px; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase; color: #b9b0a0;
+  }
+  .d-campfire .embers { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; padding-bottom: 6px; }
+  .d-campfire .ember { text-align: center; width: 56px; }
+  .d-campfire .ember .avatar {
+    width: 34px; height: 34px; font-size: 12px; margin: 0 auto;
+    filter: saturate(.25); opacity: .65;
+  }
+  .d-campfire .ember .name { font-size: 10.5px; font-weight: 600; color: #a39a8b; margin-top: 5px; }
+  .d-campfire .ember .when { font-size: 9.5px; color: #c4bcad; margin-top: 1px; }
+
+  /* ============================================================
+     DESIGN D — "Ticker"  (calm rows, glanceable, lives-open-all-day)
+     ============================================================ */
+  .d-ticker { background: #fbfaf7; color: #26231f; }
+  .d-ticker .titlebar { background: #fbfaf7; border-bottom: 1px solid #ece8df; color: #26231f; }
+  .d-ticker .body { padding: 6px 0 14px; }
+  .d-ticker .me-line {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 18px; font-size: 12.5px; color: #76705f;
+    border-bottom: 1px solid #f1ede4; font-variant-numeric: tabular-nums;
+  }
+  .d-ticker .me-line .avatar { width: 24px; height: 24px; font-size: 9px; }
+  .d-ticker .me-line b { color: #26231f; font-weight: 700; }
+  .d-ticker .me-line .spark { margin-left: auto; }
+
+  .d-ticker .row {
+    position: relative; display: flex; align-items: center; gap: 12px;
+    padding: 12px 18px 12px 22px;
+  }
+  .d-ticker .row.online::before {
+    content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: linear-gradient(180deg, var(--c1), var(--c2), var(--c1));
+    background-size: 100% 300%;
+    animation: borderFlow 7s ease-in-out infinite alternate;
+  }
+  @keyframes borderFlow { 0% { background-position: 0 0%; } 100% { background-position: 0 100%; } }
+  .d-ticker .row .avatar { width: 34px; height: 34px; font-size: 12px; }
+  .d-ticker .row.offline .avatar { width: 26px; height: 26px; font-size: 10px; filter: saturate(.3); opacity: .6; }
+  .d-ticker .row .who { flex: 1; min-width: 0; }
+  .d-ticker .row .name { font-size: 13.5px; font-weight: 700; display: flex; align-items: baseline; gap: 8px; }
+  .d-ticker .row.offline .name { font-size: 12.5px; color: #8c8574; font-weight: 600; }
+  .d-ticker .row .status {
+    font-size: 12px; color: #958e7d; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .d-ticker .row.offline .status { font-size: 11px; color: #b6af9e; }
+  .d-ticker .row .commits { font-size: 12px; font-weight: 700; color: #26231f; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .d-ticker .row.offline .commits { color: #b6af9e; font-weight: 600; }
+  .d-ticker .spark { display: flex; align-items: flex-end; gap: 2.5px; height: 16px; }
+  .d-ticker .spark i {
+    width: 4px; border-radius: 2px; background: #ddd6c7; display: block;
+  }
+  .d-ticker .row.online .spark i { background: color-mix(in srgb, var(--c1) 65%, #c9c2b1); }
+  .d-ticker .row.online .spark i:last-child { animation: tickerGrow 3s ease-in-out infinite alternate; }
+  @keyframes tickerGrow { from { transform: scaleY(.75); } to { transform: scaleY(1); } }
+  .d-ticker .gap-label {
+    padding: 12px 18px 4px; font-size: 10.5px; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase; color: #c2bbaa;
+  }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <h1>Vibes — friend-list design directions</h1>
+  <div class="sub">Experiment, not production code. Same mock data in all four; online friends always sort first and get the larger treatment.</div>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="panels"></div>
+</div>
+
+<script>
+/* ---------------- mock data (mirrors MergedStatus / UserSummary) ---------------- */
+const FRIENDS = [
+  { handle: "ana",   name: "Ana",    g: ["#f97316", "#fbbf24"], online: true,  status: "rewriting the parser, again", commits: 7, plus: 412, minus: 96,  repos: ["lexer", "docs"], when: "2 min ago" },
+  { handle: "theo",  name: "Theo",   g: ["#34d399", "#0ea5e9"], online: true,  status: "shipping the billing fix 🤞", commits: 4, plus: 188, minus: 240, repos: ["billing"],       when: "just now" },
+  { handle: "june",  name: "June",   g: ["#a78bfa", "#f472b6"], online: true,  status: "vibing with claude",          commits: 2, plus: 95,  minus: 12,  repos: ["sidecar", "infra"], when: "8 min ago" },
+  { handle: "priya", name: "Priya",  g: ["#fb7185", "#fdba74"], online: false, status: "",                            commits: 5, plus: 301, minus: 77,  repos: ["api"],           when: "3 hr ago" },
+  { handle: "sam",   name: "Sam",    g: ["#60a5fa", "#34d399"], online: false, status: "",                            commits: 0, plus: 0,   minus: 0,   repos: [],                when: "yesterday" },
+  { handle: "kofi",  name: "Kofi",   g: ["#facc15", "#fb923c"], online: false, status: "",                            commits: 1, plus: 24,  minus: 3,   repos: ["zine"],          when: "5 hr ago" },
+];
+const ME = { name: "Marcus", g: ["#2dd4bf", "#1e3a8a"], status: "VIBES", commits: 3, plus: 777, minus: 34, repos: ["braid"] };
+const online  = FRIENDS.filter(f => f.online);
+const offline = FRIENDS.filter(f => !f.online);
+
+const avatar = (p, extra = "") =>
+  `<span class="avatar ${extra}" style="background:linear-gradient(135deg, ${p.g[0]}, ${p.g[1]})">${p.name[0]}</span>`;
+const vars = p => `--c1:${p.g[0]};--c2:${p.g[1]}`;
+const offSummary = p => p.commits > 0
+  ? `${p.commits} commit${p.commits === 1 ? "" : "s"} · ${p.repos.join(", ")}`
+  : "quiet today";
+
+/* ---------------- Design A: Hearth ---------------- */
+function hearth() {
+  return `
+  <div class="mac-window d-hearth">
+    <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">Vibes</span></div>
+    <div class="body">
+      <div class="me">
+        ${avatar(ME)}
+        <div class="who"><div class="name">you</div><div class="status">${ME.status}</div></div>
+        <div class="numbers">
+          <span><b>${ME.commits}</b>commits</span>
+          <span><b>+${ME.plus}</b>added</span>
+          <span><b>−${ME.minus}</b>removed</span>
+        </div>
+      </div>
+
+      <div class="section-label">Online now <span class="count">· ${online.length}</span></div>
+      ${online.map(p => `
+      <div class="card" style="${vars(p)}">
+        <div class="flow"></div>
+        <div class="row">
+          <span class="pulse-ring">${avatar(p)}</span>
+          <div class="who">
+            <div class="name">${p.name} <span class="live">LIVE</span></div>
+            <div class="status">${p.status}</div>
+          </div>
+          <span class="when">${p.when}</span>
+        </div>
+        <div class="stats">
+          <span><b>${p.commits}</b>commits</span>
+          <span class="plus"><b>+${p.plus}</b>added</span>
+          <span class="minus"><b>−${p.minus}</b>removed</span>
+        </div>
+        <div class="repos">${p.repos.map(r => `<span class="chip">${r}</span>`).join("")}</div>
+      </div>`).join("")}
+
+      <div class="section-label">Away</div>
+      ${offline.map(p => `
+      <div class="off-row">
+        ${avatar(p)}
+        <div class="who"><span class="name">${p.name}</span><span class="recent">${offSummary(p)}</span></div>
+        <span class="when">${p.when}</span>
+      </div>`).join("")}
+    </div>
+  </div>`;
+}
+
+/* ---------------- Design B: Aurora ---------------- */
+function aurora() {
+  const maxPlus = Math.max(...online.map(p => p.plus + p.minus), 1);
+  return `
+  <div class="mac-window d-aurora">
+    <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">Vibes</span></div>
+    <div class="body">
+      <div class="me">
+        ${avatar(ME)}
+        <div class="who"><div class="name">you</div><div class="status">${ME.status}</div></div>
+        <div class="numbers">
+          <span><b>${ME.commits}</b>commits</span>
+          <span><b>+${ME.plus}</b></span>
+          <span><b>−${ME.minus}</b></span>
+        </div>
+      </div>
+
+      ${online.map(p => `
+      <div class="card" style="${vars(p)}">
+        <div class="aurora"></div>
+        <div class="row">
+          <span class="glowdot">${avatar(p)}</span>
+          <div class="who">
+            <div class="name">${p.name}</div>
+            <div class="status">${p.status}</div>
+          </div>
+          <span class="when">${p.when}</span>
+        </div>
+        <div class="meter">
+          <div class="bar"><div class="fill" style="width:${Math.round(100 * (p.plus + p.minus) / maxPlus)}%"></div></div>
+          <div class="legend">
+            <span><b>${p.commits}</b> commits today</span>
+            <span><b>+${p.plus}</b> / <b>−${p.minus}</b> · ${p.repos.join(", ")}</span>
+          </div>
+        </div>
+      </div>`).join("")}
+
+      <div class="divider">Away</div>
+      <div class="off-grid">
+        ${offline.map(p => `
+        <div class="off-row">
+          ${avatar(p)}
+          <span class="name">${p.name}</span>
+          <span class="recent">${offSummary(p)}</span>
+          <span class="when" style="font-size:11px;color:#5b6070">${p.when}</span>
+        </div>`).join("")}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------------- Design C: Campfire ---------------- */
+function campfire() {
+  return `
+  <div class="mac-window d-campfire">
+    <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">Vibes</span></div>
+    <div class="body">
+      <div class="cluster">
+        ${online.map(p => `
+        <div class="bubble" style="${vars(p)}">
+          <div class="orb">
+            <span class="badge">${p.commits}</span>
+            ${avatar(p)}
+          </div>
+          <div class="name">${p.name}</div>
+          <div class="doing">${p.status}</div>
+        </div>`).join("")}
+      </div>
+
+      <div class="you-strip">
+        ${avatar(ME)} <span>you</span><span class="sep">·</span>
+        <span><b>${ME.commits}</b> commits</span><span class="sep">·</span>
+        <span><b>+${ME.plus}</b> / <b>−${ME.minus}</b></span>
+      </div>
+
+      <div class="ember-label">Away</div>
+      <div class="embers">
+        ${offline.map(p => `
+        <div class="ember">
+          ${avatar(p)}
+          <div class="name">${p.name}</div>
+          <div class="when">${p.when}</div>
+        </div>`).join("")}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------------- Design D: Ticker ---------------- */
+function ticker() {
+  const spark = (p, n = 7) => {
+    const seed = p.handle.length + p.commits;
+    const bars = Array.from({ length: n }, (_, i) => {
+      const h = p.commits === 0 ? 3 : 4 + ((seed * (i + 3)) % 11);
+      return `<i style="height:${h}px"></i>`;
+    });
+    return `<span class="spark">${bars.join("")}</span>`;
+  };
+  return `
+  <div class="mac-window d-ticker">
+    <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">Vibes</span></div>
+    <div class="body">
+      <div class="me-line">
+        ${avatar(ME)}
+        <span><b>you</b> · ${ME.status}</span>
+        <span style="margin-left:auto"><b>${ME.commits}</b> commits · +${ME.plus} / −${ME.minus}</span>
+      </div>
+
+      ${online.map(p => `
+      <div class="row online" style="${vars(p)}">
+        ${avatar(p)}
+        <div class="who">
+          <div class="name">${p.name}</div>
+          <div class="status">${p.status} · ${p.repos.join(", ")}</div>
+        </div>
+        ${spark(p)}
+        <span class="commits">${p.commits} · +${p.plus}/−${p.minus}</span>
+      </div>`).join("")}
+
+      <div class="gap-label">Away</div>
+      ${offline.map(p => `
+      <div class="row offline">
+        ${avatar(p)}
+        <div class="who">
+          <div class="name">${p.name}</div>
+          <div class="status">${offSummary(p)} · ${p.when}</div>
+        </div>
+        <span class="commits">${p.commits > 0 ? p.commits + " today" : "—"}</span>
+      </div>`).join("")}
+    </div>
+  </div>`;
+}
+
+/* ---------------- design registry + notes ---------------- */
+const DESIGNS = [
+  {
+    id: "hearth", label: "A · Hearth", render: hearth,
+    notes: `
+      <h2>Hearth — warm evolution of today's look</h2>
+      <p>Keeps the cream palette so it feels like the same app, but presence becomes the organizing idea.</p>
+      <ul>
+        <li><em>Online cards</em> get a barely-there flowing gradient wash tinted with the friend's avatar colors, plus a slow breathing ring on the avatar.</li>
+        <li><em>Offline friends</em> collapse into one-line rows with their last activity summary — still informative, visually quiet.</li>
+        <li>Your own card shrinks to a header strip; friends are the stars.</li>
+        <li>Lowest implementation risk in SwiftUI: it's mostly the existing layout re-weighted.</li>
+      </ul>`
+  },
+  {
+    id: "aurora", label: "B · Aurora", render: aurora,
+    notes: `
+      <h2>Aurora — dark, ambient, "lava lamp" presence</h2>
+      <p>Designed for sitting in a corner of a dark desktop all day. Presence reads as glow, not badges.</p>
+      <ul>
+        <li>Each online card has a slow drifting <em>aurora wash</em> in that friend's gradient colors, blurred and at low opacity.</li>
+        <li>A shimmer <em>activity meter</em> compares today's volume across friends without exact-number competitiveness up front.</li>
+        <li>Glowing presence dot pulses gently — readable from across the room.</li>
+        <li>Pairs naturally with a menu-bar/floating-panel mode.</li>
+      </ul>`
+  },
+  {
+    id: "campfire", label: "C · Campfire", render: campfire,
+    notes: `
+      <h2>Campfire — playful, people-first bubbles</h2>
+      <p>The most "fun" direction: online friends gather at the top like people around a fire; offline friends are dim embers below.</p>
+      <ul>
+        <li>Online avatars are large orbs with a soft rotating gradient halo and a gentle bob — alive but slow enough to ignore.</li>
+        <li>Commit-count badge is the only number on a bubble; status text carries the personality.</li>
+        <li>Your stats compress into a single pill so the screen is entirely about your friends.</li>
+        <li>Trade-off: less git-stat detail at a glance; could expand a bubble on hover/click.</li>
+      </ul>`
+  },
+  {
+    id: "ticker", label: "D · Ticker", render: ticker,
+    notes: `
+      <h2>Ticker — calm rows for an always-open panel</h2>
+      <p>The least decorative direction: optimized for a narrow window you keep open beside your editor all day.</p>
+      <ul>
+        <li>Online rows are full-size with a softly flowing gradient edge on the left — the only animation on screen.</li>
+        <li>A tiny commit sparkline gives a feel for the day's rhythm without big numbers shouting.</li>
+        <li>Offline rows shrink and desaturate but keep last-known activity and recency.</li>
+        <li>Highest information density, lowest distraction; least "wow" on first open.</li>
+      </ul>`
+  },
+];
+
+const tabsEl = document.getElementById("tabs");
+const panelsEl = document.getElementById("panels");
+DESIGNS.forEach((d, i) => {
+  const btn = document.createElement("button");
+  btn.textContent = d.label;
+  btn.onclick = () => select(d.id);
+  btn.dataset.id = d.id;
+  tabsEl.appendChild(btn);
+
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  panel.dataset.id = d.id;
+  panel.innerHTML = `${d.render()}<div class="notes">${d.notes}</div>`;
+  panelsEl.appendChild(panel);
+});
+function select(id) {
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.id === id));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.dataset.id === id));
+  history.replaceState(null, "", "#" + id);
+}
+const initial = location.hash.slice(1);
+select(DESIGNS.some(d => d.id === initial) ? initial : "hearth");
+</script>
+</body>
+</html>
