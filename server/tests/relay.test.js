@@ -50,7 +50,7 @@ function expectRelayError(fn, code, status) {
 }
 
 describe("migrations", () => {
-  it("creates the v1 tables", () => {
+  it("creates the core tables and timezone column", () => {
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
       .all()
@@ -58,6 +58,8 @@ describe("migrations", () => {
     for (const t of ["users", "auth_tokens", "friendships", "invites", "statuses"]) {
       expect(tables).toContain(t);
     }
+    const columns = db.prepare("PRAGMA table_info(users)").all().map((row) => row.name);
+    expect(columns).toContain("timezone");
   });
 
   it("is idempotent when run again", () => {
@@ -100,9 +102,11 @@ describe("users", () => {
     const { user, token } = registerUser(db, {
       displayName: "Dana Scully",
       deviceLabel: "Dana MacBook",
+      timezone: "America/Los_Angeles",
     });
 
     expect(user.handle).toBe("dana-scully");
+    expect(user.timezone).toBe("America/Los_Angeles");
     expect(token.token).toBeTruthy();
     expect(authenticateToken(db, token.token).user.id).toBe(user.id);
     expect(db.prepare("SELECT COUNT(*) AS n FROM users").get().n).toBe(1);
@@ -135,6 +139,15 @@ describe("users", () => {
     );
     expect(db.prepare("SELECT COUNT(*) AS n FROM users").get().n).toBe(0);
     expect(db.prepare("SELECT COUNT(*) AS n FROM auth_tokens").get().n).toBe(0);
+  });
+
+  it("registerUser rejects invalid timezone identifiers", () => {
+    expectRelayError(
+      () => registerUser(db, { displayName: "Dana", timezone: "California" }),
+      "invalid_timezone",
+      400,
+    );
+    expect(db.prepare("SELECT COUNT(*) AS n FROM users").get().n).toBe(0);
   });
 });
 
@@ -298,6 +311,33 @@ describe("statuses and feed", () => {
     expect(feed.you.manual_status).toBe("working on Vibes");
     expect(feed.you.cards.find((card) => card.type === "git_stats").data.commits).toBe(7);
     expect(feed.friends).toHaveLength(0);
+    const stored = JSON.parse(db.prepare("SELECT payload_json FROM statuses").get().payload_json);
+    expect(stored.day_timezone).toBe("America/Los_Angeles");
+    expect(stored.day_start_at).toBe("2026-06-06T07:00:00.000Z");
+    expect(stored.day_end_at).toBe("2026-06-07T07:00:00.000Z");
+  });
+
+  it("rejects invalid status day-boundary fields", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    expectRelayError(
+      () =>
+        upsertStatus(db, user, {
+          ...fixture("status-online"),
+          day_timezone: "Mars/Base",
+        }),
+      "invalid_timezone",
+      400,
+    );
+    expectRelayError(
+      () =>
+        upsertStatus(db, user, {
+          ...fixture("status-online"),
+          day_start_at: "2026-06-07T07:00:00.000Z",
+          day_end_at: "2026-06-06T07:00:00.000Z",
+        }),
+      "invalid_day_boundary",
+      400,
+    );
   });
 
   it("offline replaces share cards and surfaces no last-seen time", () => {
@@ -378,6 +418,81 @@ describe("statuses and feed", () => {
     expect(feed.you.cards.find((card) => card.type === "agent_mix")).toBeUndefined();
   });
 
+  it("chooses the account timezone's current Vibes day over a newer stale device day", () => {
+    const user = createUser(db, {
+      handle: "marcus",
+      displayName: "Marcus",
+      timezone: "America/Los_Angeles",
+    });
+    const payload = fixture("status-online");
+    upsertStatus(db, user, payload);
+    upsertStatus(db, user, {
+      ...payload,
+      device_id: "device-marcus-travel",
+      day: "2026-06-05",
+      day_timezone: "America/New_York",
+      updated_at: "2026-06-06T18:06:00.000Z",
+      manual_status: "stale laptop",
+      cards: [
+        {
+          type: "git_stats",
+          enabled: true,
+          summary: "9 repos touched - 20 commits - +900 / -100 LOC",
+          data: {
+            commits: 20,
+            files_changed: 30,
+            insertions: 900,
+            deletions: 100,
+            uncommitted_insertions: 0,
+            uncommitted_deletions: 0,
+            repos_touched: 9,
+          },
+        },
+        {
+          type: "repo_aliases",
+          enabled: true,
+          summary: "Travel",
+          data: { aliases: ["Travel"] },
+        },
+      ],
+    });
+
+    const feed = getFeed(db, user, FEED_NOW);
+    const stats = feed.you.cards.find((card) => card.type === "git_stats").data;
+    expect(feed.you.day).toBe("2026-06-06");
+    expect(feed.you.manual_status).toBe("working on Vibes");
+    expect(stats.commits).toBe(7);
+    expect(stats.insertions).toBe(1248);
+    expect(feed.you.cards.find((card) => card.type === "repo_aliases").data.aliases).toEqual([
+      "Vibes",
+      "Braid",
+    ]);
+    expect(feed.you.updated_at).toBe("2026-06-06T18:06:00.000Z");
+  });
+
+  it("persists the newest device timezone once when a legacy account has disagreeing devices", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const payload = fixture("status-online");
+    upsertStatus(db, user, {
+      ...payload,
+      device_id: "device-la",
+      day_timezone: "America/Los_Angeles",
+      updated_at: "2026-06-06T18:02:00.000Z",
+    });
+    expect(db.prepare("SELECT timezone FROM users WHERE id = ?").get(user.id).timezone).toBeNull();
+
+    upsertStatus(db, user, {
+      ...payload,
+      device_id: "device-ny",
+      day_timezone: "America/New_York",
+      updated_at: "2026-06-06T18:04:00.000Z",
+    });
+
+    expect(db.prepare("SELECT timezone FROM users WHERE id = ?").get(user.id).timezone).toBe(
+      "America/New_York",
+    );
+  });
+
   it("does not expose device identifiers or labels in merged feed output", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
     upsertStatus(db, user, fixture("status-online"));
@@ -386,6 +501,8 @@ describe("statuses and feed", () => {
     expect(json).not.toContain("device_id");
     expect(json).not.toContain("device-marcus-macbook");
     expect(json).not.toContain("MacBook");
+    expect(json).not.toContain("timezone");
+    expect(json).not.toContain("America/Los_Angeles");
   });
 
   it("uses the newest contributing online row for merged updated_at, ignoring offline rows", () => {

@@ -123,6 +123,7 @@
     <DefinitionList>
       <div class="row"><dt>Handle</dt><dd>{user.handle}</dd></div>
       <div class="row"><dt>Display name</dt><dd>{user.display_name}</dd></div>
+      <div class="row"><dt>Timezone</dt><dd class="mono">{user.timezone ?? "—"}</dd></div>
       <div class="row">
         <dt>User id</dt>
         <dd class="mono id-cell">
@@ -158,6 +159,7 @@
             <th>Device</th>
             <th>Mode</th>
             <th>Day</th>
+            <th>Timezone</th>
             <th>Updated</th>
             <th>Received</th>
           </tr>
@@ -171,6 +173,7 @@
               </td>
               <td><StateBadge state={device.mode} /></td>
               <td class="mono">{device.client_day}</td>
+              <td class="mono">{device.day_timezone ?? "—"}</td>
               <td><RelativeTime value={device.updated_at} /></td>
               <td><RelativeTime value={device.server_received_at} /></td>
             </tr>

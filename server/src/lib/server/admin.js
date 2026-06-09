@@ -115,7 +115,7 @@ export function listUsers(db, { search = "", sort = "handle" } = {}) {
 export function getUserDetail(db, userId) {
   const profile = db
     .prepare(
-      `SELECT id, handle, display_name, created_at, updated_at, disabled_at
+      `SELECT id, handle, display_name, timezone, created_at, updated_at, disabled_at
        FROM users WHERE id = ?`,
     )
     .get(userId);
@@ -123,20 +123,29 @@ export function getUserDetail(db, userId) {
 
   const devices = db
     .prepare(
-      `SELECT device_id, device_label, mode, client_day, updated_at, server_received_at
+      `SELECT device_id, device_label, mode, client_day, payload_json, updated_at, server_received_at
        FROM statuses
        WHERE user_id = ?
        ORDER BY updated_at DESC`,
     )
     .all(userId)
-    .map((row) => ({
-      device_id: row.device_id,
-      device_label: row.device_label,
-      mode: row.mode,
-      client_day: row.client_day,
-      updated_at: row.updated_at,
-      server_received_at: row.server_received_at,
-    }));
+    .map((row) => {
+      let dayTimezone = null;
+      try {
+        dayTimezone = JSON.parse(row.payload_json)?.day_timezone ?? null;
+      } catch {
+        dayTimezone = null;
+      }
+      return {
+        device_id: row.device_id,
+        device_label: row.device_label,
+        mode: row.mode,
+        client_day: row.client_day,
+        day_timezone: dayTimezone,
+        updated_at: row.updated_at,
+        server_received_at: row.server_received_at,
+      };
+    });
 
   const tokens = db
     .prepare(
@@ -199,6 +208,7 @@ export function getUserDetail(db, userId) {
       display_name: profile.display_name,
       created_at: profile.created_at,
       updated_at: profile.updated_at,
+      timezone: profile.timezone ?? null,
       disabled_at: profile.disabled_at,
       disabled: profile.disabled_at != null,
     },

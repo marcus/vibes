@@ -10,6 +10,7 @@ export async function POST(event) {
     const { user, token } = registerUser(getDb(), {
       displayName: body?.display_name ?? body?.displayName,
       deviceLabel: body?.device_label ?? body?.deviceLabel ?? "Mac",
+      timezone: body?.timezone,
     });
     return json({ user, token: token.token }, { status: 201 });
   } catch (err) {

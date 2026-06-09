@@ -9,6 +9,9 @@ const MODE_RANK = { offline: 0, online: 1 };
 // A friend reports `online` only if they are sharing and have published within
 // this window; older online rows fall back to a last-seen "online … ago".
 const ONLINE_WINDOW_MS = 10 * 60 * 1000;
+const UTC_TIMEZONE = "UTC";
+const TIMEZONE_RE = /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){1,3}$/;
+const RFC3339_INSTANT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
 
 /** Error with a stable code and HTTP status for the single error envelope. */
 export class RelayError extends Error {
@@ -34,6 +37,70 @@ const newSecret = (bytes) => randomBytes(bytes).toString("base64url");
 function publicUser(user) {
   if (!user) return null;
   return { handle: user.handle, display_name: user.display_name };
+}
+
+function feedUser(user) {
+  if (!user) return null;
+  return { id: user.id, handle: user.handle, display_name: user.display_name };
+}
+
+function registeredUser(user) {
+  return {
+    id: user.id,
+    handle: user.handle,
+    display_name: user.display_name,
+    timezone: user.timezone ?? null,
+  };
+}
+
+function isSupportedTimezone(value) {
+  if (value === UTC_TIMEZONE) return true;
+  try {
+    if (typeof Intl.supportedValuesOf === "function") {
+      return Intl.supportedValuesOf("timeZone").includes(value);
+    }
+  } catch {
+    // Fall through to the formatter check below.
+  }
+  if (!TIMEZONE_RE.test(value)) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeTimezone(input, { required = false } = {}) {
+  const value = String(input ?? "").trim();
+  if (!value) {
+    if (required) throw new RelayError("invalid_timezone", "Timezone is required.", 400);
+    return null;
+  }
+  if (!isSupportedTimezone(value)) {
+    throw new RelayError("invalid_timezone", "Timezone must be a valid IANA identifier.", 400);
+  }
+  return value;
+}
+
+function formatDayInTimezone(timestampMs, timezone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(timestampMs));
+  const get = (type) => parts.find((part) => part.type === type)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function normalizeOptionalInstant(value, key) {
+  if (value == null) return null;
+  const text = String(value).trim();
+  if (!RFC3339_INSTANT_RE.test(text) || Number.isNaN(Date.parse(text))) {
+    throw new RelayError("invalid_day_boundary", `${key} must be an ISO timestamp.`, 400);
+  }
+  return text;
 }
 
 function trimHandleToLength(handle, maxLength = MAX_HANDLE_LENGTH) {
@@ -65,9 +132,9 @@ function handleCandidate(base, attempt) {
 
 /**
  * @param {import('better-sqlite3').Database} db
- * @param {{ handle: string, displayName: string }} input
+ * @param {{ handle: string, displayName: string, timezone?: string | null }} input
  */
-export function createUser(db, { handle, displayName }) {
+export function createUser(db, { handle, displayName, timezone = null }) {
   // Handles are stored lowercased so uniqueness is case-insensitive.
   const cleanHandle = String(handle ?? "").trim().toLowerCase();
   const cleanName = String(displayName ?? "").trim();
@@ -82,32 +149,34 @@ export function createUser(db, { handle, displayName }) {
   if (cleanHandle.length > 32) throw new RelayError("invalid_handle", "Handle is too long.", 400);
   if (!cleanName) throw new RelayError("invalid_display_name", "Display name is required.", 400);
   if (cleanName.length > 64) throw new RelayError("invalid_display_name", "Display name is too long.", 400);
+  const cleanTimezone = normalizeTimezone(timezone);
 
   const id = randomUUID();
   try {
     // Single INSERT — autocommit is atomic. Callers needing multi-step
     // atomicity (e.g. acceptInvite) wrap this in writeTx.
     db.prepare(
-      `INSERT INTO users (id, handle, display_name, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(id, cleanHandle, cleanName, now(), now());
+      `INSERT INTO users (id, handle, display_name, timezone, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(id, cleanHandle, cleanName, cleanTimezone, now(), now());
   } catch (err) {
     if (String(err).includes("UNIQUE")) {
       throw new RelayError("handle_taken", "That handle is already taken.", 409);
     }
     throw err;
   }
-  return { id, handle: cleanHandle, display_name: cleanName };
+  return { id, handle: cleanHandle, display_name: cleanName, timezone: cleanTimezone };
 }
 
 /**
  * Self-register an app user and first device token in one write transaction.
  * @param {import('better-sqlite3').Database} db
- * @param {{ displayName: string, deviceLabel?: string | null, handle?: string | null }} input
+ * @param {{ displayName: string, deviceLabel?: string | null, handle?: string | null, timezone?: string | null }} input
  */
-export function registerUser(db, { displayName, deviceLabel = null, handle = null }) {
+export function registerUser(db, { displayName, deviceLabel = null, handle = null, timezone = null }) {
   const handleSource = String(handle ?? "").trim() || displayName;
   const base = deriveHandleBase(handleSource);
+  const cleanTimezone = normalizeTimezone(timezone);
 
   return writeTx(db, () => {
     for (let attempt = 1; attempt <= 1000; attempt += 1) {
@@ -115,9 +184,10 @@ export function registerUser(db, { displayName, deviceLabel = null, handle = nul
         const user = createUser(db, {
           handle: handleCandidate(base, attempt),
           displayName,
+          timezone: cleanTimezone,
         });
         const token = createToken(db, user.id, deviceLabel);
-        return { user, token };
+        return { user: registeredUser(user), token };
       } catch (err) {
         if (err instanceof RelayError && err.code === "handle_taken") continue;
         throw err;
@@ -160,7 +230,8 @@ export function authenticateToken(db, rawToken) {
          auth_tokens.user_id,
          auth_tokens.label,
          users.handle,
-         users.display_name
+         users.display_name,
+         users.timezone
        FROM auth_tokens
        JOIN users ON users.id = auth_tokens.user_id
        WHERE auth_tokens.token_hash = ?
@@ -177,6 +248,7 @@ export function authenticateToken(db, rawToken) {
       id: row.user_id,
       handle: row.handle,
       display_name: row.display_name,
+      timezone: row.timezone,
     },
   };
 }
@@ -349,6 +421,12 @@ function normalizeStatusPayload(authUser, input, receivedAt) {
   if (Number.isNaN(Date.parse(updatedAt))) {
     throw new RelayError("invalid_updated_at", "updated_at must be an ISO timestamp.", 400);
   }
+  const dayTimezone = normalizeTimezone(input?.day_timezone);
+  const dayStartAt = normalizeOptionalInstant(input?.day_start_at, "day_start_at");
+  const dayEndAt = normalizeOptionalInstant(input?.day_end_at, "day_end_at");
+  if (dayStartAt && dayEndAt && Date.parse(dayStartAt) >= Date.parse(dayEndAt)) {
+    throw new RelayError("invalid_day_boundary", "day_start_at must be before day_end_at.", 400);
+  }
 
   const cards = Array.isArray(input?.cards)
     ? input.cards.map(sanitizeCard).filter(Boolean).filter((card) => card.enabled)
@@ -367,11 +445,56 @@ function normalizeStatusPayload(authUser, input, receivedAt) {
     mode,
     manual_status: manualStatus,
     day: clientDay,
+    ...(dayTimezone ? { day_timezone: dayTimezone } : {}),
+    ...(dayStartAt ? { day_start_at: dayStartAt } : {}),
+    ...(dayEndAt ? { day_end_at: dayEndAt } : {}),
     updated_at: updatedAt,
     cards: sharedCards,
   };
   assertStatusPayloadSize(payload);
   return { payload, mode, clientDay, updatedAt };
+}
+
+function newestValidPayloadTimezone(rows) {
+  for (const row of rows) {
+    try {
+      const timezone = JSON.parse(row.payload_json)?.day_timezone;
+      if (timezone && isSupportedTimezone(timezone)) return timezone;
+    } catch {
+      // Ignore malformed historical payloads.
+    }
+  }
+  return null;
+}
+
+function maybePersistMissingTimezone(db, userId) {
+  const user = db.prepare("SELECT timezone FROM users WHERE id = ?").get(userId);
+  if (!user || user.timezone) return;
+  const rows = db
+    .prepare(
+      `SELECT payload_json, updated_at
+       FROM statuses
+       WHERE user_id = ?
+       ORDER BY updated_at DESC`,
+    )
+    .all(userId);
+  const timezones = new Set();
+  for (const row of rows) {
+    try {
+      const timezone = JSON.parse(row.payload_json)?.day_timezone;
+      if (timezone && isSupportedTimezone(timezone)) timezones.add(timezone);
+    } catch {
+      // Ignore malformed historical payloads.
+    }
+  }
+  if (timezones.size < 2) return;
+  const chosen = newestValidPayloadTimezone(rows);
+  if (!chosen) return;
+  db.prepare("UPDATE users SET timezone = ?, updated_at = ? WHERE id = ? AND timezone IS NULL").run(
+    chosen,
+    now(),
+    userId,
+  );
 }
 
 /**
@@ -388,30 +511,33 @@ export function upsertStatus(db, user, input) {
   const deviceLabel = String(input?.device_label ?? "").trim().slice(0, 64) || null;
   const { payload, mode, clientDay, updatedAt } = normalizeStatusPayload(user, input, receivedAt);
 
-  db.prepare(
-    `INSERT INTO statuses (
-       user_id, device_id, device_label, mode, client_day, payload_json,
-       schema_version, updated_at, server_received_at
-     )
-     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-     ON CONFLICT(user_id, device_id) DO UPDATE SET
-       device_label = excluded.device_label,
-       mode = excluded.mode,
-       client_day = excluded.client_day,
-       payload_json = excluded.payload_json,
-       schema_version = excluded.schema_version,
-       updated_at = excluded.updated_at,
-       server_received_at = excluded.server_received_at`,
-  ).run(
-    user.id,
-    deviceId,
-    deviceLabel,
-    mode,
-    clientDay,
-    JSON.stringify(payload),
-    updatedAt,
-    receivedAt,
-  );
+  writeTx(db, () => {
+    db.prepare(
+      `INSERT INTO statuses (
+         user_id, device_id, device_label, mode, client_day, payload_json,
+         schema_version, updated_at, server_received_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+       ON CONFLICT(user_id, device_id) DO UPDATE SET
+         device_label = excluded.device_label,
+         mode = excluded.mode,
+         client_day = excluded.client_day,
+         payload_json = excluded.payload_json,
+         schema_version = excluded.schema_version,
+         updated_at = excluded.updated_at,
+         server_received_at = excluded.server_received_at`,
+    ).run(
+      user.id,
+      deviceId,
+      deviceLabel,
+      mode,
+      clientDay,
+      JSON.stringify(payload),
+      updatedAt,
+      receivedAt,
+    );
+    maybePersistMissingTimezone(db, user.id);
+  });
 
   return { ok: true, server_received_at: receivedAt };
 }
@@ -424,7 +550,7 @@ function sumNumber(total, value) {
   return total + (Number.isFinite(Number(value)) ? Number(value) : 0);
 }
 
-function mergeGitStats(rows, latestDay) {
+function mergeGitStats(rows, chosenDay, chosenTimezone) {
   const stats = {
     commits: 0,
     files_changed: 0,
@@ -436,7 +562,10 @@ function mergeGitStats(rows, latestDay) {
   };
   let found = false;
   for (const row of rows) {
-    if (row.mode !== "online" || row.client_day !== latestDay) continue;
+    if (row.mode !== "online" || row.client_day !== chosenDay) continue;
+    if (chosenTimezone && row.payload.day_timezone && row.payload.day_timezone !== chosenTimezone) {
+      continue;
+    }
     const card = getCard(row.payload, "git_stats");
     if (!card) continue;
     found = true;
@@ -453,10 +582,33 @@ function mergeGitStats(rows, latestDay) {
   };
 }
 
+function chooseVibesDay(user, onlineRows, source, nowMs) {
+  const timezone = user.timezone && isSupportedTimezone(user.timezone) ? user.timezone : null;
+  const currentDay = timezone ? formatDayInTimezone(nowMs, timezone) : null;
+  if (currentDay && onlineRows.some((row) => row.client_day === currentDay)) {
+    return { day: currentDay, timezone };
+  }
+  return {
+    day: onlineRows[0]?.client_day ?? source.client_day,
+    timezone: currentDay ? timezone : null,
+  };
+}
+
+function newestOnlineRowForDay(onlineRows, day, timezone) {
+  return (
+    onlineRows.find((row) => {
+      if (row.client_day !== day) return false;
+      return !timezone || !row.payload.day_timezone || row.payload.day_timezone === timezone;
+    }) ??
+    onlineRows.find((row) => row.client_day === day) ??
+    onlineRows[0]
+  );
+}
+
 function mergeUserStatuses(user, statusRows, nowMs) {
   if (!statusRows.length) {
     return {
-      user,
+      user: feedUser(user),
       mode: "offline",
       manual_status: null,
       day: null,
@@ -473,17 +625,14 @@ function mergeUserStatuses(user, statusRows, nowMs) {
     .filter((row) => row.mode === "online")
     .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
   const source = online[0] ?? rows.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0];
-  const latestDay = online[0]?.client_day ?? source.client_day;
-  const contributingRows =
-    strongest.mode === "online"
-      ? online.filter((row) => row.client_day === latestDay)
-      : rows.filter((row) => row.mode === strongest.mode);
+  const { day: latestDay, timezone: chosenTimezone } = chooseVibesDay(user, online, source, nowMs);
+  const cardSource = newestOnlineRowForDay(online, latestDay, chosenTimezone) ?? source;
 
   // Effective presence: the user is sharing (`online`) only counts as live if
   // they have published within the recency window. Otherwise they read as
   // offline, but we still surface the last timestamp so the client can render
   // "online … ago". A user who toggled themselves offline surfaces no timestamp.
-  const lastSharedAt = contributingRows
+  const lastSharedAt = online
     .map((row) => row.updated_at)
     .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
   const isFresh =
@@ -491,7 +640,7 @@ function mergeUserStatuses(user, statusRows, nowMs) {
 
   if (!isFresh) {
     return {
-      user,
+      user: feedUser(user),
       mode: "offline",
       manual_status: null,
       day: strongest.mode === "online" ? latestDay : null,
@@ -502,17 +651,17 @@ function mergeUserStatuses(user, statusRows, nowMs) {
   }
 
   const cards = [];
-  const gitStats = mergeGitStats(rows, latestDay);
+  const gitStats = mergeGitStats(rows, latestDay, chosenTimezone);
   if (gitStats) cards.push(gitStats);
   for (const type of ["repo_aliases", "spotify", "weather"]) {
-    const card = getCard(source.payload, type);
+    const card = getCard(cardSource.payload, type);
     if (card) cards.push(card);
   }
 
   return {
-    user,
+    user: feedUser(user),
     mode: "online",
-    manual_status: source.payload.manual_status ?? null,
+    manual_status: cardSource.payload.manual_status ?? null,
     day: latestDay,
     updated_at: lastSharedAt,
     cards,
@@ -529,7 +678,7 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
     viewer,
     ...db
       .prepare(
-        `SELECT users.id, users.handle, users.display_name
+        `SELECT users.id, users.handle, users.display_name, users.timezone
          FROM friendships
          JOIN users ON users.id = friendships.friend_user_id
          WHERE friendships.user_id = ? AND friendships.state = 'accepted'
@@ -544,7 +693,15 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
      WHERE user_id = ?
      ORDER BY updated_at DESC`,
   );
-  const merged = users.map((user) => mergeUserStatuses(user, statusQuery.all(user.id), nowMs));
+  const viewerWithTimezone =
+    viewer.timezone == null
+      ? db
+          .prepare("SELECT id, handle, display_name, timezone FROM users WHERE id = ?")
+          .get(viewer.id) ?? viewer
+      : viewer;
+  const merged = [viewerWithTimezone, ...users.slice(1)].map((user) =>
+    mergeUserStatuses(user, statusQuery.all(user.id), nowMs),
+  );
   return { you: merged[0], friends: merged.slice(1) };
 }
 

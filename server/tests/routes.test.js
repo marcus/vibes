@@ -9,6 +9,7 @@ process.env.VIBES_DB_PATH = join(dir, "routes.sqlite");
 const [
   { getDb },
   registerRoute,
+  meRoute,
   invitesRoute,
   inviteAcceptRoute,
   shortInviteRoute,
@@ -17,6 +18,7 @@ const [
 ] = await Promise.all([
   import("../src/lib/server/db.js"),
   import("../src/routes/api/register/+server.js"),
+  import("../src/routes/api/me/+server.js"),
   import("../src/routes/api/invites/+server.js"),
   import("../src/routes/api/invites/[code]/accept/+server.js"),
   import("../src/routes/i/[code]/+server.js"),
@@ -30,6 +32,7 @@ const {
   createInvite,
   createToken,
   createUser,
+  registerUser,
   revokeInvite,
 } = relay;
 
@@ -90,12 +93,32 @@ describe("POST /api/register", () => {
     expect(body.user).toMatchObject({
       handle: "dana-scully",
       display_name: "Dana Scully",
+      timezone: null,
     });
     expect(body.token).toBeTruthy();
     expect(authenticateToken(db, body.token).user.id).toBe(body.user.id);
     expect(
       db.prepare("SELECT label FROM auth_tokens WHERE user_id = ?").get(body.user.id).label,
     ).toBe("Dana MacBook");
+  });
+
+  it("stores a registration timezone from the client", async () => {
+    const response = await registerRoute.POST(
+      routeEvent("/api/register", {
+        body: {
+          display_name: "Dana Scully",
+          device_label: "Dana MacBook",
+          timezone: "America/Los_Angeles",
+        },
+      }),
+    );
+    const { status, body } = await responseJson(response);
+
+    expect(status).toBe(201);
+    expect(body.user.timezone).toBe("America/Los_Angeles");
+    expect(db.prepare("SELECT timezone FROM users WHERE id = ?").get(body.user.id).timezone).toBe(
+      "America/Los_Angeles",
+    );
   });
 
   it("accepts camelCase aliases and defaults the device label to Mac", async () => {
@@ -121,6 +144,38 @@ describe("POST /api/register", () => {
     expect(await responseJson(response)).toMatchObject({
       status: 400,
       body: { error: { code: "invalid_display_name" } },
+    });
+  });
+});
+
+describe("GET /api/me", () => {
+  it("returns the authenticated account timezone without using the feed", async () => {
+    const { user, token } = registerUser(db, {
+      displayName: "Dana Scully",
+      deviceLabel: "Dana MacBook",
+      timezone: "America/Los_Angeles",
+    });
+    const request = new Request("https://vibes.test/api/me", {
+      method: "GET",
+      headers: { authorization: `Bearer ${token.token}` },
+    });
+
+    const response = await meRoute.GET({
+      request,
+      url: new URL(request.url),
+      getClientAddress: () => "203.0.113.20",
+    });
+
+    expect(await responseJson(response)).toMatchObject({
+      status: 200,
+      body: {
+        user: {
+          id: user.id,
+          handle: "dana-scully",
+          display_name: "Dana Scully",
+          timezone: "America/Los_Angeles",
+        },
+      },
     });
   });
 });

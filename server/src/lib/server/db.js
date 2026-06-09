@@ -92,6 +92,13 @@ const MIGRATIONS = [
       CREATE INDEX idx_admin_audit_created_at ON admin_audit(created_at);
     `,
   },
+  {
+    version: 3,
+    name: "user_timezone",
+    sql: `
+      ALTER TABLE users ADD COLUMN timezone TEXT;
+    `,
+  },
 ];
 
 /**

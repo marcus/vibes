@@ -1,11 +1,11 @@
 import Foundation
 
 struct GitScanner {
-  func scan(repos: [RepoConfig], now: Date = Date()) async -> DailyGitStats {
+  func scan(repos: [RepoConfig], dayWindow: VibesDayWindow, now: Date = Date()) async -> DailyGitStats {
     var total = DailyGitStats()
     for repo in repos {
       guard FileManager.default.fileExists(atPath: repo.path) else { continue }
-      let stats = scanRepo(repo: repo, now: now)
+      let stats = scanRepo(repo: repo, dayWindow: dayWindow, now: now)
       if stats.hasActivity {
         total.reposTouched += 1
         if repo.shareAlias {
@@ -27,7 +27,7 @@ struct GitScanner {
     return total
   }
 
-  private func scanRepo(repo: RepoConfig, now: Date) -> DailyGitStats {
+  private func scanRepo(repo: RepoConfig, dayWindow: VibesDayWindow, now: Date) -> DailyGitStats {
     var stats = DailyGitStats()
     guard let authorEmail = configuredUserEmail(repo.path) else {
       scanWorkingTree(repo: repo, into: &stats)
@@ -40,7 +40,8 @@ struct GitScanner {
     let log = runGit([
       "-C", repo.path,
       "log",
-      "--since=midnight",
+      "--since=\(DateFormatters.isoWithFractional.string(from: dayWindow.startAt))",
+      "--until=\(DateFormatters.isoWithFractional.string(from: min(now, dayWindow.endAt)))",
       "--numstat",
       "--pretty=format:__VIBES_COMMIT__%ae"
     ])
@@ -115,12 +116,43 @@ struct GitScanner {
   }
 }
 
+struct VibesDayWindow: Equatable {
+  var day: String
+  var timezone: String
+  var startAt: Date
+  var endAt: Date
+
+  static func current(now: Date = Date(), timezone identifier: String) -> VibesDayWindow {
+    let timezone = TimeZone(identifier: identifier) ?? .current
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = timezone
+    let start = calendar.startOfDay(for: now)
+    let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(24 * 60 * 60)
+
+    let formatter = DateFormatter()
+    formatter.calendar = calendar
+    formatter.timeZone = timezone
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+
+    return VibesDayWindow(
+      day: formatter.string(from: now),
+      timezone: timezone.identifier,
+      startAt: start,
+      endAt: end
+    )
+  }
+}
+
 struct StatusPayload: Codable {
   var deviceID: String
   var deviceLabel: String
   var mode: PresenceMode
   var manualStatus: String?
   var day: String
+  var dayTimezone: String
+  var dayStartAt: Date
+  var dayEndAt: Date
   var updatedAt: Date
   var cards: [StatusCard]
 
@@ -130,6 +162,9 @@ struct StatusPayload: Codable {
     case mode
     case manualStatus = "manual_status"
     case day
+    case dayTimezone = "day_timezone"
+    case dayStartAt = "day_start_at"
+    case dayEndAt = "day_end_at"
     case updatedAt = "updated_at"
     case cards
   }
@@ -143,7 +178,11 @@ struct RelayClient {
     try await send(
       path: "/api/register",
       method: "POST",
-      body: RegisterRequest(displayName: displayName, deviceLabel: deviceLabel),
+      body: RegisterRequest(
+        displayName: displayName,
+        deviceLabel: deviceLabel,
+        timezone: TimeZone.current.identifier
+      ),
       requiresAuth: false
     )
   }
@@ -158,6 +197,10 @@ struct RelayClient {
 
   func feed() async throws -> FeedResponse {
     try await send(path: "/api/feed", method: "GET", body: Optional<String>.none)
+  }
+
+  func me() async throws -> AccountResponse {
+    try await send(path: "/api/me", method: "GET", body: Optional<String>.none)
   }
 
   func createInvite() async throws -> CreatedInvite {
@@ -210,9 +253,17 @@ struct RelayClient {
     }
     guard (200..<300).contains(http.statusCode) else {
       if let error = try? JSONCoding.decoder.decode(ErrorEnvelope.self, from: data) {
-        throw RelayClientError.server(error.error.message)
+        throw RelayClientError.serverResponse(
+          message: error.error.message,
+          status: http.statusCode,
+          code: error.error.code
+        )
       }
-      throw RelayClientError.server("Relay returned HTTP \(http.statusCode).")
+      throw RelayClientError.serverResponse(
+        message: "Relay returned HTTP \(http.statusCode).",
+        status: http.statusCode,
+        code: nil
+      )
     }
     return try JSONCoding.decoder.decode(Response.self, from: data)
   }
@@ -221,6 +272,10 @@ struct RelayClient {
 struct EmptyBody: Codable {}
 struct PublishResponse: Codable { var ok: Bool }
 struct OKResponse: Codable { var ok: Bool }
+
+struct AccountResponse: Codable {
+  var user: UserSummary
+}
 
 struct CreatedInvite: Codable {
   var id: String
@@ -249,13 +304,20 @@ struct ErrorEnvelope: Codable {
 enum RelayClientError: LocalizedError {
   case invalidResponse
   case insecureRelayURL
-  case server(String)
+  case serverResponse(message: String, status: Int, code: String?)
 
   var errorDescription: String? {
     switch self {
     case .invalidResponse: "Relay returned an invalid response."
     case .insecureRelayURL: "Relay URL must use HTTPS unless it is localhost."
-    case .server(let message): message
+    case .serverResponse(let message, _, _): message
+    }
+  }
+
+  var statusCode: Int? {
+    switch self {
+    case .serverResponse(_, let status, _): status
+    default: nil
     }
   }
 }
@@ -274,15 +336,23 @@ enum StatusBuilder {
     mode: PresenceMode,
     manualStatus: String,
     stats: DailyGitStats,
-    now: Date = Date()
+    now: Date = Date(),
+    dayWindow: VibesDayWindow? = nil
   ) -> StatusPayload {
+    let window = dayWindow ?? VibesDayWindow.current(
+      now: now,
+      timezone: config.identity.timezone ?? TimeZone.current.identifier
+    )
     let cards = mode == .online ? buildCards(config: config, stats: stats) : []
     return StatusPayload(
       deviceID: config.device.id,
       deviceLabel: config.device.label,
       mode: mode,
       manualStatus: mode == .online ? manualStatus.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty : nil,
-      day: localDay(now),
+      day: window.day,
+      dayTimezone: window.timezone,
+      dayStartAt: window.startAt,
+      dayEndAt: window.endAt,
       updatedAt: now,
       cards: cards
     )
@@ -322,12 +392,8 @@ enum StatusBuilder {
     return cards
   }
 
-  static func localDay(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.calendar = .current
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.dateFormat = "yyyy-MM-dd"
-    return formatter.string(from: date)
+  static func vibesDay(_ date: Date, timezone: String) -> String {
+    VibesDayWindow.current(now: date, timezone: timezone).day
   }
 }
 

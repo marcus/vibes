@@ -27,7 +27,7 @@ xcodebuild -project client/Vibes.xcodeproj -scheme Vibes -configuration Debug -d
 1. **First-Launch Setup Panel**: Connection screen allows importing a JSON configuration file or inputting settings manually (relay URL, token, handle, display name, and device label).
 2. **Settings/Config Store**: Configuration is persisted locally at `~/Library/Application Support/Vibes/config.json`. Repository aliases, sharing preferences, and display details are stored here.
 3. **Secure Auth Storage**: Authentication tokens are stored securely in the macOS Keychain (`Vibes Relay` service) rather than in the configuration file.
-4. **Git Scanner Service**: Scans uncommitted and committed changes since midnight for all tracked repositories, aggregating commits, files changed, insertions, and deletions without publishing repo paths or code-origin attribution.
+4. **Git Scanner Service**: Scans uncommitted and committed changes for the account-level Vibes day across all tracked repositories, aggregating commits, files changed, insertions, and deletions without publishing repo paths or code-origin attribution.
 5. **Feed & Status Update**: Centralized state manager publishes local status updates and retrieves the merged feed (the user's status and friends' statuses) periodically.
 6. **Presence**: Two states — online and offline — derived from recent activity. You are online when you have published within the recency window and have not hidden yourself; a one-tap Offline toggle hides you immediately. Stale online presence reads as "online … ago" from the last update.
 7. **Invite Link Management**: Users can generate new single-use invite URLs, copy them to the clipboard, list pending invites, and revoke open invites directly from the app interface.
@@ -37,7 +37,7 @@ xcodebuild -project client/Vibes.xcodeproj -scheme Vibes -configuration Debug -d
 
 - [AppModel.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/AppModel.swift): Central `@MainActor` class managing app state, background loops, settings mutations, and Keychain interactions.
 - [ConfigStore.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/ConfigStore.swift): Manages saving/loading configuration JSON profiles.
-- [GitScanner.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/GitScanner.swift): Executes shell commands to scan repository changes since midnight.
+- [GitScanner.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/GitScanner.swift): Executes shell commands to scan repository changes inside the account Vibes day window.
 - [ContentView.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/ContentView.swift): Holds the primary user interface screens (`SetupPanel`, `MainPanel` with Feed, Repos, and Invites tabs).
 - [Models.swift](file:///Users/marcusvorwaller/code/vibes/client/Vibes/Models.swift): Holds model types corresponding to the API contract.
 
@@ -50,6 +50,8 @@ Start with a local JSON config file under Application Support:
 ```
 
 Keep repo aliases opt-in. Do not publish raw repo paths, branch names, commit messages, or filenames by default. Store raw relay tokens in Keychain, not in config.
+
+`identity.timezone` stores the account Vibes day timezone. Registration sends `TimeZone.current.identifier`; imported or manually-entered tokens are hydrated from authenticated `/api/me` when the relay has an account timezone. If a config has no timezone and the relay cannot provide one yet, publishing falls back locally to the Mac timezone without changing the server account timezone.
 
 ## Xcode Project Notes
 

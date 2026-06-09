@@ -117,14 +117,14 @@ Track per day:
 - latest activity timestamp
 - optional repo aliases
 
-Use the user's local calendar day for "today" rather than a rolling 24-hour window. When the local day rolls over, the client rescans and republishes so the feed resets to the new day's stats; until it republishes, the previous `client_day` blob stays visible and the feed treats it as belonging to that earlier day. The scanner should not count untracked files in v1; use committed changes, working tree diff, and staged diff only.
+Use the user's account-level Vibes day timezone for "today" rather than a rolling 24-hour window or each Mac's local midnight. The timezone is set during registration/import from the Mac timezone when possible and is stable across that user's devices. When the account Vibes day rolls over, each client rescans and republishes so the feed resets to the new day's stats; until it republishes, the previous `client_day` blob stays visible and the feed treats it as stale. The scanner should not count untracked files in v1; use committed changes, working tree diff, and staged diff only.
 
 Use local Git CLI commands rather than GitHub APIs.
 
 Useful commands:
 
 ```bash
-git log --since=midnight --numstat --pretty=format:
+git log --since=<account-day-start-iso> --numstat --pretty=format:
 git diff --numstat
 git diff --cached --numstat
 ```
@@ -225,10 +225,13 @@ Each install generates a stable `device_id` (a local UUID) on first launch and s
 The feed merges a user's device rows into one presence view per user on read. Merge rules:
 
 - Presence mode is the strongest mode across the user's devices, using the order online > offline (`MODE_RANK = {offline: 0, online: 1}`). A user is Offline only when every device is Offline or absent.
-- Manual status and singleton cards (`spotify`, `weather`, `repo_aliases`) come from the online device with the most recent `updated_at`.
-- `git_stats` is summed across online devices that share the most recent `client_day`. Devices reporting an older `client_day` are ignored so a stale laptop does not inflate today's totals.
-- `updated_at` for the merged view is the newest contributing device's `updated_at`.
-- Recency gates the reported state: an `online` row whose newest contributing `updated_at` is within 10 minutes reports `online`. If that timestamp is stale the merged view reports `offline` but preserves the merged `updated_at` as the last-seen time so the client can render "online … ago". A genuinely-offline (toggled) user reports `offline` with `updated_at: null`.
+- The relay prefers the current Vibes day computed from the user's account timezone. If no online row exists for that day, it falls back to the latest online row's `client_day`.
+- Manual status and singleton cards (`spotify`, `weather`, `repo_aliases`) come from the newest online source device for the chosen Vibes day. Repo aliases are not cross-device merged in v1.
+- `git_stats` is summed across online devices whose `client_day` matches the chosen Vibes day. Devices reporting an older `client_day` are ignored so a stale laptop does not inflate today's totals.
+- `updated_at` for the merged view is the newest online device's `updated_at` across devices, so last-seen remains accurate even when a stale row does not contribute stats.
+- Recency gates the reported state: an `online` row whose newest online `updated_at` is within 10 minutes reports `online`. If that timestamp is stale the merged view reports `offline` but preserves the merged `updated_at` as the last-seen time so the client can render "online … ago". A genuinely-offline (toggled) user reports `offline` with `updated_at: null`.
+- Feed responses do not expose account or device timezones. Admin detail may show them for debugging.
+- `GET /api/me` returns the authenticated user's own account identity and timezone so the client can hydrate imported/manual-token setup without putting timezone in the feed.
 
 Revoking a device's token stops that device from publishing. Its last status row remains until overwritten or until the row is removed by admin action.
 
@@ -321,6 +324,8 @@ CREATE TABLE statuses (
   PRIMARY KEY (user_id, device_id)
 );
 
+ALTER TABLE users ADD COLUMN timezone TEXT;
+
 CREATE TABLE schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL
@@ -331,7 +336,8 @@ Notes:
 
 - `statuses` is one row per `(user_id, device_id)`. `POST /api/status` upserts on that key. See Multi-Device for how the feed merges a user's devices.
 - `updated_at` comes from the client payload; `server_received_at` is when the relay accepted it.
-- `client_day` allows local-day stats without making the relay understand user time zones.
+- `users.timezone` stores the account-level IANA timezone used for the Vibes day. `client_day` remains the merge key, and upgraded clients also publish `day_timezone`, `day_start_at`, and `day_end_at` inside `payload_json` for validation and debugging.
+- If a legacy account has no timezone and upgraded device statuses disagree, the relay persists the newest valid device timezone once. Otherwise it leaves the account timezone unchanged.
 - `payload_json` stores the publishable status blob, not raw scanner output.
 - `friendships` stores reciprocal rows for v1. Feed queries stay simple and direct. Unfriending deletes both rows.
 - `expires_at` on invites is allowed because invite lifetime is different from status lifetime.
@@ -795,7 +801,7 @@ An ADR is an Architecture Decision Record: a short document that records one imp
 - local repo config
 - local Git stats scan
 - manual status
-- Broadcasting / Quiet / Offline mode
+- Online / Offline mode
 - relay publish
 - friend feed
 - at least basic invite/friend setup

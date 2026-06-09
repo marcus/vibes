@@ -83,7 +83,8 @@ final class AppModel: ObservableObject {
         relayURL: relayURL,
         handle: identity.user.handle,
         displayName: identity.user.displayName,
-        deviceLabel: label
+        deviceLabel: label,
+        timezone: identity.user.timezone ?? TimeZone.current.identifier
       )
       await install(config: next, token: identity.token)
     } catch {
@@ -95,7 +96,12 @@ final class AppModel: ObservableObject {
   func completeManualSetup(relayURLText: String, token: String, handle: String, displayName: String, deviceLabel: String) async {
     let cleanToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
     if let imported = config, !cleanToken.isEmpty {
-      await install(config: imported, token: cleanToken)
+      do {
+        let hydrated = try await accountHydratedConfig(imported, token: cleanToken)
+        await install(config: hydrated, token: cleanToken)
+      } catch {
+        lastError = error.localizedDescription
+      }
       return
     }
 
@@ -110,9 +116,15 @@ final class AppModel: ObservableObject {
       relayURL: relayURL,
       handle: handle.trimmingCharacters(in: .whitespacesAndNewlines),
       displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
-      deviceLabel: label
+      deviceLabel: label,
+      timezone: TimeZone.current.identifier
     )
-    await install(config: next, token: token)
+    do {
+      let hydrated = try await accountHydratedConfig(next, token: token)
+      await install(config: hydrated, token: token)
+    } catch {
+      lastError = error.localizedDescription
+    }
   }
 
   func importConfigFile() async {
@@ -129,10 +141,13 @@ final class AppModel: ObservableObject {
         return
       }
       if let importedToken = imported.token, !importedToken.isEmpty {
-        await install(config: imported.config, token: importedToken)
+        let hydrated = try await accountHydratedConfig(imported.config, token: importedToken)
+        await install(config: hydrated, token: importedToken)
       } else {
-        config = imported.config
-        try configStore.save(imported.config)
+        var next = imported.config
+        applyLocalTimezoneFallback(to: &next)
+        config = next
+        try configStore.save(next)
         lastError = "Config imported. Paste the one-time token to finish setup."
       }
     } catch {
@@ -223,14 +238,21 @@ final class AppModel: ObservableObject {
     guard let config, isConfigured else { return }
     isBusy = true
     lastError = nil
-    let nextStats = await scanner.scan(repos: config.repos)
+    let now = Date()
+    let dayWindow = VibesDayWindow.current(
+      now: now,
+      timezone: config.identity.timezone ?? TimeZone.current.identifier
+    )
+    let nextStats = await scanner.scan(repos: config.repos, dayWindow: dayWindow, now: now)
     stats = nextStats
     do {
       let payload = StatusBuilder.payload(
         config: config,
         mode: mode,
         manualStatus: manualStatus,
-        stats: nextStats
+        stats: nextStats,
+        now: now,
+        dayWindow: dayWindow
       )
       try await client(for: config).publish(payload)
       feed = try await client(for: config).feed()
@@ -349,7 +371,8 @@ final class AppModel: ObservableObject {
         config: config,
         mode: .offline,
         manualStatus: "",
-        stats: DailyGitStats()
+        stats: DailyGitStats(),
+        now: Date()
       )
       try await client(for: config).publish(payload)
     } catch {
@@ -369,6 +392,31 @@ final class AppModel: ObservableObject {
 
   private func client(for config: VibesConfig) -> RelayClient {
     RelayClient(baseURL: config.server.relayURL, token: token)
+  }
+
+  private func accountHydratedConfig(_ config: VibesConfig, token rawToken: String) async throws -> VibesConfig {
+    var next = config
+    applyLocalTimezoneFallback(to: &next)
+    do {
+      let account = try await RelayClient(baseURL: config.server.relayURL, token: rawToken).me()
+      next.identity.handle = account.user.handle
+      next.identity.displayName = account.user.displayName
+      if let timezone = account.user.timezone {
+        next.identity.timezone = timezone
+      }
+    } catch {
+      if (error as? RelayClientError)?.statusCode == 404 {
+        return next
+      }
+      throw error
+    }
+    return next
+  }
+
+  private func applyLocalTimezoneFallback(to config: inout VibesConfig) {
+    if config.identity.timezone == nil {
+      config.identity.timezone = TimeZone.current.identifier
+    }
   }
 
   private func mutateConfig(_ mutate: (inout VibesConfig) -> Void) {

@@ -17,10 +17,25 @@ enum PresenceMode: String, Codable, CaseIterable, Identifiable {
 struct IdentityConfig: Codable, Equatable {
   var handle: String
   var displayName: String
+  var timezone: String?
+
+  init(handle: String, displayName: String, timezone: String? = nil) {
+    self.handle = handle
+    self.displayName = displayName
+    self.timezone = timezone
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    handle = try container.decode(String.self, forKey: .handle)
+    displayName = try container.decode(String.self, forKey: .displayName)
+    timezone = try container.decodeIfPresent(String.self, forKey: .timezone)
+  }
 
   enum CodingKeys: String, CodingKey {
     case handle
     case displayName = "display_name"
+    case timezone
   }
 }
 
@@ -136,9 +151,15 @@ struct VibesConfig: Codable, Equatable {
   var sharing: SharingConfig
   var presence: PresenceConfig
 
-  static func firstLaunch(relayURL: URL, handle: String, displayName: String, deviceLabel: String) -> VibesConfig {
+  static func firstLaunch(
+    relayURL: URL,
+    handle: String,
+    displayName: String,
+    deviceLabel: String,
+    timezone: String = TimeZone.current.identifier
+  ) -> VibesConfig {
     VibesConfig(
-      identity: IdentityConfig(handle: handle, displayName: displayName),
+      identity: IdentityConfig(handle: handle, displayName: displayName, timezone: timezone),
       device: DeviceConfig(id: UUID().uuidString.lowercased(), label: deviceLabel),
       server: ServerConfig(relayURL: relayURL),
       repos: [],
@@ -234,21 +255,25 @@ struct UserSummary: Codable, Equatable, Identifiable {
   var id: String?
   var handle: String
   var displayName: String
+  var timezone: String?
 
   enum CodingKeys: String, CodingKey {
     case id
     case handle
     case displayName = "display_name"
+    case timezone
   }
 }
 
 struct RegisterRequest: Codable, Equatable {
   var displayName: String
   var deviceLabel: String
+  var timezone: String
 
   enum CodingKeys: String, CodingKey {
     case displayName = "display_name"
     case deviceLabel = "device_label"
+    case timezone
   }
 }
 

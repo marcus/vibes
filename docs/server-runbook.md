@@ -19,6 +19,12 @@ Common values:
 ## Local Relay
 
 The relay is a SvelteKit app (adapter-node) backed by SQLite via better-sqlite3.
+Users have an optional account-level IANA timezone. New clients send the Mac
+timezone at registration; existing accounts can remain `NULL` until import,
+profile hydration, or the relay resolves a multi-device disagreement from
+upgraded status rows. Feed responses intentionally do not expose timezones;
+`GET /api/me` returns the authenticated user's own timezone for setup/config
+hydration.
 
 Development, with hot reload:
 

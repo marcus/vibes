@@ -1,6 +1,6 @@
 # Vibes: Multi-Device Aggregation & Timezones
 
-Status: planning. Build after the current payload/privacy cleanup and before the full presence recency rework.
+Status: implemented.
 
 ## Purpose
 
@@ -31,6 +31,7 @@ Do not use a viewer-timezone day for v1. That would make a friend's totals chang
 - A user in New York and a user in California may be on different Vibes days for a few hours. That is okay; each row is about that person.
 - If one user's two devices are in different time zones, they still scan and publish the same Vibes day.
 - The feed should not make time zones prominent. At most, detail copy can say "today in Marcus's timezone" if a mismatch would otherwise feel confusing.
+- Feed detail should not show timezone copy in v1.
 - Device rows from older Vibes days should not contribute to today's Git totals, but they can still influence "last seen" once presence becomes recency-based.
 
 ## Current Behavior
@@ -81,7 +82,8 @@ Rules:
 - Store an IANA timezone identifier such as `America/Los_Angeles`.
 - New registration should accept `timezone` and default to the client's `TimeZone.current.identifier`.
 - Existing users can get `timezone = NULL` until their next app publish or profile update; the server falls back to `UTC` only when needed.
-- Later profile/settings UI can expose this as "Vibes day timezone."
+- If a legacy account has no timezone and upgraded device statuses disagree, the server chooses the newest valid device timezone once and persists it.
+- Later profile/settings UI can expose this as "Vibes day timezone." V1 does not add editable timezone settings.
 
 ### Status Payload
 
@@ -120,9 +122,10 @@ Add a client config value:
 
 Client rules:
 
-- Missing timezone defaults to `TimeZone.current.identifier` and is saved on next config write.
-- Existing-account setup should use the account timezone returned by the relay where possible.
+- Missing timezone is preserved as missing in imported config; publishing falls back locally to `TimeZone.current.identifier` when no account timezone is available.
+- Existing-account setup uses the account timezone returned by the relay where possible.
 - A device should not silently change the account timezone just because the Mac's system timezone changes.
+- Registration and imported config are the v1 places where the client supplies or preserves an account timezone.
 
 ## Aggregation Rules
 
@@ -146,6 +149,7 @@ This keeps today's active devices summed while still showing something sensible 
 
 - `manual_status`, `derived_status`, `repo_aliases`, `spotify`, and `weather` still come from one source row: the newest broadcasting row for the chosen Vibes day.
 - If there is no broadcasting row for the chosen day, use the newest broadcasting row as stale display only.
+- Repo aliases are not cross-device merged in v1; they continue to come from the newest source device for the chosen day.
 
 ### Last Seen / Recency
 
@@ -218,7 +222,7 @@ Already using Vibes on another Mac?
 Use the same account token on both Macs. Vibes uses one day boundary for all your Macs, so today's Git stats combine cleanly.
 ```
 
-- Existing-token import should preserve the account timezone if exported.
+- Existing-token import should preserve the account timezone if exported, and hydrate it from `/api/me` when the relay has one.
 - If the app cannot fetch account timezone yet, use local config and avoid changing server timezone implicitly.
 
 ### Phase 5: Admin and Docs
@@ -243,7 +247,7 @@ Client:
 - Day calculation for `America/Los_Angeles` around midnight.
 - Day calculation across DST transition dates.
 - Git scanner uses the explicit start instant rather than system-local `midnight`.
-- Existing config without timezone loads and saves with a default timezone.
+- Existing config without timezone loads without inventing one, then publishes using a Mac-timezone fallback if the relay cannot provide an account timezone.
 
 Manual proof:
 
@@ -251,9 +255,9 @@ Manual proof:
 - Configure a stale previous-day row; feed excludes it from Git totals.
 - Change the test account timezone and verify the computed day boundary changes predictably.
 
-## Open Questions
+## Decisions
 
-- Should account timezone be editable in v1 settings, or only set during registration/import?
-- Should the feed detail ever show "today in Marcus's timezone," or is that too much surface area?
-- If a user's account timezone is missing and their devices disagree, should the server choose the newest device's timezone once and persist it, or wait for the upgraded client to register/update it?
-- Should repo aliases from multiple devices be merged/deduped in the future, or continue to come from the newest source device?
+- Account timezone is not editable in v1 settings. It is set during registration/import, with future settings UI left for later.
+- Feed detail does not show timezone copy.
+- If account timezone is missing and devices disagree, the server chooses the newest valid device timezone once and persists it.
+- Repo aliases continue to come from the newest source device for the chosen day. Cross-device alias merge/dedupe can wait until real users hit the long-running different-name edge case.
