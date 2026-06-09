@@ -499,29 +499,47 @@ final class AppModel: ObservableObject {
     }
   }
 
+  // Patch the locally-displayed "you" avatar fields from an authoritative server
+  // response so the UI updates immediately and correctly, independent of the
+  // follow-up feed GET (which is best-effort and may transiently fail).
+  private func applyAvatarToYou(kind: String?, gradient: AvatarGradient?, url: String?) {
+    guard var snapshot = feed else { return }
+    snapshot.you.user.avatarKind = kind
+    snapshot.you.user.avatarGradient = gradient
+    snapshot.you.user.avatarUrl = url
+    feed = snapshot
+  }
+
   // Apply the two selected gradient colors as the profile icon. PUTs them as
-  // "#RRGGBB" hex, then refreshes the feed so the gradient shows on "you" and
-  // propagates to friends.
+  // "#RRGGBB" hex, applies the server's echoed fields to "you" immediately, then
+  // best-effort refreshes the feed to propagate to friends.
   func setGradientAvatar() async {
     guard let config, isConfigured else { return }
     avatarError = nil
     isUploadingAvatar = true
     do {
-      _ = try await client(for: config).setAvatarGradient(
+      let result = try await client(for: config).setAvatarGradient(
         start: gradientStart.hexRGB,
         end: gradientEnd.hexRGB
       )
       avatarPreviewPNG = nil
-      await refreshFeedOnly()
+      // Prefer the locally-known inputs over the loosely-decoded echo so a thin
+      // or partial server response can't momentarily blank the gradient.
+      applyAvatarToYou(
+        kind: result.avatarKind ?? "gradient",
+        gradient: result.avatarGradient ?? AvatarGradient(start: gradientStart.hexRGB, end: gradientEnd.hexRGB),
+        url: nil
+      )
       successMessage = "Profile icon updated."
+      await refreshFeedOnly()
     } catch {
       avatarError = error.localizedDescription
     }
     isUploadingAvatar = false
   }
 
-  // Upload the current preview PNG as the profile icon, then refresh the feed so
-  // the new icon shows on "you" and propagates to friends.
+  // Upload the current preview PNG as the profile icon, apply the result to "you"
+  // immediately, then best-effort refresh the feed.
   func useGeneratedAvatar() async {
     guard let config, isConfigured else { return }
     guard let png = avatarPreviewPNG else {
@@ -531,21 +549,23 @@ final class AppModel: ObservableObject {
     avatarError = nil
     isUploadingAvatar = true
     do {
-      _ = try await client(for: config).uploadAvatar(
+      let result = try await client(for: config).uploadAvatar(
         pngData: png,
         prompt: avatarLastPrompt,
         style: avatarLastStyle ?? ""
       )
       avatarPreviewPNG = nil
-      await refreshFeedOnly()
+      applyAvatarToYou(kind: "image", gradient: nil, url: result.avatarURL)
       successMessage = "Profile icon updated."
+      await refreshFeedOnly()
     } catch {
       avatarError = error.localizedDescription
     }
     isUploadingAvatar = false
   }
 
-  // Clear the current profile icon (revert to initials) and refresh the feed.
+  // Clear the current profile icon (revert to initials), apply locally, then
+  // best-effort refresh the feed.
   func removeAvatar() async {
     guard let config, isConfigured else { return }
     avatarError = nil
@@ -554,8 +574,9 @@ final class AppModel: ObservableObject {
     do {
       try await client(for: config).deleteAvatar()
       avatarPreviewPNG = nil
-      await refreshFeedOnly()
+      applyAvatarToYou(kind: nil, gradient: nil, url: nil)
       successMessage = "Profile icon removed."
+      await refreshFeedOnly()
     } catch {
       avatarError = error.localizedDescription
     }

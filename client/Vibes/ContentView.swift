@@ -292,10 +292,7 @@ private struct ProfileIconSettingsPane: View {
 
   var body: some View {
     SettingsPane {
-      SettingsHeading(
-        title: "profile icon",
-        detail: "Generate a personal icon from a short prompt with on-device Apple Intelligence. A shared house style keeps everyone's icons consistent."
-      )
+      SettingsHeading(title: "profile icon")
 
       if model.avatarSupported == false {
         unavailableNote
@@ -396,34 +393,51 @@ private struct ProfileIconSettingsPane: View {
         .font(.caption)
         .foregroundStyle(VibeColor.muted)
 
-      HStack(spacing: 16) {
-        Circle()
-          .fill(
-            LinearGradient(
-              colors: [model.gradientStart, model.gradientEnd],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
+      HStack(alignment: .center, spacing: 16) {
+        ZStack {
+          Circle()
+            .fill(
+              LinearGradient(
+                colors: [model.gradientStart, model.gradientEnd],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+              )
             )
-          )
-          .frame(width: 72, height: 72)
-          .overlay(Circle().strokeBorder(VibeColor.cardBorder, lineWidth: 1))
+          Text(gradientPreviewInitial)
+            .font(.system(size: 28, weight: .medium, design: .rounded))
+            .foregroundStyle(.white.opacity(0.9))
+            .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+        }
+        .frame(width: 72, height: 72)
+        .overlay(Circle().strokeBorder(VibeColor.cardBorder, lineWidth: 1))
 
-        VStack(alignment: .leading, spacing: 8) {
-          ColorPicker("Start", selection: $model.gradientStart, supportsOpacity: false)
-          ColorPicker("End", selection: $model.gradientEnd, supportsOpacity: false)
+        // Labels in column 1, color wells in column 2 → the wells line up
+        // vertically regardless of label width.
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+          GridRow {
+            Text("Start")
+            ColorPicker("", selection: $model.gradientStart, supportsOpacity: false)
+              .labelsHidden()
+          }
+          GridRow {
+            Text("End")
+            ColorPicker("", selection: $model.gradientEnd, supportsOpacity: false)
+              .labelsHidden()
+          }
         }
         .font(.system(size: 13))
+        .foregroundStyle(VibeColor.foreground)
+
+        Button {
+          Task { await model.setGradientAvatar() }
+        } label: {
+          Label("Use gradient", systemImage: "circle.lefthalf.filled")
+        }
+        .buttonStyle(PlainVibeButtonStyle())
+        .disabled(isWorking)
 
         Spacer()
       }
-
-      Button {
-        Task { await model.setGradientAvatar() }
-      } label: {
-        Label("Use gradient", systemImage: "circle.lefthalf.filled")
-      }
-      .buttonStyle(PlainVibeButtonStyle())
-      .disabled(isWorking)
     }
   }
 
@@ -481,8 +495,12 @@ private struct ProfileIconSettingsPane: View {
 
   private var workingStatus: String? {
     if model.isGeneratingAvatar { return "Generating on device..." }
-    if model.isUploadingAvatar { return "Uploading..." }
     return nil
+  }
+
+  private var gradientPreviewInitial: String {
+    let handle = model.feed?.you.user.handle ?? ""
+    return (handle.first.map(String.init) ?? "?").uppercased()
   }
 
   private func generate() {
@@ -598,16 +616,18 @@ private struct SettingsPane<Content: View>: View {
 
 private struct SettingsHeading: View {
   var title: String
-  var detail: String
+  var detail: String? = nil
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       Text(title)
         .font(.system(size: 22, weight: .light))
-      Text(detail)
-        .font(.system(size: 13))
-        .foregroundStyle(VibeColor.muted)
-        .fixedSize(horizontal: false, vertical: true)
+      if let detail {
+        Text(detail)
+          .font(.system(size: 13))
+          .foregroundStyle(VibeColor.muted)
+          .fixedSize(horizontal: false, vertical: true)
+      }
     }
   }
 }
