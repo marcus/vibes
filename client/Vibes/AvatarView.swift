@@ -12,11 +12,18 @@ struct AvatarView: View {
   var status: MergedStatus
   var size: FriendCardSize
   var isOnline: Bool
+  // Aurora II: online avatars get a slow "breathing" ring (scale + fade, ~3.4s).
+  // Off by default so static contexts (settings preview, away rows) stay still.
+  var breathes: Bool
 
-  init(status: MergedStatus, size: FriendCardSize = .comfortable, isOnline: Bool) {
+  @State private var isBreathing = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  init(status: MergedStatus, size: FriendCardSize = .comfortable, isOnline: Bool, breathes: Bool = false) {
     self.status = status
     self.size = size
     self.isOnline = isOnline
+    self.breathes = breathes
   }
 
   // The full outer diameter (image + gap + ring on every side) for a given size.
@@ -40,8 +47,16 @@ struct AvatarView: View {
       Circle()
         .strokeBorder(ringColor, lineWidth: metrics.ringWidth)
         .frame(width: outer, height: outer)
+        .scaleEffect(isBreathing ? 1.07 : 1.0)
+        .opacity(isBreathing ? 0.45 : 1.0)
     }
     .frame(width: outer, height: outer)
+    .onAppear {
+      guard breathes, isOnline, !reduceMotion else { return }
+      withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
+        isBreathing = true
+      }
+    }
     .accessibilityElement()
     .accessibilityLabel(isOnline ? "\(status.user.displayName), online" : "\(status.user.displayName), offline")
   }
@@ -140,10 +155,10 @@ private struct AvatarMetrics {
   init(size: FriendCardSize) {
     switch size {
     case .comfortable:
-      diameter = 34
-      ringWidth = 2.5
-      gap = 2
-      initialsFontSize = 14
+      diameter = 40
+      ringWidth = 2
+      gap = 2.5
+      initialsFontSize = 16
     case .compact:
       diameter = 26
       ringWidth = 2

@@ -1,125 +1,127 @@
 import SwiftUI
 
-// FriendCard — an isolated, reusable presence card for one person (a friend or
-// "you"). Pulls its visual language from the shared TE tokens in `VibeColor`
-// (see client/Vibes/DESIGN.md): a raised `cardSurface` block on the chassis,
-// hairline `cardBorder`, chunky `radiusCard`. The online dot is "lit"; offline
-// is "at-rest". Commit count is surfaced prominently; repos and an optional
-// manual status note fill out the body.
+// FriendCard — the Aurora II presence card for one person (a friend or "you").
+// Design source: experiments/friend-list-mockups, design E ("Aurora II").
 //
-// Rendered in isolation here with previews for every state and both sizes.
-// Wiring into the Home view happens in a later task (td-4ac06a).
+// Layout, top to bottom:
+//   header  — ring avatar (breathing when online) · name + status line · updated-at
+//   LOC bar — always full width; additions left, deletions right, numbers inside.
+//             The split reflects this person's own add/remove ratio (absolute
+//             scale isn't comparable between people).
+//   legend  — commit count left, repo list right
+//   extras  — optional spotify track / weather, faintest tier, only when shared
+//
+// "You" gets the identical treatment on a slightly different tint
+// (VibeColor.meCardSurface). Offline friends don't use this card — they render
+// as AwayFriendRow below.
 
-// Shape / sizing constants documented in DESIGN.md. Colors live in VibeColor;
-// these are the matching shape tokens, kept local to the card for now.
 enum FriendCardSize {
   case comfortable
   case compact
-
-  var padding: CGFloat { self == .comfortable ? 16 : 12 }
-  var spacing: CGFloat { self == .comfortable ? 10 : 7 }
-  var nameFont: Font {
-    .system(size: self == .comfortable ? 16 : 14, weight: .medium)
-  }
-  var commitNumberFont: Font {
-    .system(size: self == .comfortable ? 30 : 24, weight: .semibold, design: .rounded)
-  }
-  var commitLabelFont: Font {
-    .system(size: self == .comfortable ? 11 : 10, weight: .medium)
-  }
-  var bodyFont: Font {
-    .system(size: self == .comfortable ? 14 : 13)
-  }
-  var captionFont: Font {
-    .system(size: self == .comfortable ? 12 : 11)
-  }
-  var chipFont: Font {
-    .system(size: self == .comfortable ? 11 : 10, weight: .medium)
-  }
-}
-
-private enum FriendCardShape {
-  static let radiusCard: CGFloat = 14
-  static let radiusControl: CGFloat = 8
 }
 
 struct FriendCard: View {
   var status: MergedStatus
   var isYou: Bool = false
-  var size: FriendCardSize = .comfortable
 
   var body: some View {
-    VStack(alignment: .leading, spacing: size.spacing) {
+    VStack(alignment: .leading, spacing: 12) {
       header
-      commitFeature
-      if !repoAliases.isEmpty {
-        repoChips
-      }
-      if let note = manualNote {
-        Text(note)
-          .font(size.bodyFont)
-          .foregroundStyle(VibeColor.foreground)
-          .lineLimit(2)
-          .fixedSize(horizontal: false, vertical: true)
-      } else {
-        Text(presenceText)
-          .font(size.bodyFont)
-          .foregroundStyle(VibeColor.muted)
+      LocBar(added: insertions, removed: deletions)
+      legend
+      if spotifyLine != nil || weatherLine != nil {
+        extras
       }
     }
-    .padding(size.padding)
+    .padding(15)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(VibeColor.cardSurface)
-    .clipShape(RoundedRectangle(cornerRadius: FriendCardShape.radiusCard))
+    .background(isYou ? VibeColor.meCardSurface : VibeColor.cardSurface)
+    .clipShape(RoundedRectangle(cornerRadius: 16))
     .overlay(
-      RoundedRectangle(cornerRadius: FriendCardShape.radiusCard)
-        .stroke(VibeColor.cardBorder, lineWidth: 1)
+      RoundedRectangle(cornerRadius: 16)
+        .stroke(isYou ? VibeColor.meCardBorder : VibeColor.cardBorder, lineWidth: 1)
     )
   }
 
   // MARK: - Sections
 
   private var header: some View {
-    HStack(alignment: .center, spacing: 8) {
-      // Circular avatar; presence is the ring around it ("lit" green when online,
-      // "at-rest" neutral otherwise) — replaces the old standalone dot.
-      AvatarView(status: status, size: size, isOnline: isOnline)
-      Text(isYou ? "you" : status.user.displayName)
-        .font(size.nameFont)
-        .foregroundStyle(VibeColor.foreground)
-        .lineLimit(1)
+    HStack(alignment: .center, spacing: 13) {
+      AvatarView(status: status, size: .comfortable, isOnline: isOnline, breathes: isOnline)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(isYou ? "you" : status.user.displayName)
+          .font(.system(size: 15, weight: .bold))
+          .foregroundStyle(VibeColor.foreground)
+          .lineLimit(1)
+        Text(statusLine)
+          .font(.system(size: 12.5))
+          .foregroundStyle(VibeColor.muted)
+          .lineLimit(1)
+      }
       Spacer(minLength: 4)
       Text(lastSeen)
-        .font(size.captionFont)
-        .foregroundStyle(VibeColor.muted)
+        .font(.system(size: 11))
+        .foregroundStyle(VibeColor.faint)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.top, 2)
+    }
+    .fixedSize(horizontal: false, vertical: true)
+  }
+
+  private var legend: some View {
+    HStack(alignment: .firstTextBaseline) {
+      (
+        Text("\(commitCount)").fontWeight(.bold).foregroundColor(VibeColor.foreground)
+        + Text(commitCount == 1 ? " commit today" : " commits today")
+      )
+      .font(.system(size: 11.5))
+      .foregroundStyle(VibeColor.muted)
+      .monospacedDigit()
+
+      Spacer(minLength: 8)
+
+      if !repoAliases.isEmpty {
+        Text(repoAliases.joined(separator: ", "))
+          .font(.system(size: 11.5, weight: .semibold))
+          .foregroundStyle(VibeColor.faint)
+          .lineLimit(1)
+          .truncationMode(.tail)
+      }
     }
   }
 
-  // Commits-per-day, surfaced prominently — the focal stat of the card.
-  private var commitFeature: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 6) {
-      Text("\(commitCount)")
-        .font(size.commitNumberFont)
-        .foregroundStyle(commitCount > 0 ? VibeColor.accent : VibeColor.muted)
-      Text(commitCount == 1 ? "commit today" : "commits today")
-        .font(size.commitLabelFont)
-        .foregroundStyle(VibeColor.muted)
-        .textCase(.uppercase)
+  // One quiet line: now-playing left, weather right. Either half drops out when
+  // the friend isn't sharing it; the row drops out entirely when both are absent.
+  private var extras: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 12) {
+      if let track = spotifyLine {
+        Text("♪ \(track)")
+          .font(.system(size: 11.5))
+          .foregroundStyle(VibeColor.faint)
+          .lineLimit(1)
+          .truncationMode(.tail)
+      }
+      Spacer(minLength: 0)
+      if let weather = weatherLine {
+        Text(weather)
+          .font(.system(size: 11.5))
+          .foregroundStyle(VibeColor.faint)
+          .monospacedDigit()
+          .lineLimit(1)
+      }
     }
-  }
-
-  // Repos worked on today as small at-rest chips.
-  private var repoChips: some View {
-    FlowChips(aliases: repoAliases, size: size)
   }
 
   // MARK: - Derived data
 
   private var isOnline: Bool { status.mode == .online }
 
-  private var manualNote: String? {
-    guard let note = status.manualStatus, !note.isEmpty else { return nil }
-    return note
+  // Manual status when set; otherwise a quiet presence description.
+  private var statusLine: String {
+    if let note = status.manualStatus, !note.isEmpty { return note }
+    if isOnline { return "online" }
+    guard let updatedAt = status.updatedAt else { return "offline" }
+    return "offline, synced \(updatedAt.formatted(.relative(presentation: .numeric)))"
   }
 
   private var gitStatsCard: StatusCard? {
@@ -130,27 +132,129 @@ struct FriendCard: View {
     gitStatsCard?.data["commits"]?.intValue ?? 0
   }
 
-  private var repoAliasCard: StatusCard? {
-    status.cards.first { $0.type == "repo_aliases" }
+  private var insertions: Int {
+    gitStatsCard?.data["insertions"]?.intValue ?? 0
+  }
+
+  private var deletions: Int {
+    gitStatsCard?.data["deletions"]?.intValue ?? 0
   }
 
   private var repoAliases: [String] {
-    if case let .array(items)? = repoAliasCard?.data["aliases"] {
+    let card = status.cards.first { $0.type == "repo_aliases" }
+    if case let .array(items)? = card?.data["aliases"] {
       return items.compactMap { if case let .string(s) = $0 { return s } else { return nil } }
     }
     // Fall back to the comma-joined summary if structured data is absent.
-    if let summary = repoAliasCard?.summary, !summary.isEmpty {
+    if let summary = card?.summary, !summary.isEmpty {
       return summary.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
     }
     return []
   }
 
-  // online -> "online"; offline with a snapshot -> "offline, synced {relative}";
-  // offline with no timestamp -> "offline".
-  private var presenceText: String {
-    if isOnline { return "online" }
-    guard let updatedAt = status.updatedAt else { return "offline" }
-    return "offline, synced \(updatedAt.formatted(.relative(presentation: .numeric)))"
+  private func cardSummary(_ type: String) -> String? {
+    guard
+      let card = status.cards.first(where: { $0.type == type }),
+      card.enabled,
+      let summary = card.summary,
+      !summary.isEmpty
+    else { return nil }
+    return summary
+  }
+
+  private var spotifyLine: String? { cardSummary("spotify") }
+  private var weatherLine: String? { cardSummary("weather") }
+
+  private var lastSeen: String {
+    guard let date = status.updatedAt else { return "" }
+    return date.formatted(.relative(presentation: .named))
+  }
+}
+
+// The full-width added/removed bar. Additions fill from the left, deletions from
+// the right; each half keeps a minimum width so small numbers stay readable, and
+// a zero day splits the bar evenly.
+private struct LocBar: View {
+  var added: Int
+  var removed: Int
+
+  private let height: CGFloat = 22
+  private let minHalf: CGFloat = 64
+
+  var body: some View {
+    GeometryReader { geo in
+      let addWidth = addedWidth(in: geo.size.width)
+      HStack(spacing: 0) {
+        Text("+\(added)")
+          .foregroundStyle(VibeColor.locAddedInk)
+          .padding(.leading, 12)
+          .frame(width: addWidth, height: height, alignment: .leading)
+          .background(VibeColor.locAddedBg)
+        Text("\u{2212}\(removed)")
+          .foregroundStyle(VibeColor.locRemovedInk)
+          .padding(.trailing, 12)
+          .frame(width: geo.size.width - addWidth, height: height, alignment: .trailing)
+          .background(VibeColor.locRemovedBg)
+      }
+      .font(.system(size: 11, weight: .bold))
+      .monospacedDigit()
+      .clipShape(Capsule())
+    }
+    .frame(height: height)
+  }
+
+  private func addedWidth(in total: CGFloat) -> CGFloat {
+    guard total > 2 * minHalf else { return total / 2 }
+    let sum = added + removed
+    guard sum > 0 else { return total / 2 }
+    let proportional = total * CGFloat(added) / CGFloat(sum)
+    return min(max(proportional, minHalf), total - minHalf)
+  }
+}
+
+// MARK: - Away list
+
+// Compact one-line row for an offline friend: small at-rest avatar, name, the
+// last-known activity, and recency. Quiet by design — these sit below the
+// "away" divider and shouldn't compete with the online cards.
+struct AwayFriendRow: View {
+  var status: MergedStatus
+
+  var body: some View {
+    HStack(spacing: 10) {
+      AvatarView(status: status, size: .compact, isOnline: false)
+        .saturation(0.3)
+        .opacity(0.8)
+      Text(status.user.displayName)
+        .font(.system(size: 12.5, weight: .semibold))
+        .foregroundStyle(VibeColor.muted)
+        .lineLimit(1)
+      Text(recentSummary)
+        .font(.system(size: 11.5))
+        .foregroundStyle(VibeColor.faint)
+        .lineLimit(1)
+        .truncationMode(.tail)
+      Spacer(minLength: 8)
+      Text(lastSeen)
+        .font(.system(size: 11))
+        .foregroundStyle(VibeColor.faint)
+    }
+    .padding(.vertical, 7)
+    .padding(.horizontal, 10)
+    .background(VibeColor.awayRowSurface)
+    .clipShape(RoundedRectangle(cornerRadius: 11))
+  }
+
+  private var recentSummary: String {
+    let git = status.cards.first { $0.type == "git_stats" }
+    let commits = git?.data["commits"]?.intValue ?? 0
+    guard commits > 0 else { return "quiet today" }
+    var parts = ["\(commits) commit\(commits == 1 ? "" : "s")"]
+    if case let .array(items)? = status.cards.first(where: { $0.type == "repo_aliases" })?.data["aliases"] {
+      let aliases = items.compactMap { if case let .string(s) = $0 { return s } else { return nil } }
+      if !aliases.isEmpty { parts.append(aliases.joined(separator: ", ")) }
+    }
+    return parts.joined(separator: " · ")
   }
 
   private var lastSeen: String {
@@ -159,36 +263,20 @@ struct FriendCard: View {
   }
 }
 
-// Small wrapping row of repo-alias chips. At-rest neutral blocks per DESIGN.md.
-private struct FlowChips: View {
-  var aliases: [String]
-  var size: FriendCardSize
-
+// "AWAY ────────" — the divider between online cards and the away list.
+struct AwaySectionHeader: View {
   var body: some View {
-    // A simple horizontal run; the card is narrow so we cap visible chips and
-    // summarize the remainder. Avoids a custom flow layout dependency.
-    HStack(spacing: 6) {
-      ForEach(Array(visible.enumerated()), id: \.offset) { _, alias in
-        Text(alias)
-          .font(size.chipFont)
-          .padding(.horizontal, 8)
-          .padding(.vertical, 3)
-          .foregroundStyle(VibeColor.controlAtRestForeground)
-          .background(VibeColor.controlAtRest)
-          .clipShape(RoundedRectangle(cornerRadius: 8))
-          .lineLimit(1)
-      }
-      if overflow > 0 {
-        Text("+\(overflow)")
-          .font(size.chipFont)
-          .foregroundStyle(VibeColor.muted)
-      }
+    HStack(spacing: 10) {
+      Text("AWAY")
+        .font(.system(size: 10.5, weight: .bold))
+        .tracking(1.2)
+        .foregroundStyle(VibeColor.faint)
+      Rectangle()
+        .fill(VibeColor.sectionDivider)
+        .frame(height: 1)
     }
+    .padding(.horizontal, 2)
   }
-
-  private var maxVisible: Int { size == .comfortable ? 3 : 2 }
-  private var visible: [String] { Array(aliases.prefix(maxVisible)) }
-  private var overflow: Int { max(0, aliases.count - maxVisible) }
 }
 
 // MARK: - Preview sample data
@@ -199,18 +287,25 @@ private func sampleStatus(
   mode: PresenceMode,
   manual: String? = nil,
   updatedAt: Date? = Date(),
-  commits: Int? = 7,
-  repos: [String] = ["vibes", "relay", "dotfiles"]
+  commits: Int = 7,
+  insertions: Int = 412,
+  deletions: Int = 96,
+  repos: [String] = ["vibes", "relay"],
+  spotify: String? = nil,
+  weather: String? = nil
 ) -> MergedStatus {
-  var cards: [StatusCard] = []
-  if let commits {
-    cards.append(StatusCard(
+  var cards: [StatusCard] = [
+    StatusCard(
       type: "git_stats",
       enabled: true,
-      summary: "\(repos.count) repos touched - \(commits) commits",
-      data: ["commits": .int(commits), "repos_touched": .int(repos.count)]
-    ))
-  }
+      summary: nil,
+      data: [
+        "commits": .int(commits),
+        "insertions": .int(insertions),
+        "deletions": .int(deletions),
+      ]
+    )
+  ]
   if !repos.isEmpty {
     cards.append(StatusCard(
       type: "repo_aliases",
@@ -218,6 +313,12 @@ private func sampleStatus(
       summary: repos.joined(separator: ", "),
       data: ["aliases": .array(repos.map { .string($0) })]
     ))
+  }
+  if let spotify {
+    cards.append(StatusCard(type: "spotify", enabled: true, summary: spotify, data: [:]))
+  }
+  if let weather {
+    cards.append(StatusCard(type: "weather", enabled: true, summary: weather, data: [:]))
   }
   return MergedStatus(
     user: UserSummary(id: handle, handle: handle, displayName: name, timezone: nil),
@@ -229,90 +330,50 @@ private func sampleStatus(
   )
 }
 
-#Preview("Online") {
-  FriendCard(status: sampleStatus(
-    handle: "lin",
-    name: "Lin Wei",
-    mode: .online,
-    manual: "deep in the parser rewrite",
-    commits: 12
-  ))
-  .padding()
-  .frame(width: 300)
-  .background(VibeColor.chassis)
-}
-
-#Preview("Offline — recent") {
-  FriendCard(status: sampleStatus(
-    handle: "sam",
-    name: "Sam Ortiz",
-    mode: .offline,
-    updatedAt: Date().addingTimeInterval(-3600),
-    commits: 4,
-    repos: ["api", "web"]
-  ))
-  .padding()
-  .frame(width: 300)
-  .background(VibeColor.chassis)
-}
-
-#Preview("Offline — hidden") {
-  FriendCard(status: sampleStatus(
-    handle: "kai",
-    name: "Kai Mensah",
-    mode: .offline,
-    updatedAt: nil,
-    commits: nil,
-    repos: []
-  ))
-  .padding()
-  .frame(width: 300)
-  .background(VibeColor.chassis)
-}
-
-#Preview("You") {
-  FriendCard(
-    status: sampleStatus(
-      handle: "me",
-      name: "Marcus",
-      mode: .online,
-      manual: "shipping the UI rework",
-      commits: 23,
-      repos: ["vibes", "relay", "td", "dotfiles"]
-    ),
-    isYou: true
-  )
-  .padding()
-  .frame(width: 300)
-  .background(VibeColor.chassis)
-}
-
-#Preview("Empty / loading") {
-  FriendCard(status: sampleStatus(
-    handle: "new",
-    name: "Pat",
-    mode: .offline,
-    updatedAt: nil,
-    commits: 0,
-    repos: []
-  ))
-  .padding()
-  .frame(width: 300)
-  .background(VibeColor.chassis)
-}
-
-#Preview("Sizes — comfortable vs compact") {
-  VStack(spacing: 12) {
+#Preview("Aurora II — column") {
+  VStack(alignment: .leading, spacing: 12) {
     FriendCard(
-      status: sampleStatus(handle: "lin", name: "Lin Wei", mode: .online, commits: 12),
-      size: .comfortable
+      status: sampleStatus(
+        handle: "me", name: "Marcus", mode: .online, manual: "VIBES",
+        commits: 3, insertions: 777, deletions: 34, repos: ["braid"],
+        spotify: "Pink Pony Club · Chappell Roan", weather: "⛅️ 61°"
+      ),
+      isYou: true
     )
-    FriendCard(
-      status: sampleStatus(handle: "lin", name: "Lin Wei", mode: .online, commits: 12),
-      size: .compact
-    )
+    FriendCard(status: sampleStatus(
+      handle: "ana", name: "Ana", mode: .online, manual: "rewriting the parser, again",
+      commits: 7, insertions: 412, deletions: 96, repos: ["lexer", "docs"],
+      spotify: "Starburster · Fontaines D.C.", weather: "☀️ 72°"
+    ))
+    FriendCard(status: sampleStatus(
+      handle: "theo", name: "Theo", mode: .online, manual: "shipping the billing fix 🤞",
+      commits: 4, insertions: 188, deletions: 240, repos: ["billing"],
+      weather: "🌧 54°"
+    ))
+    AwaySectionHeader()
+      .padding(.top, 4)
+    AwayFriendRow(status: sampleStatus(
+      handle: "priya", name: "Priya", mode: .offline,
+      updatedAt: Date().addingTimeInterval(-3 * 3600),
+      commits: 5, insertions: 301, deletions: 77, repos: ["api"]
+    ))
+    AwayFriendRow(status: sampleStatus(
+      handle: "sam", name: "Sam", mode: .offline,
+      updatedAt: Date().addingTimeInterval(-26 * 3600),
+      commits: 0, insertions: 0, deletions: 0, repos: []
+    ))
   }
+  .padding(16)
+  .frame(width: 420)
+  .background(VibeColor.background)
+}
+
+#Preview("Zero day") {
+  FriendCard(status: sampleStatus(
+    handle: "new", name: "Pat", mode: .online,
+    commits: 0, insertions: 0, deletions: 0, repos: []
+  ))
   .padding()
-  .frame(width: 280)
-  .background(VibeColor.chassis)
+  .frame(width: 420)
+  .background(VibeColor.background)
 }
