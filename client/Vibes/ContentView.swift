@@ -1102,47 +1102,99 @@ private struct EmptyState: View {
   }
 }
 
+// Aurora II palette (see experiments/friend-list-mockups, design E). Dark mode is
+// a cool near-black with slightly-cool-gray cards; light mode keeps the original
+// warm cream. Card tints, the LOC bar pair, and the faint text tier are all part
+// of the same ramp — adjust them together.
 enum VibeColor {
-  static let ink = NSColor(red: 0.102, green: 0.090, blue: 0.078, alpha: 1)
-  static let paper = NSColor(red: 0.949, green: 0.933, blue: 0.902, alpha: 1)
+  static let ink = NSColor(red: 0.169, green: 0.149, blue: 0.125, alpha: 1)
+  static let paper = NSColor(red: 0.953, green: 0.937, blue: 0.906, alpha: 1)
+  static let darkBg = NSColor(red: 0.078, green: 0.082, blue: 0.102, alpha: 1)
+  static let darkInk = NSColor(red: 0.914, green: 0.918, blue: 0.941, alpha: 1)
   static let accent = Color(red: 0.878, green: 0.325, blue: 0.122)
   static let online = Color(red: 0.18, green: 0.55, blue: 0.34)
   static let background = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode ? ink : paper
+    appearance.isDarkMode ? darkBg : paper
   })
   static let foreground = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode ? paper : ink
+    appearance.isDarkMode ? darkInk : ink
   })
   static let muted = Color(nsColor: NSColor(name: nil) { appearance in
     appearance.isDarkMode
-      ? NSColor(red: 0.659, green: 0.624, blue: 0.573, alpha: 1)
-      : NSColor(red: 0.431, green: 0.400, blue: 0.357, alpha: 1)
+      ? NSColor(red: 0.655, green: 0.675, blue: 0.741, alpha: 1)
+      : NSColor(red: 0.435, green: 0.404, blue: 0.357, alpha: 1)
+  })
+  // The faintest text tier — timestamps, repo lists, spotify/weather extras.
+  static let faint = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.424, green: 0.443, blue: 0.502, alpha: 1)
+      : NSColor(red: 0.639, green: 0.604, blue: 0.545, alpha: 1)
   })
   static let field = Color(nsColor: NSColor(name: nil) { appearance in
     appearance.isDarkMode
-      ? paper.withAlphaComponent(0.06)
+      ? darkInk.withAlphaComponent(0.06)
       : ink.withAlphaComponent(0.045)
   })
   static let accentForeground = Color(nsColor: paper)
 
-  // --- TE-derived tokens (see client/Vibes/DESIGN.md). Shared by the presence
-  // Online/Offline control AND the friend card. ---
-
   // Chassis & surfaces — the neutral body controls sit on.
   static let chassis = Color(nsColor: NSColor(name: nil) { appearance in
     appearance.isDarkMode
-      ? NSColor(red: 0.149, green: 0.133, blue: 0.114, alpha: 1)
+      ? NSColor(red: 0.102, green: 0.110, blue: 0.133, alpha: 1)
       : NSColor(red: 0.894, green: 0.871, blue: 0.812, alpha: 1)
   })
   static let cardSurface = Color(nsColor: NSColor(name: nil) { appearance in
     appearance.isDarkMode
-      ? NSColor(red: 0.188, green: 0.169, blue: 0.145, alpha: 1)
-      : NSColor(red: 0.984, green: 0.973, blue: 0.949, alpha: 1)
+      ? NSColor(red: 0.176, green: 0.188, blue: 0.208, alpha: 1)
+      : NSColor(red: 0.992, green: 0.984, blue: 0.965, alpha: 1)
   })
   static let cardBorder = Color(nsColor: NSColor(name: nil) { appearance in
     appearance.isDarkMode
-      ? paper.withAlphaComponent(0.09)
-      : ink.withAlphaComponent(0.08)
+      ? NSColor(red: 0.263, green: 0.275, blue: 0.298, alpha: 1)
+      : NSColor(red: 0.906, green: 0.882, blue: 0.835, alpha: 1)
+  })
+  // "You" card: identical treatment to friends, slightly different tint.
+  static let meCardSurface = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.208, green: 0.227, blue: 0.271, alpha: 1)
+      : NSColor(red: 0.925, green: 0.902, blue: 0.847, alpha: 1)
+  })
+  static let meCardBorder = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.298, green: 0.322, blue: 0.376, alpha: 1)
+      : NSColor(red: 0.867, green: 0.835, blue: 0.761, alpha: 1)
+  })
+  // LOC bar halves: additions left, deletions right, numbers inside.
+  static let locAddedBg = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.114, green: 0.227, blue: 0.169, alpha: 1)
+      : NSColor(red: 0.851, green: 0.925, blue: 0.867, alpha: 1)
+  })
+  static let locAddedInk = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.498, green: 0.878, blue: 0.655, alpha: 1)
+      : NSColor(red: 0.122, green: 0.478, blue: 0.302, alpha: 1)
+  })
+  static let locRemovedBg = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.239, green: 0.145, blue: 0.149, alpha: 1)
+      : NSColor(red: 0.957, green: 0.867, blue: 0.839, alpha: 1)
+  })
+  static let locRemovedInk = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.945, green: 0.584, blue: 0.545, alpha: 1)
+      : NSColor(red: 0.702, green: 0.314, blue: 0.243, alpha: 1)
+  })
+  // Away rows: quiet, barely raised off the window background.
+  static let awayRowSurface = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor.white.withAlphaComponent(0.025)
+      : NSColor.white.withAlphaComponent(0.45)
+  })
+  static let sectionDivider = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.149, green: 0.161, blue: 0.196, alpha: 1)
+      : NSColor(red: 0.894, green: 0.867, blue: 0.812, alpha: 1)
   })
 
   // Secondary accent — petrol blue. Orange leads; use this sparingly.
@@ -1157,12 +1209,12 @@ enum VibeColor {
   static let controlLitForeground = Color(nsColor: paper)
   static let controlAtRest = Color(nsColor: NSColor(name: nil) { appearance in
     appearance.isDarkMode
-      ? NSColor(red: 0.227, green: 0.204, blue: 0.176, alpha: 1)
+      ? NSColor(red: 0.231, green: 0.247, blue: 0.282, alpha: 1)
       : NSColor(red: 0.847, green: 0.820, blue: 0.753, alpha: 1)
   })
   static let controlAtRestForeground = Color(nsColor: NSColor(name: nil) { appearance in
     appearance.isDarkMode
-      ? NSColor(red: 0.659, green: 0.624, blue: 0.573, alpha: 1)
+      ? NSColor(red: 0.655, green: 0.675, blue: 0.741, alpha: 1)
       : NSColor(red: 0.431, green: 0.400, blue: 0.357, alpha: 1)
   })
 }
