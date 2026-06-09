@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Opt out of Chrome's Auto Dark Mode, which force-darkens the white desktop option -->
+<meta name="color-scheme" content="dark light">
 <title>Vibes — friend list design mockups</title>
 <style>
   /* ============================================================
@@ -13,6 +15,25 @@
   :root {
     --page-bg: #1c1a17;
     --page-ink: #e8e4dd;
+    --chrome-muted: #9a948a;
+    --chrome-soft: #b5afa4;
+    --chrome-strong: #d8d2c6;
+    --tab-bg: #2a2723;
+    --tab-border: #3a362f;
+    --tab-active-bg: #e8e4dd;
+    --tab-active-ink: #1c1a17;
+  }
+  body.bg-white {
+    --page-bg: #ffffff; --page-ink: #1c1a17;
+    --chrome-muted: #8a8276; --chrome-soft: #6f675b; --chrome-strong: #4a443a;
+    --tab-bg: #f1ede4; --tab-border: #ddd6c7;
+    --tab-active-bg: #1c1a17; --tab-active-ink: #ffffff;
+  }
+  body.bg-gray {
+    --page-bg: #88898c; --page-ink: #15161a;
+    --chrome-muted: #2e3036; --chrome-soft: #25272c; --chrome-strong: #15161a;
+    --tab-bg: #94959a; --tab-border: #a4a5aa;
+    --tab-active-bg: #15161a; --tab-active-ink: #f2f2f4;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -30,29 +51,52 @@
     padding: 28px 24px 64px;
   }
   .chrome h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
-  .chrome .sub { color: #9a948a; font-size: 13px; margin-top: 4px; }
+  .chrome .sub { color: var(--chrome-muted); font-size: 13px; margin-top: 4px; }
   .tabs {
-    display: flex; gap: 8px; margin: 20px 0 8px; flex-wrap: wrap;
+    display: flex; gap: 8px; margin: 20px 0 8px; flex-wrap: wrap; align-items: center;
   }
   .tabs button {
     font: inherit; font-size: 13px; font-weight: 500;
-    color: #b5afa4; background: #2a2723; border: 1px solid #3a362f;
+    color: var(--chrome-soft); background: var(--tab-bg); border: 1px solid var(--tab-border);
     padding: 7px 14px; border-radius: 99px; cursor: pointer;
   }
-  .tabs button:hover { color: #e8e4dd; }
-  .tabs button.active { background: #e8e4dd; color: #1c1a17; border-color: #e8e4dd; }
+  .tabs button:hover { color: var(--page-ink); }
+  .tabs button.active { background: var(--tab-active-bg); color: var(--tab-active-ink); border-color: var(--tab-active-bg); }
+  .bg-toggle {
+    margin-left: auto; display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--chrome-muted);
+  }
+  .bg-toggle .swatch {
+    width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+    border: 1.5px solid var(--tab-border); padding: 0;
+  }
+  .bg-toggle .swatch.active { box-shadow: 0 0 0 2px var(--page-bg), 0 0 0 4px var(--chrome-strong); }
+  .bg-toggle .swatch.w { background: #ffffff; }
+  .bg-toggle .swatch.g { background: #88898c; }
+  .bg-toggle .swatch.b { background: #1c1a17; }
   .stage {
     display: flex; gap: 32px; align-items: flex-start; margin-top: 20px;
     flex-wrap: wrap;
   }
   .notes {
     flex: 1 1 280px; max-width: 380px; font-size: 13.5px; line-height: 1.55;
-    color: #b5afa4; padding-top: 8px;
+    color: var(--chrome-soft); padding-top: 8px;
   }
-  .notes h2 { font-size: 14px; color: #e8e4dd; margin-bottom: 8px; }
+  .notes h2 { font-size: 14px; color: var(--page-ink); margin-bottom: 8px; }
   .notes ul { margin: 10px 0 0 18px; }
   .notes li { margin-bottom: 7px; }
-  .notes em { color: #d8d2c6; font-style: normal; font-weight: 600; }
+  .notes em { color: var(--chrome-strong); font-style: normal; font-weight: 600; }
+
+  /* window + per-window controls (Aurora II dark-mode slider) */
+  .win-col { flex: 0 0 auto; width: 420px; display: flex; flex-direction: column; gap: 12px; }
+  .win-col .mac-window { width: 100%; }
+  .win-ctrl {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; color: var(--chrome-muted);
+  }
+  .win-ctrl label { white-space: nowrap; }
+  .win-ctrl input[type="range"] { flex: 1; accent-color: var(--chrome-strong); }
+  .win-ctrl .val { font-variant-numeric: tabular-nums; color: var(--chrome-strong); min-width: 60px; text-align: right; }
 
   /* ---------- shared mac window shell ---------- */
   .mac-window {
@@ -256,11 +300,11 @@
      ============================================================ */
   .d-aurora2.dark {
     --bg: #14151a; --bar-bg: #1a1c22; --ink: #e9eaf0; --muted: #a7acbd;
-    --faint: #6c7180; --card: #1c1e25; --card-border: #2a2d37;
-    --me-card: #232633; --me-border: #343a4d;
+    --faint: #6c7180; --card: #2d3035; --card-border: #43464c;
+    --me-card: #353a45; --me-border: #4c5260;
     --add-bg: #1d3a2b; --add-ink: #7fe0a7; --del-bg: #3d2526; --del-ink: #f1958b;
     --divider: #262932; --off-bg: rgba(255,255,255,.025);
-    --label: #5b6070; --wash-opacity: .14;
+    --label: #5b6070;
   }
   .d-aurora2.light {
     --bg: #f3efe7; --bar-bg: #faf7f1; --ink: #2b2620; --muted: #6f675b;
@@ -268,7 +312,7 @@
     --me-card: #ece6d8; --me-border: #ddd5c2;
     --add-bg: #d9ecdd; --add-ink: #1f7a4d; --del-bg: #f4ddd6; --del-ink: #b3503e;
     --divider: #e4ddcf; --off-bg: rgba(255,255,255,.45);
-    --label: #b3aa99; --wash-opacity: .08;
+    --label: #b3aa99;
   }
   .d-aurora2 { background: var(--bg); color: var(--ink); }
   .d-aurora2 .titlebar { background: var(--bar-bg); border-bottom: 1px solid var(--card-border); color: var(--ink); }
@@ -280,15 +324,6 @@
     overflow: hidden;
   }
   .d-aurora2 .card.me { background: var(--me-card); border-color: var(--me-border); }
-  .d-aurora2 .card .aurora {
-    position: absolute; inset: -60% -30%;
-    background:
-      radial-gradient(45% 60% at 25% 35%, var(--c1) 0%, transparent 65%),
-      radial-gradient(50% 65% at 75% 65%, var(--c2) 0%, transparent 65%);
-    opacity: var(--wash-opacity); filter: blur(18px);
-    animation: auroraDrift 18s ease-in-out infinite alternate;
-    pointer-events: none;
-  }
   .d-aurora2 .card .row { position: relative; display: flex; align-items: center; gap: 13px; }
   .d-aurora2 .card .avatar { width: 42px; height: 42px; font-size: 15px; }
   .d-aurora2 .ring { position: relative; flex: 0 0 auto; }
@@ -467,7 +502,14 @@
   <h1>Vibes — friend-list design directions</h1>
   <div class="sub">Experiment, not production code. Same mock data in all four; online friends always sort first and get the larger treatment.</div>
 
-  <div class="tabs" id="tabs"></div>
+  <div class="tabs" id="tabs">
+    <span class="bg-toggle" id="bgToggle">
+      desktop
+      <button class="swatch w" title="White" onclick="setPageBg('white')"></button>
+      <button class="swatch g" title="Gray" onclick="setPageBg('gray')"></button>
+      <button class="swatch b" title="Black" onclick="setPageBg('black')"></button>
+    </span>
+  </div>
   <div id="panels"></div>
 </div>
 
@@ -594,7 +636,6 @@ function aurora() {
 function aurora2() {
   const card = (p, isMe) => `
     <div class="card${isMe ? " me" : ""}" style="${vars(p)}">
-      <div class="aurora"></div>
       <div class="row">
         <span class="ring">${avatar(p)}</span>
         <div class="who">
@@ -628,7 +669,38 @@ function aurora2() {
       </div>`).join("")}
     </div>
   </div>`;
-  return win("dark") + win("light");
+  return `
+  <div class="win-col">
+    ${win("dark")}
+    <div class="win-ctrl">
+      <label for="cardL">card background</label>
+      <input type="range" id="cardL" min="10" max="34" step="1" value="19"
+             oninput="setCardLightness(this.value)">
+      <span class="val" id="cardLVal"></span>
+    </div>
+  </div>
+  ${win("light")}`;
+}
+
+/* Dark-mode card background lightness (Aurora II). Hue/sat stay fixed;
+   borders and the me-card tint track the chosen value at fixed offsets. */
+function setCardLightness(l) {
+  l = Number(l);
+  const win = document.querySelector(".d-aurora2.dark");
+  if (!win) return;
+  const hsl = (h, s, ll) => `hsl(${h} ${s}% ${ll}%)`;
+  win.style.setProperty("--card", hsl(222, 7, l));
+  win.style.setProperty("--card-border", hsl(222, 7, l + 9));
+  win.style.setProperty("--me-card", hsl(222, 12, l + 4));
+  win.style.setProperty("--me-border", hsl(222, 12, l + 13));
+  const toHex = (h, s, ll) => {
+    const f = n => {
+      const k = (n + h / 30) % 12, a = s / 100 * Math.min(ll / 100, 1 - ll / 100);
+      return Math.round(255 * (ll / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+    };
+    return "#" + [f(0), f(8), f(4)].map(v => v.toString(16).padStart(2, "0")).join("");
+  };
+  document.getElementById("cardLVal").textContent = toHex(222, 7, l);
 }
 
 /* ---------------- Design C: Campfire ---------------- */
@@ -785,7 +857,7 @@ DESIGNS.forEach((d, i) => {
   btn.textContent = d.label;
   btn.onclick = () => select(d.id);
   btn.dataset.id = d.id;
-  tabsEl.appendChild(btn);
+  tabsEl.insertBefore(btn, document.getElementById("bgToggle"));
 
   const panel = document.createElement("div");
   panel.className = "panel";
@@ -798,8 +870,17 @@ function select(id) {
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.dataset.id === id));
   history.replaceState(null, "", "#" + id);
 }
+function setPageBg(bg) {
+  document.body.classList.remove("bg-white", "bg-gray");
+  if (bg !== "black") document.body.classList.add("bg-" + bg);
+  document.querySelectorAll(".bg-toggle .swatch").forEach(s =>
+    s.classList.toggle("active", s.title.toLowerCase() === bg));
+}
+setPageBg("black");
+
 const initial = location.hash.slice(1);
 select(DESIGNS.some(d => d.id === initial) ? initial : "aurora2");
+setCardLightness(document.getElementById("cardL").value);
 </script>
 </body>
 </html>
