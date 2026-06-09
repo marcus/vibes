@@ -10,10 +10,11 @@
         try {
           theme = localStorage.getItem('theme');
         } catch (e) {}
-        if (theme === 'dark' || (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        } else {
+        // Dark is the default; only an explicit saved 'light' choice opts out.
+        if (theme === 'light') {
           document.documentElement.setAttribute('data-theme', 'light');
+        } else {
+          document.documentElement.setAttribute('data-theme', 'dark');
         }
       })();
     </script>
