@@ -361,6 +361,17 @@
   .d-aurora2 .legend b { color: var(--ink); font-weight: 700; }
   .d-aurora2 .legend .repos { color: var(--faint); font-weight: 600; }
 
+  /* spotify + weather: one quiet line, faint tier, never competes with stats */
+  .d-aurora2 .extras {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    margin-top: 8px; font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums;
+  }
+  .d-aurora2 .extras .track {
+    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .d-aurora2 .extras .track::before { content: "♪ "; opacity: .8; }
+  .d-aurora2 .extras .wx { flex: 0 0 auto; margin-left: auto; white-space: nowrap; }
+
   .d-aurora2 .divider {
     display: flex; align-items: center; gap: 10px; margin: 8px 2px 0;
     font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--label);
@@ -516,14 +527,18 @@
 <script>
 /* ---------------- mock data (mirrors MergedStatus / UserSummary) ---------------- */
 const FRIENDS = [
-  { handle: "ana",   name: "Ana",    g: ["#f97316", "#fbbf24"], online: true,  status: "rewriting the parser, again", commits: 7, plus: 412, minus: 96,  repos: ["lexer", "docs"], when: "2 min ago" },
-  { handle: "theo",  name: "Theo",   g: ["#34d399", "#0ea5e9"], online: true,  status: "shipping the billing fix 🤞", commits: 4, plus: 188, minus: 240, repos: ["billing"],       when: "just now" },
-  { handle: "june",  name: "June",   g: ["#a78bfa", "#f472b6"], online: true,  status: "vibing with claude",          commits: 2, plus: 95,  minus: 12,  repos: ["sidecar", "infra"], when: "8 min ago" },
+  { handle: "ana",   name: "Ana",    g: ["#f97316", "#fbbf24"], online: true,  status: "rewriting the parser, again", commits: 7, plus: 412, minus: 96,  repos: ["lexer", "docs"], when: "2 min ago",
+    spotify: "Starburster · Fontaines D.C.", weather: "☀️ 72°" },
+  { handle: "theo",  name: "Theo",   g: ["#34d399", "#0ea5e9"], online: true,  status: "shipping the billing fix 🤞", commits: 4, plus: 188, minus: 240, repos: ["billing"],       when: "just now",
+    spotify: null, weather: "🌧 54°" },
+  { handle: "june",  name: "June",   g: ["#a78bfa", "#f472b6"], online: true,  status: "vibing with claude",          commits: 2, plus: 95,  minus: 12,  repos: ["sidecar", "infra"], when: "8 min ago",
+    spotify: "Weird Fishes / Arpeggi · Radiohead", weather: null },
   { handle: "priya", name: "Priya",  g: ["#fb7185", "#fdba74"], online: false, status: "",                            commits: 5, plus: 301, minus: 77,  repos: ["api"],           when: "3 hr ago" },
   { handle: "sam",   name: "Sam",    g: ["#60a5fa", "#34d399"], online: false, status: "",                            commits: 0, plus: 0,   minus: 0,   repos: [],                when: "yesterday" },
   { handle: "kofi",  name: "Kofi",   g: ["#facc15", "#fb923c"], online: false, status: "",                            commits: 1, plus: 24,  minus: 3,   repos: ["zine"],          when: "5 hr ago" },
 ];
-const ME = { name: "Marcus", g: ["#2dd4bf", "#1e3a8a"], status: "VIBES", commits: 3, plus: 777, minus: 34, repos: ["braid"] };
+const ME = { name: "Marcus", g: ["#2dd4bf", "#1e3a8a"], status: "VIBES", commits: 3, plus: 777, minus: 34, repos: ["braid"],
+  spotify: "Pink Pony Club · Chappell Roan", weather: "⛅️ 61°" };
 const online  = FRIENDS.filter(f => f.online);
 const offline = FRIENDS.filter(f => !f.online);
 
@@ -652,6 +667,11 @@ function aurora2() {
         <span><b>${p.commits}</b> commit${p.commits === 1 ? "" : "s"} today</span>
         <span class="repos">${p.repos.join(", ")}</span>
       </div>
+      ${p.spotify || p.weather ? `
+      <div class="extras">
+        ${p.spotify ? `<span class="track">${p.spotify}</span>` : ""}
+        ${p.weather ? `<span class="wx">${p.weather}</span>` : ""}
+      </div>` : ""}
     </div>`;
   const win = theme => `
   <div class="mac-window d-aurora2 ${theme}">
