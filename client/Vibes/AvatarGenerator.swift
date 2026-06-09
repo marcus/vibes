@@ -36,6 +36,14 @@ enum AvatarGenerationError: LocalizedError {
   }
 }
 
+// The PNG bytes plus the style the creator actually used. The chosen style may
+// differ from `house.styles.first` (the generator falls back to whatever the
+// device offers), so callers thread `style` through to the upload header/store.
+struct GeneratedAvatar {
+  let data: Data
+  let style: String
+}
+
 @available(macOS 15.4, *)
 struct AvatarGenerator {
   // Runtime capability probe: ImageCreator() throws when the device/model is
@@ -53,8 +61,10 @@ struct AvatarGenerator {
   }
 
   // Generate a square PNG for `prompt` under the server `house` style. Returns
-  // raw PNG bytes ready to POST to /api/avatar. Throws AvatarGenerationError.
-  func generate(prompt: String, house: HouseStyle) async throws -> Data {
+  // the raw PNG bytes (ready to POST to /api/avatar) plus the style id actually
+  // chosen by the creator, which may differ from `house.styles.first`. Throws
+  // AvatarGenerationError.
+  func generate(prompt: String, house: HouseStyle) async throws -> GeneratedAvatar {
     let creator: ImageCreator
     do {
       creator = try await ImageCreator()
@@ -72,7 +82,8 @@ struct AvatarGenerator {
     do {
       let stream = creator.images(for: [.text(full)], style: chosen, limit: 1)
       for try await created in stream {
-        return try encodeSquarePNG(created.cgImage, size: house.imageSize)
+        let data = try encodeSquarePNG(created.cgImage, size: house.imageSize)
+        return GeneratedAvatar(data: data, style: chosen.id)
       }
       // Stream finished with no image.
       throw AvatarGenerationError.failed

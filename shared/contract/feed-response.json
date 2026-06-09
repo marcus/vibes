@@ -3,7 +3,8 @@
     "user": {
       "id": "user-marcus",
       "handle": "marcus",
-      "display_name": "Marcus"
+      "display_name": "Marcus",
+      "avatar_url": null
     },
     "mode": "online",
     "manual_status": "working on Vibes",

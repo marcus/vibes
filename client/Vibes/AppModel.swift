@@ -450,12 +450,12 @@ final class AppModel: ObservableObject {
     avatarError = nil
     isGeneratingAvatar = true
     do {
-      let png = try await AvatarGenerator().generate(prompt: prompt, house: house)
-      avatarPreviewPNG = png
+      let generated = try await AvatarGenerator().generate(prompt: prompt, house: house)
+      avatarPreviewPNG = generated.data
       avatarLastPrompt = prompt
-      // Record the first style the server prefers (the generator picks the first
-      // available match) so the upload header reflects what was used.
-      avatarLastStyle = house.styles.first ?? ""
+      // Record the style the creator actually used (it may fall back from the
+      // server's first preference) so the upload header reflects what was used.
+      avatarLastStyle = generated.style
     } catch {
       avatarPreviewPNG = nil
       avatarError = error.localizedDescription

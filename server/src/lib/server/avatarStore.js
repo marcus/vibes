@@ -10,6 +10,11 @@ import { RelayError } from "./relay.js";
  *   remove(id) -> void
  *   urlFor(id) -> string        // public, cache-immutable URL for the slug
  *   kind: string                // value persisted in avatars.store
+ *
+ * NOTE: `urlFor` always builds URLs with the currently-configured store, so
+ * switching `VIBES_AVATAR_STORE` does NOT rebuild URLs for rows written by a
+ * different store — the existing assets must be migrated to the new backend
+ * (and re-served at the new base URL) for old avatars to keep resolving.
  */
 
 /**
@@ -30,9 +35,18 @@ export class FilesystemAvatarStore {
   /**
    * @param {string} id
    * @param {Buffer | Uint8Array} bytes
-   * @param {string} _contentType
+   * @param {string} contentType
    */
-  put(id, bytes, _contentType) {
+  put(id, bytes, contentType) {
+    // The slug is hardcoded to `.png`, so reject anything else rather than
+    // silently writing a mismatched extension and ignoring the param.
+    if (contentType !== "image/png") {
+      throw new RelayError(
+        "internal",
+        `FilesystemAvatarStore only supports image/png, got ${contentType}.`,
+        500,
+      );
+    }
     writeFileSync(join(this.dir, `${id}.png`), bytes);
   }
 

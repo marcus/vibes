@@ -732,10 +732,10 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
      WHERE user_id = ?
      ORDER BY updated_at DESC`,
   );
-  // The authenticated viewer object carries no avatar_id (or timezone, for
-  // legacy callers), so re-read the row to surface the viewer's own avatar_url.
+  // The authenticated viewer object carries no avatar_id, so re-read the row to
+  // surface the viewer's own avatar_url.
   const viewerRow =
-    viewer.avatar_id === undefined || viewer.timezone == null
+    viewer.avatar_id === undefined
       ? db
           .prepare(
             "SELECT id, handle, display_name, timezone, avatar_id FROM users WHERE id = ?",

@@ -33,7 +33,6 @@ enum FriendCardSize {
   var captionFont: Font {
     .system(size: self == .comfortable ? 12 : 11)
   }
-  var dotSize: CGFloat { self == .comfortable ? 14 : 10 }
   var chipFont: Font {
     .system(size: self == .comfortable ? 11 : 10, weight: .medium)
   }

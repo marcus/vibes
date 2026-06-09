@@ -383,7 +383,7 @@ private struct ProfileIconSettingsPane: View {
           .overlay(Circle().strokeBorder(VibeColor.cardBorder, lineWidth: 1))
       } else if let you = model.feed?.you {
         AvatarView(status: you, size: .comfortable, isOnline: you.mode == .online)
-          .scaleEffect(previewDiameter / 38)
+          .scaleEffect(previewDiameter / AvatarView.outerDiameter(for: .comfortable))
           .frame(width: previewDiameter, height: previewDiameter)
       } else {
         Circle()

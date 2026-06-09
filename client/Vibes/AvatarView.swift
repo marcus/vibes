@@ -19,10 +19,18 @@ struct AvatarView: View {
     self.isOnline = isOnline
   }
 
+  // The full outer diameter (image + gap + ring on every side) for a given size.
+  // Exposed so callers that scale a rendered AvatarView (e.g. the Settings
+  // preview) can match the real geometry instead of hardcoding a magic number.
+  static func outerDiameter(for size: FriendCardSize) -> CGFloat {
+    let metrics = AvatarMetrics(size: size)
+    return metrics.diameter + 2 * (metrics.gap + metrics.ringWidth)
+  }
+
   var body: some View {
     // The ring lives outside the image with a gap, so the overall frame is the
     // image diameter plus the gap and ring on every side.
-    let outer = metrics.diameter + 2 * (metrics.gap + metrics.ringWidth)
+    let outer = AvatarView.outerDiameter(for: size)
 
     ZStack {
       avatarFill
