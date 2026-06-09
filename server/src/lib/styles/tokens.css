@@ -11,7 +11,7 @@
 
 :root {
   /* --- Raw palette -------------------------------------------------------- */
-  --vibe-ink: #0e1b26; /* blue-black — same value as the old warm off-black, tinted toward the cool edge of the hero video */
+  --vibe-ink: #061320; /* deep blue-black — darker, richer blue drawn from the cool edge of the hero video */
   --vibe-paper: #f2eee6; /* warm off-white */
 
   /* Warm neutrals, light -> dark */
@@ -58,7 +58,7 @@
      for the rare separation that spacing cannot express. */
   --radius-sm: 2px;
   --radius-md: 4px;
-  --hairline: rgba(14, 27, 38, 0.1);
+  --hairline: rgba(6, 19, 32, 0.1);
 
   /* --- Semantic (light is default) --------------------------------------- */
   --bg: var(--vibe-paper);
@@ -66,7 +66,7 @@
   --muted: var(--vibe-ash-500);
   --faint: var(--vibe-ash-300);
   --accent: var(--vibe-accent);
-  --field-bg: rgba(14, 27, 38, 0.04);
+  --field-bg: rgba(6, 19, 32, 0.04);
 }
 
 @media (prefers-color-scheme: dark) {
