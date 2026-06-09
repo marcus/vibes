@@ -21,7 +21,6 @@
 
 <section class="hero" aria-label="Vibes">
   <div class="hero-inner">
-    <div class="glow glow-left" aria-hidden="true"></div>
     <!-- svelte-ignore a11y_media_has_caption -->
     <video
       bind:this={video}
@@ -36,7 +35,6 @@
       <source src="/hero/website-hero.webm" type="video/webm" />
       <source src="/hero/website-hero.mp4" type="video/mp4" />
     </video>
-    <div class="glow glow-right" aria-hidden="true"></div>
 
     <button
       type="button"
@@ -118,52 +116,66 @@
 
 <style>
   /* --- Hero -------------------------------------------------------------- */
+  /* The hero sits on the page background, not a separate black panel, so it
+     reads as the top of one continuous surface. The magenta (left) and teal
+     (right) glow is baked into this background; the video is feathered into
+     it so there is no hard rectangle. A final vertical fade guarantees the
+     bottom edge lands on exactly --bg, melting into the content below. */
   .hero {
     width: 100%;
-    background: #000;
     overflow: hidden;
+    background:
+      linear-gradient(to bottom, transparent 45%, var(--bg) 100%),
+      radial-gradient(
+        95% 78% at 14% 42%,
+        rgba(155, 15, 82, 0.55),
+        transparent 62%
+      ),
+      radial-gradient(
+        95% 78% at 86% 42%,
+        rgba(4, 86, 125, 0.6),
+        transparent 62%
+      ),
+      var(--bg);
   }
 
   .hero-inner {
     position: relative;
     height: clamp(240px, 32vw, 440px);
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: stretch;
-    justify-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
+  /* Sizing from height keeps the box at the clip's native 16:9, so the full
+     frame is always shown (never cropped) and the mask aligns exactly to the
+     video edges. In the desktop range the clip's width stays well under the
+     viewport, so it never needs cropping or letterboxing. */
   .hero-video {
     height: 100%;
     width: auto;
     max-width: 100%;
     display: block;
-    object-fit: cover;
-  }
-
-  /* Side fills bleed from the video edges out to black, matching the
-     magenta (left) and teal (right) glow sampled from the clip. */
-  .glow {
-    height: 100%;
-    width: 100%;
-  }
-
-  .glow-left {
-    background: radial-gradient(
-      135% 92% at 100% 50%,
-      #55052d 0%,
-      rgba(73, 5, 39, 0.55) 28%,
-      #000 66%
-    );
-  }
-
-  .glow-right {
-    background: radial-gradient(
-      135% 92% at 0% 50%,
-      #014261 0%,
-      rgba(0, 58, 86, 0.55) 28%,
-      #000 66%
-    );
+    -webkit-mask-image:
+      linear-gradient(
+        to right,
+        transparent 0,
+        #000 11%,
+        #000 89%,
+        transparent 100%
+      ),
+      linear-gradient(to bottom, #000 0, #000 78%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(
+        to right,
+        transparent 0,
+        #000 11%,
+        #000 89%,
+        transparent 100%
+      ),
+      linear-gradient(to bottom, #000 0, #000 78%, transparent 100%);
+    mask-composite: intersect;
   }
 
   .sound-toggle {
@@ -336,18 +348,12 @@
 
   @media (max-width: 720px) {
     .hero-inner {
-      display: block;
       height: auto;
     }
 
     .hero-video {
       width: 100%;
-      height: auto;
-      object-fit: contain;
-    }
-
-    .glow {
-      display: none;
+      max-height: none;
     }
 
     main {
