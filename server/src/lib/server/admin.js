@@ -21,9 +21,8 @@ import {
 const now = () => new Date().toISOString();
 
 /** Map a presence mode to a comparable rank, matching relay.js MODE_RANK. */
-const PRESENCE_CASE =
-  "CASE mode WHEN 'broadcasting' THEN 2 WHEN 'quiet' THEN 1 ELSE 0 END";
-const RANK_TO_MODE = ["offline", "quiet", "broadcasting"];
+const PRESENCE_CASE = "CASE mode WHEN 'online' THEN 1 ELSE 0 END";
+const RANK_TO_MODE = ["offline", "online"];
 
 /** Whitelisted sort columns for the user list — never interpolate raw input. */
 const USER_SORTS = {
@@ -287,7 +286,7 @@ export function dashboardStats(db) {
     invites.total += 1;
   }
 
-  // Per-user strongest presence, tallied into broadcasting/quiet/offline.
+  // Per-user strongest presence, tallied into online/offline.
   const presenceRows = db
     .prepare(
       `SELECT u.id,
@@ -295,7 +294,7 @@ export function dashboardStats(db) {
        FROM users u`,
     )
     .all();
-  const presence = { broadcasting: 0, quiet: 0, offline: 0 };
+  const presence = { online: 0, offline: 0 };
   for (const row of presenceRows) {
     presence[RANK_TO_MODE[row.rank ?? 0]] += 1;
   }
@@ -309,17 +308,17 @@ export function dashboardStats(db) {
 }
 
 /**
- * Users currently broadcasting, newest activity first, for the dashboard list.
+ * Users currently online, newest activity first, for the dashboard list.
  * @param {import('better-sqlite3').Database} db
  * @param {number} [limit]
  */
-export function currentlyBroadcasting(db, limit = 12) {
+export function currentlyOnline(db, limit = 12) {
   return db
     .prepare(
       `SELECT u.id, u.handle, u.display_name, MAX(s.updated_at) AS updated_at
        FROM statuses s
        JOIN users u ON u.id = s.user_id
-       WHERE s.mode = 'broadcasting' AND u.disabled_at IS NULL
+       WHERE s.mode = 'online' AND u.disabled_at IS NULL
        GROUP BY u.id
        ORDER BY updated_at DESC
        LIMIT ?`,

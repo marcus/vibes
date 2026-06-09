@@ -29,7 +29,7 @@ xcodebuild -project client/Vibes.xcodeproj -scheme Vibes -configuration Debug -d
 3. **Secure Auth Storage**: Authentication tokens are stored securely in the macOS Keychain (`Vibes Relay` service) rather than in the configuration file.
 4. **Git Scanner Service**: Scans uncommitted and committed changes since midnight for all tracked repositories, aggregating commits, files changed, insertions, and deletions without publishing repo paths or code-origin attribution.
 5. **Feed & Status Update**: Centralized state manager publishes local status updates and retrieves the merged feed (the user's status and friends' statuses) periodically.
-6. **Presence Modes & Vibes**: Supports Broadcasting, Quiet, and Offline presence modes. Derived vibes are automatically computed from git activity levels (e.g. warming up, deep work, yak shaving, rage fixing).
+6. **Presence**: Two states — online and offline — derived from recent activity. You are online when you have published within the recency window and have not hidden yourself; a one-tap Offline toggle hides you immediately. Stale online presence reads as "online … ago" from the last update.
 7. **Invite Link Management**: Users can generate new single-use invite URLs, copy them to the clipboard, list pending invites, and revoke open invites directly from the app interface.
 8. **Periodic Refresh Loop**: Background synchronizer scans, publishes, and fetches the feed every 3 minutes, with an immediate manual refresh trigger in the header.
 

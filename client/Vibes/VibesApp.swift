@@ -57,14 +57,10 @@ struct VibesApp: App {
       }
       CheckForUpdatesView(updater: updaterController.updater)
       Divider()
-      Picker("Mode", selection: Binding(
-        get: { model.mode },
-        set: { model.setMode($0) }
-      )) {
-        ForEach(PresenceMode.allCases) { mode in
-          Text(mode.label).tag(mode)
-        }
-      }
+      Toggle("Online", isOn: Binding(
+        get: { model.mode == .online },
+        set: { model.setMode($0 ? .online : .offline) }
+      ))
       Button("Scan Now") {
         Task { await model.scanPublishAndFetch() }
       }

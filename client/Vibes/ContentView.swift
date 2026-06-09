@@ -128,7 +128,7 @@ private struct MainPanel: View {
       HStack(alignment: .top) {
         Header(title: "vibes", subtitle: model.config?.identity.displayName ?? "")
         Spacer()
-        Picker("Mode", selection: Binding(
+        Picker("Presence", selection: Binding(
           get: { model.mode },
           set: { model.setMode($0) }
         )) {
@@ -137,8 +137,8 @@ private struct MainPanel: View {
           }
         }
         .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(width: 150)
+        .pickerStyle(.segmented)
+        .frame(width: 160)
       }
 
       HStack(spacing: 8) {
@@ -243,24 +243,24 @@ private struct StatusRow: View {
     } label: {
       VStack(alignment: .leading, spacing: 7) {
         HStack(alignment: .firstTextBaseline) {
+          Circle()
+            .fill(status.mode == .online ? VibeColor.online : VibeColor.muted)
+            .frame(width: 7, height: 7)
           Text(isYou ? "you" : status.user.displayName)
             .font(.system(size: 16, weight: .medium))
-          Text(status.derivedStatus)
-            .font(.system(size: 13))
-            .foregroundStyle(tint)
           Spacer()
           Text(relative(status.updatedAt))
             .font(.caption)
             .foregroundStyle(VibeColor.muted)
         }
 
-        if let manual = status.manualStatus, !manual.isEmpty {
+        if status.mode == .online, let manual = status.manualStatus, !manual.isEmpty {
           Text(manual)
             .font(.system(size: 14))
             .foregroundStyle(VibeColor.foreground)
             .lineLimit(2)
-        } else if status.mode != .broadcasting {
-          Text(status.mode == .quiet ? "online, not broadcasting" : "offline")
+        } else {
+          Text(presenceText)
             .font(.system(size: 14))
             .foregroundStyle(VibeColor.muted)
         }
@@ -280,13 +280,12 @@ private struct StatusRow: View {
     }
   }
 
-  private var tint: Color {
-    switch status.derivedStatus {
-    case "ship mode": Color(red: 0.82, green: 0.18, blue: 0.08)
-    case "deep work", "vibing": Color(red: 0.18, green: 0.45, blue: 0.34)
-    case "yak shaving", "rage fixing": Color(red: 0.78, green: 0.43, blue: 0.10)
-    default: VibeColor.muted
-    }
+  // Online → "online". Offline but with a recent timestamp (sharing, just idle)
+  // → "online {relative} ago". Offline with no timestamp (hidden) → "offline".
+  private var presenceText: String {
+    if status.mode == .online { return "online" }
+    guard let updatedAt = status.updatedAt else { return "offline" }
+    return "online \(updatedAt.formatted(.relative(presentation: .numeric)))"
   }
 
   private func relative(_ date: Date?) -> String {
@@ -637,6 +636,7 @@ private enum VibeColor {
   static let ink = NSColor(red: 0.102, green: 0.090, blue: 0.078, alpha: 1)
   static let paper = NSColor(red: 0.949, green: 0.933, blue: 0.902, alpha: 1)
   static let accent = Color(red: 0.878, green: 0.325, blue: 0.122)
+  static let online = Color(red: 0.18, green: 0.55, blue: 0.34)
   static let background = Color(nsColor: NSColor(name: nil) { appearance in
     appearance.isDarkMode ? ink : paper
   })

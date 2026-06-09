@@ -120,7 +120,6 @@ struct StatusPayload: Codable {
   var deviceLabel: String
   var mode: PresenceMode
   var manualStatus: String?
-  var derivedStatus: String
   var day: String
   var updatedAt: Date
   var cards: [StatusCard]
@@ -130,7 +129,6 @@ struct StatusPayload: Codable {
     case deviceLabel = "device_label"
     case mode
     case manualStatus = "manual_status"
-    case derivedStatus = "derived_status"
     case day
     case updatedAt = "updated_at"
     case cards
@@ -278,13 +276,12 @@ enum StatusBuilder {
     stats: DailyGitStats,
     now: Date = Date()
   ) -> StatusPayload {
-    let cards = mode == .broadcasting ? buildCards(config: config, stats: stats) : []
+    let cards = mode == .online ? buildCards(config: config, stats: stats) : []
     return StatusPayload(
       deviceID: config.device.id,
       deviceLabel: config.device.label,
       mode: mode,
-      manualStatus: mode == .broadcasting ? manualStatus.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty : nil,
-      derivedStatus: mode == .broadcasting ? deriveVibe(stats: stats) : mode.rawValue,
+      manualStatus: mode == .online ? manualStatus.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty : nil,
       day: localDay(now),
       updatedAt: now,
       cards: cards
@@ -323,15 +320,6 @@ enum StatusBuilder {
       )
     }
     return cards
-  }
-
-  static func deriveVibe(stats: DailyGitStats) -> String {
-    if stats.commits >= 3 && stats.insertions + stats.deletions > 500 { return "ship mode" }
-    if stats.reposTouched >= 4 { return "wandering" }
-    if stats.deletions > stats.insertions * 2 && stats.deletions > 100 { return "yak shaving" }
-    if stats.commits >= 2 || stats.uncommittedInsertions + stats.uncommittedDeletions > 150 { return "vibing" }
-    if stats.hasActivity { return "warming up" }
-    return "quiet"
   }
 
   static func localDay(_ date: Date) -> String {

@@ -27,7 +27,7 @@ Primary target:
 - Tiny centralized VPS relay
 - Local Git repo stats scanner
 - Manual status text
-- Broadcast / quiet / offline control
+- Online / offline control
 - Friend feed
 
 Assume users are technical Mac users.
@@ -48,45 +48,41 @@ The menu bar companion is secondary.
 Menu bar actions:
 
 - Show / Hide Vibes
-- Set Broadcasting / Quiet / Offline
+- Set Online / Offline
 - Scan now
 - Quit
 
 ## Presence States
 
-### Broadcasting
+Presence has two states: Online and Offline. The only manual control is an Online ⇄ Offline toggle (default Online).
 
-Friends can see current derived stats and manual status.
+### Online
+
+The user is sharing and has published activity within a 10-minute recency window. Friends see a green "online" indicator plus the for-fun cards: aggregate git stats, optional manual note, and optional repo alias.
 
 Example:
 
 ```text
-Marcus is vibing
+Marcus is online
 4 repos touched - 7 commits - +1,248 / -402 LOC
 "working on Vibes"
 ```
 
-### Quiet
-
-User is online but not broadcasting details.
-
-Example:
-
-```text
-Marcus is online, not broadcasting
-```
-
-Quiet should publish a latest status with `mode: "quiet"` and no share cards. It should not preserve old broadcast cards in the feed while hiding them client-side.
-
 ### Offline / Invisible
 
-Friends see user as offline or last seen, depending on implementation.
+A user is Offline in either of two cases:
 
-Example:
+- They toggled themselves offline (invisible/paused). This surfaces no timestamp.
+- They are still sharing but have not published within 10 minutes (laptop asleep or idle). The client renders a friendly "online {relative} ago" (for example "online 10 hours ago") from the last update timestamp.
+
+Examples:
 
 ```text
-Marcus offline - last seen 2h ago
+Marcus offline
+Marcus online 10 hours ago
 ```
+
+Toggling Offline publishes a latest status with `mode: "offline"` and no share cards, replacing the user's latest status blob. It does not preserve old online cards in the feed while hiding them client-side.
 
 Quitting the app should not be the only privacy control.
 
@@ -102,37 +98,9 @@ Examples:
 - "coffee then shipping"
 - "not coding, just around"
 
-Manual status is separate from derived status. Derived status can say "vibing" or "deep work"; manual status is user-authored.
+Manual status is user-authored free text. It is shared while the user is Online, alongside the for-fun cards.
 
 Manual status should be optional and easy to clear.
-
-## Derived Vibes
-
-The app can derive a coarse status from local activity.
-
-Initial statuses:
-
-- offline
-- quiet
-- warming up
-- vibing
-- deep work
-- yak shaving
-- ship mode
-- wandering
-- rage fixing
-
-Initial derivation can be simple:
-
-- no activity recently: quiet / offline
-- small activity: warming up
-- multiple commits or uncommitted changes: vibing
-- sustained repo activity: deep work
-- many repos touched: wandering or yak shaving
-- many deletions or refactors: yak shaving
-- recent commits with substantial changes: ship mode
-
-Exact heuristics are not critical for v1.
 
 ## Local Git Stats
 
@@ -202,7 +170,7 @@ SwiftUI macOS app:
 - local config
 - local Git scanner
 - local status aggregation
-- broadcast mode toggle
+- online/offline toggle
 - manual status editor
 - friend feed UI, including an empty state when the user has no friends yet
 - friend detail popover
@@ -244,11 +212,9 @@ The relay stores the latest status only. It does not store status history by def
 
 Status records do not expire. If a user has ever published a status, friends can continue to see that latest status with its `updated_at` timestamp. The client can render stale states such as "last updated 3h ago" or "last updated yesterday", but the relay should not delete or hide a status just because it is old.
 
-Offline is an explicit presence mode or the absence of any status. On a graceful quit the app makes a best-effort publish of an Offline status for that device. If the app exits without publishing Offline, the previous status remains visible as stale.
+Offline is an explicit presence mode or the absence of any status. On a graceful quit the app makes a best-effort publish of an Offline status for that device. If the app exits without publishing Offline, the previous status remains visible as stale. Publishing Offline replaces the user's latest status blob with an offline payload containing no optional cards.
 
-Quiet is also explicit. Publishing Quiet replaces the user's latest status blob with a quiet payload containing no optional cards.
-
-The model answers "what was their latest vibe?" rather than acting as a strict realtime online indicator.
+The model answers "what was their latest activity?" rather than acting as a strict realtime online indicator.
 
 ### Multi-Device
 
@@ -258,10 +224,11 @@ Each install generates a stable `device_id` (a local UUID) on first launch and s
 
 The feed merges a user's device rows into one presence view per user on read. Merge rules:
 
-- Presence mode is the strongest mode across the user's devices, using the order broadcasting > quiet > offline. A user is Offline only when every device is Offline or absent.
-- Manual status, derived vibe, and singleton cards (`spotify`, `weather`, `repo_aliases`) come from the broadcasting device with the most recent `updated_at`.
-- `git_stats` is summed across broadcasting devices that share the most recent `client_day`. Devices reporting an older `client_day` are ignored so a stale laptop does not inflate today's totals.
+- Presence mode is the strongest mode across the user's devices, using the order online > offline (`MODE_RANK = {offline: 0, online: 1}`). A user is Offline only when every device is Offline or absent.
+- Manual status and singleton cards (`spotify`, `weather`, `repo_aliases`) come from the online device with the most recent `updated_at`.
+- `git_stats` is summed across online devices that share the most recent `client_day`. Devices reporting an older `client_day` are ignored so a stale laptop does not inflate today's totals.
 - `updated_at` for the merged view is the newest contributing device's `updated_at`.
+- Recency gates the reported state: an `online` row whose newest contributing `updated_at` is within 10 minutes reports `online`. If that timestamp is stale the merged view reports `offline` but preserves the merged `updated_at` as the last-seen time so the client can render "online … ago". A genuinely-offline (toggled) user reports `offline` with `updated_at: null`.
 
 Revoking a device's token stops that device from publishing. Its last status row remains until overwritten or until the row is removed by admin action.
 
@@ -274,7 +241,6 @@ Core fields:
 - user identity summary
 - presence mode
 - manual status
-- derived vibe label
 - client day
 - `updated_at`
 
@@ -531,7 +497,6 @@ Default shared status should include only:
 - handle/display name
 - presence state
 - manual status if user entered one
-- derived vibe label
 - aggregate daily stats
 - last updated timestamp
 - optional enabled cards such as repo aliases, Spotify, or weather
@@ -557,9 +522,8 @@ The app is for friends, but still avoid accidental oversharing.
     "handle": "marcus",
     "display_name": "Marcus"
   },
-  "mode": "broadcasting",
+  "mode": "online",
   "manual_status": "working on Vibes",
-  "derived_status": "vibing",
   "day": "2026-06-06",
   "updated_at": "2026-06-06T18:02:00Z",
   "cards": [
@@ -606,17 +570,17 @@ Main panel:
 +------------------------------------+
 | Vibes                              |
 |                                    |
-| Marcus      vibing        +1.2k    |
+| Marcus    o online        +1.2k    |
 | "working on Vibes"                 |
 |                                    |
-| Ken         deep work       +412   |
+| Ken       o online          +412   |
 | "refactoring the weird part"       |
 |                                    |
-| Justin      quiet            -     |
-| online, not broadcasting           |
+| Justin    . offline          -     |
+| online 3h ago                      |
 |                                    |
 | Status: working on Vibes           |
-| Mode: Broadcasting v               |
+| Mode: Online v                     |
 +------------------------------------+
 ```
 
@@ -624,7 +588,7 @@ User detail view:
 
 ```text
 Ken today
-Status: deep work
+Status: online
 Manual: "refactoring the weird part"
 Commits: 5
 Files touched: 18
@@ -656,7 +620,7 @@ Clicking a friend row opens that friend's detail as a popover anchored to the ro
 
 The footer holds two controls:
 
-- A mode control (Broadcasting / Quiet / Offline). Changing it publishes immediately.
+- A mode control (Online / Offline). Changing it publishes immediately.
 - A single-line manual status field. Typing and committing publishes the new manual status; clearing the field to empty removes `manual_status`. A small clear affordance empties it in one click.
 
 ### Settings Window
@@ -671,21 +635,9 @@ Settings writes the same config JSON described in Configuration, so hand-edited 
 
 ### Visual Language
 
-The app is native SwiftUI and supports both light and dark mode, following the system accent. The tone is calm and low-density: generous spacing, SF Pro text, and SF Symbols. Each derived vibe has an icon and tint so the feed reads at a glance. A starting mapping:
+The app is native SwiftUI and supports both light and dark mode, following the system accent. The tone is calm and low-density: generous spacing, SF Pro text, and SF Symbols. Presence is shown with a simple two-state indicator so the feed reads at a glance: a green dot for Online and a muted gray dot for Offline. An offline row that still has a last-seen timestamp renders "online … ago" next to the muted dot; a toggled-offline row just reads "offline".
 
-| Vibe | Symbol | Tint |
-| --- | --- | --- |
-| offline | `moon.zzz` | gray |
-| quiet | `circle.dotted` | gray |
-| warming up | `sunrise` | soft orange |
-| vibing | `waveform` | green |
-| deep work | `scope` | indigo |
-| yak shaving | `scissors` | brown |
-| ship mode | `paperplane.fill` | teal |
-| wandering | `figure.walk` | purple |
-| rage fixing | `flame` | red |
-
-Exact symbols and tints are not critical for v1; the mapping exists so vibes are visually distinct rather than text-only.
+Exact symbols and tints are not critical for v1; the indicator exists so presence is visually clear rather than text-only.
 
 ### Brand Assets
 
@@ -857,7 +809,7 @@ An ADR is an Architecture Decision Record: a short document that records one imp
 - secondary manual refresh action
 - clean visual design
 - light and dark mode support
-- derived vibe label with per-vibe iconography
+- online/offline presence indicator
 - friend detail popover
 - in-app invite creation, sharing, and revocation
 - feed loading, stale, relay-unreachable, and empty states
@@ -965,7 +917,7 @@ Add:
 - menu bar companion
 - window position persistence
 - periodic scanning
-- derived vibe label
+- online/offline presence indicator
 - better visual design
 - optional Spotify if time remains
 
@@ -976,7 +928,7 @@ By the end of the hackathon:
 - Two people can run the app on their Macs.
 - Each person can configure at least one repo.
 - Each person can set a manual status.
-- Each person can choose Broadcasting / Quiet / Offline.
+- Each person can choose Online / Offline.
 - Each person can see the other person's current status and daily coding stats.
 - The app feels like a small ambient friend-presence object.
 
@@ -986,10 +938,8 @@ Vibes should feel warm, nerdy, low-stakes, and private.
 
 Prefer language like:
 
-- vibing
 - around
 - building
-- quiet
-- ship mode
-- yak shaving
+- shipping
+- heads down
 - what are friends up to?

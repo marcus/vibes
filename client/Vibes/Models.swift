@@ -1,16 +1,14 @@
 import Foundation
 
 enum PresenceMode: String, Codable, CaseIterable, Identifiable {
-  case broadcasting
-  case quiet
+  case online
   case offline
 
   var id: String { rawValue }
 
   var label: String {
     switch self {
-    case .broadcasting: "Broadcasting"
-    case .quiet: "Quiet"
+    case .online: "Online"
     case .offline: "Offline"
     }
   }
@@ -122,7 +120,7 @@ struct PresenceConfig: Codable, Equatable {
   var mode: PresenceMode
   var manualStatus: String
 
-  static let defaults = PresenceConfig(mode: .broadcasting, manualStatus: "")
+  static let defaults = PresenceConfig(mode: .online, manualStatus: "")
 
   enum CodingKeys: String, CodingKey {
     case mode
@@ -275,7 +273,6 @@ struct MergedStatus: Codable, Equatable, Identifiable {
   var user: UserSummary
   var mode: PresenceMode
   var manualStatus: String?
-  var derivedStatus: String
   var day: String?
   var updatedAt: Date?
   var cards: [StatusCard]
@@ -284,7 +281,6 @@ struct MergedStatus: Codable, Equatable, Identifiable {
     case user
     case mode
     case manualStatus = "manual_status"
-    case derivedStatus = "derived_status"
     case day
     case updatedAt = "updated_at"
     case cards

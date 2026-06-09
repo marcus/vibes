@@ -23,12 +23,12 @@ Collapse Vibes' presence model to **two states — online and offline — and no
 
 **Two states, derived by default, with one manual override.**
 
-- **Online** — the user is sharing *and* has published activity within a recency `THRESHOLD`. Friends see a green/"online" indicator plus the optional for-fun cards (aggregate Git stats, optional manual note, optional repo alias).
-- **Offline** — either the user has flipped themselves offline (invisible/paused), *or* they are sharing but haven't published within `THRESHOLD` (laptop asleep, app closed, idle). Friends see "offline" or, when we have a timestamp, **"last seen N minutes ago"** (rolling up to hours/days). No cards.
+- **Online** — the user is sharing *and* has published activity within the **10-minute** recency threshold. Friends see a green/"online" indicator plus the optional for-fun cards (aggregate Git stats, optional manual note, optional repo alias).
+- **Offline** — either the user has flipped themselves offline (invisible/paused), *or* they are sharing but haven't published within 10 minutes (laptop asleep, app closed, idle). Friends see **friendly last-seen language** built from the timestamp, e.g. **"online 10 hours ago"** / "online 5 minutes ago" (rolling minutes → hours → days). When there's no timestamp at all, just "offline". No cards.
 
 **The only manual control** is an Online ⇄ Offline toggle (default Online). Flipping to Offline hides you immediately regardless of activity. There is no third mode, no "broadcasting" label, and no vibe word anywhere.
 
-**Words the user ever sees:** `online`, `offline`, and `last seen … ago`. That's it.
+**Words the user ever sees:** `online`, `offline`, and `online … ago`. That's it.
 
 ### What stays (untouched by this phase)
 
@@ -90,18 +90,18 @@ Every place the three concepts (quiet mode, "broadcasting" wording, derived vibe
 ### Client (SwiftUI)
 
 1. **Collapse the enum.** `PresenceMode` → two cases: `online`, `offline` (rename `broadcasting`→`online`, delete `quiet`). Labels `"Online"` / `"Offline"`. — [Models.swift:3-17](client/Vibes/Models.swift)
-2. **Config + state defaults** flip `.broadcasting` → `.online`. Decode tolerantly: a stored `"broadcasting"` maps to `.online`, a stored `"quiet"` maps to `.offline` (custom `init(from:)` or a normalizing decoder), so existing config files don't break. — [Models.swift:121-131](client/Vibes/Models.swift), [AppModel.swift:10,48,158](client/Vibes/AppModel.swift)
+2. **Config + state defaults** flip `.broadcasting` → `.online`. No tolerant decoding — just change the default and the cases. (Pre-public, two installs; the config on both machines gets rewritten on next launch. See [[no-legacy-until-public]].) — [Models.swift:121-131](client/Vibes/Models.swift), [AppModel.swift:10,48,158](client/Vibes/AppModel.swift)
 3. **Replace both mode pickers with an Online/Offline toggle.** The main panel (`ContentView`) and menu bar (`VibesApp`) currently render a 3-item `Picker` over `allCases`. Replace with a single toggle/segmented control (Online ⇄ Offline). `setMode` stays as the action. — [ContentView.swift:131-141](client/Vibes/ContentView.swift), [VibesApp.swift:60-67](client/Vibes/VibesApp.swift)
 4. **Delete `deriveVibe` and `derived_status`.** Remove the function, the `StatusPayload.derivedStatus` field and its coding key, and stop sending the field. — [GitScanner.swift:280-291,328-335,133](client/Vibes/GitScanner.swift)
-5. **Friend-row rendering.** Remove `derivedStatus` from `MergedStatus` and the vibe-based `tint` switch. The dot becomes a plain **online (green) / offline (muted)** indicator. Detail text: when online but stale → `"last seen N minutes ago"` (use `updatedAt`); when offline → `"offline"`; drop `"online, not broadcasting"`. Detail popover stops showing a vibe word. — [Models.swift:273-296](client/Vibes/Models.swift), [ContentView.swift:262-266,283-296,305](client/Vibes/ContentView.swift)
+5. **Friend-row rendering.** Remove `derivedStatus` from `MergedStatus` and the vibe-based `tint` switch. The dot becomes a plain **online (green) / offline (muted)** indicator. Detail text: when online and fresh → `"online"`; when stale → friendly **"online {relative} ago"** from `updatedAt` (e.g. "online 10 hours ago"); when offline-by-toggle with no timestamp → `"offline"`; drop `"online, not broadcasting"`. SwiftUI's `.formatted(.relative(...))` already gives the friendly phrasing. Detail popover stops showing a vibe word. — [Models.swift:273-296](client/Vibes/Models.swift), [ContentView.swift:262-266,283-296,305](client/Vibes/ContentView.swift)
 
 ### Server (relay)
 
-6. **Modes → two values.** `MODES = {online, offline}`; `MODE_RANK {offline:0, online:1}`. On publish, accept legacy `"broadcasting"`→`online` and `"quiet"`→`offline` (normalize before validating) so older clients keep working during rollout. — [relay.js:7-8,338](server/src/lib/server/relay.js)
+6. **Modes → two values.** `MODES = {online, offline}`; `MODE_RANK {offline:0, online:1}`. Reject anything else — no legacy `broadcasting`/`quiet` acceptance (both installs update together; see [[no-legacy-until-public]]). — [relay.js:7-8,338](server/src/lib/server/relay.js)
 7. **Sharing gate** keyed on `online` instead of `broadcasting`: cards/manual shared only when `online`; `offline` replaces the blob with no cards (same shape quiet/offline had). — [relay.js:353-371](server/src/lib/server/relay.js)
 8. **Remove `derived_status`.** Stop reading/defaulting/emitting it in publish and in `mergeUserStatuses`. — [relay.js:366-368,463,497](server/src/lib/server/relay.js)
-9. **Recency-based liveness in the feed.** In `mergeUserStatuses`, compute the friend's effective state: if mode is `online` *and* the source row's `updated_at` is within `THRESHOLD`, report `online`; if `online` but stale, report `offline` with a `last_seen` timestamp (= `updated_at`); if mode `offline`, report `offline` with no `last_seen`. Keep using the **existing single merge source / `client_day` logic untouched** — no multi-device changes. — [relay.js:460-540](server/src/lib/server/relay.js)
-10. **Contract + schema.** Update `shared/contract/status-broadcasting.json` (rename file/value to `online`, drop `derived_status`) and `feed-response.json`. Bump `schema_version` if the contract tests key on it. — [shared/contract/](shared/contract/)
+9. **Recency-based liveness in the feed.** In `mergeUserStatuses`, compute the friend's effective state: if mode is `online` *and* the source row's `updated_at` is within **10 min**, report `online`; if `online` but stale, report `offline` and surface the `updated_at` as `last_seen` so the client can render "online {relative} ago"; if mode `offline`, report `offline` with no `last_seen`. Keep using the **existing single merge source / `client_day` logic untouched** — no multi-device changes. — [relay.js:460-540](server/src/lib/server/relay.js)
+10. **Contract.** Rename `shared/contract/status-broadcasting.json` → `status-online.json` with `"mode": "online"` and no `derived_status`; update `feed-response.json` likewise (add `last_seen` where modeled). No `schema_version` bump needed. — [shared/contract/](shared/contract/)
 
 ### Admin
 
@@ -111,7 +111,7 @@ Every place the three concepts (quiet mode, "broadcasting" wording, derived vibe
 
 ### Tests
 
-14. **`relay.test.js`**: rename `broadcasting`→`online` everywhere; delete/replace the three quiet-specific cases (299-312, 377-379, 427) with offline equivalents; remove `derived_status` assertions; add a regression that **legacy `"broadcasting"`/`"quiet"` payloads are normalized** to online/offline, and a test for the **recency → offline/"last seen"** transition. — [relay.test.js](server/tests/relay.test.js)
+14. **`relay.test.js`**: rename `broadcasting`→`online` everywhere; delete/replace the three quiet-specific cases (299-312, 377-379, 427) with offline equivalents; remove `derived_status` assertions; add a test for the **recency → offline + `last_seen`** transition (online row within 10 min reports online; same row aged past 10 min reports offline with `last_seen`). — [relay.test.js](server/tests/relay.test.js)
 15. **`admin.test.js`**: drop `derived_status`; update presence-tally expectations. — [admin.test.js:51](server/tests/admin.test.js)
 
 ### Copy & docs
@@ -138,26 +138,25 @@ Every place the three concepts (quiet mode, "broadcasting" wording, derived vibe
 
 (These are starting strings, not final — the only hard constraints are: no "quiet", no "broadcasting", no vibe-label words, online/offline only.)
 
-## Backward compatibility / rollout
+## No legacy support
 
-- **Old clients keep publishing** `mode: "broadcasting"` / `"quiet"` for a while. The server normalizes on ingest (step 6): `broadcasting→online`, `quiet→offline`. So a mixed fleet works.
-- **Old config files** on disk still say `mode: "broadcasting"`; client decode normalizes (step 2). No migration script needed.
-- **Old feed rows** with a stored `derived_status` are simply ignored by the new feed builder; nothing surfaces it.
-- Do the **server normalization before** shipping the new client, so an updated relay tolerates both old and new clients.
+Pre-public, exactly two installs (this Mac + MacBook Pro), no external users. Rip and replace — **no** legacy-value normalization, **no** tolerant config decoding, **no** migration scripts, **no** schema-version bump. Both machines update together and rewrite their own config/status on next launch. (See [[no-legacy-until-public]].) Reinstate normal back-compat discipline once Vibes goes public.
 
 ## Suggested implementation order
 
-1. **Server normalization + two-state modes + drop `derived_status`** (steps 6-10) with legacy mapping. Ship first; tolerant of old clients.
-2. **Recency liveness** in the feed (step 9) + threshold decision.
-3. **Client enum/config/pickers/rendering** (steps 1-5).
-4. **Admin** (steps 11-13).
-5. **Tests + contract** (steps 14-15, 10).
-6. **Copy & docs** (steps 16-19).
+1. **Server two-state modes + drop `derived_status` + recency liveness** (steps 6-10).
+2. **Client enum/config/pickers/rendering** (steps 1-5).
+3. **Admin** (steps 11-13).
+4. **Tests + contract** (steps 14-15, 10).
+5. **Copy & docs** (steps 16-19).
 
-## Open questions / decisions
+## Settled decisions
 
-- **Online `THRESHOLD`.** Publish cadence is ~3 min today. A window tighter than that flickers; recommend `THRESHOLD ≈ 8–10 min` (≈3× cadence) unless we also tighten the heartbeat. Configurable per relay?
-- **`last seen` precision.** Source from the merge row's `updated_at` (cheap, single-source) — fine for this phase since multi-device "last active" is deferred. Confirm that's acceptable when a user has two machines (off-machine staleness could show "last seen" while the other is active — acceptable until the multi-device phase).
-- **Keep the manual note?** `manual_status` survives by default (it's user-authored, not a derived label). Confirm we want to keep it, or cut it for a purer online/offline UI. (Low stakes.)
-- **Offline-toggle wording in-app.** Toggle labeled `Online`/`Offline`, or a checkbox "Go offline"? Recommend a two-state toggle reading `Online` / `Offline`.
-- **`schema_version` bump?** Decide whether dropping `derived_status` and renaming the mode warrants a contract version increment, and whether contract tests assert on it.
+- **Online threshold: 10 minutes.** Within 10 min of last publish → online; older → offline with a last-seen timestamp.
+- **Last-seen wording: friendly relative**, e.g. "online 10 hours ago". Use the merge row's `updated_at` (single-source) — fine here since multi-device "last active" is the deferred phase.
+- **Keep `manual_status`** — user-authored note, not a derived label.
+- **No `schema_version` bump.**
+
+## Open questions
+
+- **Offline-toggle wording in-app.** A two-state toggle reading `Online` / `Offline` (recommended) vs a checkbox "Go offline". Low stakes — confirm during implementation.

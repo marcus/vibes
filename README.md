@@ -2,7 +2,7 @@
 
 A small macOS app for private, ambient presence among friends who are building things together.
 
-Vibes shows who is around, what kind of coding day they are having, and coarse daily stats from local Git repositories. The app is designed for small friend groups, privacy-respecting defaults, and a lightweight native desktop experience.
+Vibes shows which friends are online and coding, plus coarse daily stats from local Git repositories. The app is designed for small friend groups, privacy-respecting defaults, and a lightweight native desktop experience.
 
 ## Status
 
@@ -62,7 +62,7 @@ For v1 it should store user identity, friend invites, friend relationships, and 
 The client is a SwiftUI macOS app. The first build target is a small mostly chromeless desktop window with:
 
 - manual status
-- Broadcasting / Quiet / Offline mode
+- online / offline presence, with a one-tap Offline toggle
 - configured local Git repo scanner
 - aggregate daily stats
 - friend feed from the relay

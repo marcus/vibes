@@ -10,7 +10,7 @@
   } from "$lib/components/admin/index.js";
 
   let { data } = $props();
-  let { stats, broadcasting, recentInvites, audit } = $derived(data);
+  let { stats, online, recentInvites, audit } = $derived(data);
 
   const AUDIT_LABELS = {
     "user.disable": "disabled a user",
@@ -53,25 +53,24 @@
   />
   <Stat
     label="presence"
-    value={stats.presence.broadcasting}
-    sub="broadcasting now"
-    accent={stats.presence.broadcasting > 0}
+    value={stats.presence.online}
+    sub="online now"
+    accent={stats.presence.online > 0}
     parts={[
-      { label: "quiet", value: stats.presence.quiet },
       { label: "offline", value: stats.presence.offline },
     ]}
   />
 </div>
 
 <div class="columns">
-  <Section title="Broadcasting now" count={broadcasting.length}>
-    {#if broadcasting.length}
+  <Section title="Online now" count={online.length}>
+    {#if online.length}
       <ul class="people">
-        {#each broadcasting as person (person.id)}
+        {#each online as person (person.id)}
           <li>
             <a class="person" href="/admin/users/{person.id}">
               <span class="who">
-                <StateBadge state="broadcasting" label={person.handle} />
+                <StateBadge state="online" label={person.handle} />
               </span>
               <span class="name">{person.display_name}</span>
               <span class="when"><RelativeTime value={person.updated_at} /></span>
@@ -80,7 +79,7 @@
         {/each}
       </ul>
     {:else}
-      <EmptyState icon="dot" title="No one is broadcasting" description="Live presence will show up here as friends start sharing." />
+      <EmptyState icon="dot" title="No one is online" description="Live presence will show up here as friends start sharing." />
     {/if}
   </Section>
 

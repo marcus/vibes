@@ -1,6 +1,6 @@
 import { getDb } from "$lib/server/db.js";
 import {
-  currentlyBroadcasting,
+  currentlyOnline,
   dashboardStats,
   listAllInvites,
   recentAudit,
@@ -11,7 +11,7 @@ export function load() {
   const db = getDb();
   return {
     stats: dashboardStats(db),
-    broadcasting: currentlyBroadcasting(db, 8),
+    online: currentlyOnline(db, 8),
     recentInvites: listAllInvites(db).slice(0, 6),
     audit: recentAudit(db, 6),
   };

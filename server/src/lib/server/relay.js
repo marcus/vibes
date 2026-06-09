@@ -4,8 +4,11 @@ import { writeTx } from "./db.js";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_HANDLE_LENGTH = 32;
 const MAX_STATUS_BYTES = 32 * 1024;
-const MODES = new Set(["broadcasting", "quiet", "offline"]);
-const MODE_RANK = { offline: 0, quiet: 1, broadcasting: 2 };
+const MODES = new Set(["online", "offline"]);
+const MODE_RANK = { offline: 0, online: 1 };
+// A friend reports `online` only if they are sharing and have published within
+// this window; older online rows fall back to a last-seen "online … ago".
+const ONLINE_WINDOW_MS = 10 * 60 * 1000;
 
 /** Error with a stable code and HTTP status for the single error envelope. */
 export class RelayError extends Error {
@@ -350,9 +353,9 @@ function normalizeStatusPayload(authUser, input, receivedAt) {
   const cards = Array.isArray(input?.cards)
     ? input.cards.map(sanitizeCard).filter(Boolean).filter((card) => card.enabled)
     : [];
-  const sharedCards = mode === "broadcasting" ? cards : [];
+  const sharedCards = mode === "online" ? cards : [];
   const manualStatus =
-    mode === "broadcasting" && input?.manual_status != null
+    mode === "online" && input?.manual_status != null
       ? String(input.manual_status).trim().slice(0, 160) || null
       : null;
 
@@ -363,10 +366,6 @@ function normalizeStatusPayload(authUser, input, receivedAt) {
     },
     mode,
     manual_status: manualStatus,
-    derived_status:
-      mode === "broadcasting"
-        ? String(input?.derived_status ?? "vibing").trim().slice(0, 64) || "vibing"
-        : mode,
     day: clientDay,
     updated_at: updatedAt,
     cards: sharedCards,
@@ -437,7 +436,7 @@ function mergeGitStats(rows, latestDay) {
   };
   let found = false;
   for (const row of rows) {
-    if (row.mode !== "broadcasting" || row.client_day !== latestDay) continue;
+    if (row.mode !== "online" || row.client_day !== latestDay) continue;
     const card = getCard(row.payload, "git_stats");
     if (!card) continue;
     found = true;
@@ -454,13 +453,12 @@ function mergeGitStats(rows, latestDay) {
   };
 }
 
-function mergeUserStatuses(user, statusRows) {
+function mergeUserStatuses(user, statusRows, nowMs) {
   if (!statusRows.length) {
     return {
       user,
       mode: "offline",
       manual_status: null,
-      derived_status: "offline",
       day: null,
       updated_at: null,
       cards: [],
@@ -471,34 +469,52 @@ function mergeUserStatuses(user, statusRows) {
   const strongest = rows.reduce((best, row) =>
     MODE_RANK[row.mode] > MODE_RANK[best.mode] ? row : best,
   );
-  const broadcasting = rows
-    .filter((row) => row.mode === "broadcasting")
+  const online = rows
+    .filter((row) => row.mode === "online")
     .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
-  const source = broadcasting[0] ?? rows.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0];
-  const latestDay = broadcasting[0]?.client_day ?? source.client_day;
+  const source = online[0] ?? rows.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0];
+  const latestDay = online[0]?.client_day ?? source.client_day;
   const contributingRows =
-    strongest.mode === "broadcasting"
-      ? broadcasting.filter((row) => row.client_day === latestDay)
+    strongest.mode === "online"
+      ? online.filter((row) => row.client_day === latestDay)
       : rows.filter((row) => row.mode === strongest.mode);
+
+  // Effective presence: the user is sharing (`online`) only counts as live if
+  // they have published within the recency window. Otherwise they read as
+  // offline, but we still surface the last timestamp so the client can render
+  // "online … ago". A user who toggled themselves offline surfaces no timestamp.
+  const lastSharedAt = contributingRows
+    .map((row) => row.updated_at)
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  const isFresh =
+    strongest.mode === "online" && nowMs - Date.parse(lastSharedAt) <= ONLINE_WINDOW_MS;
+
+  if (!isFresh) {
+    return {
+      user,
+      mode: "offline",
+      manual_status: null,
+      day: strongest.mode === "online" ? latestDay : null,
+      // online-but-stale surfaces a last-seen timestamp; offline-by-toggle does not.
+      updated_at: strongest.mode === "online" ? lastSharedAt : null,
+      cards: [],
+    };
+  }
+
   const cards = [];
-  const gitStats = strongest.mode === "broadcasting" ? mergeGitStats(rows, latestDay) : null;
+  const gitStats = mergeGitStats(rows, latestDay);
   if (gitStats) cards.push(gitStats);
-  if (strongest.mode === "broadcasting") {
-    for (const type of ["repo_aliases", "spotify", "weather"]) {
-      const card = getCard(source.payload, type);
-      if (card) cards.push(card);
-    }
+  for (const type of ["repo_aliases", "spotify", "weather"]) {
+    const card = getCard(source.payload, type);
+    if (card) cards.push(card);
   }
 
   return {
     user,
-    mode: strongest.mode,
-    manual_status: strongest.mode === "broadcasting" ? source.payload.manual_status ?? null : null,
-    derived_status: strongest.mode === "broadcasting" ? source.payload.derived_status ?? "vibing" : strongest.mode,
+    mode: "online",
+    manual_status: source.payload.manual_status ?? null,
     day: latestDay,
-    updated_at: contributingRows
-      .map((row) => row.updated_at)
-      .sort((a, b) => Date.parse(b) - Date.parse(a))[0],
+    updated_at: lastSharedAt,
     cards,
   };
 }
@@ -506,8 +522,9 @@ function mergeUserStatuses(user, statusRows) {
 /**
  * @param {import('better-sqlite3').Database} db
  * @param {{ id: string, handle: string, display_name: string }} viewer
+ * @param {number} [nowMs] Reference clock for recency, injectable for tests.
  */
-export function getFeed(db, viewer) {
+export function getFeed(db, viewer, nowMs = Date.now()) {
   const users = [
     viewer,
     ...db
@@ -527,7 +544,7 @@ export function getFeed(db, viewer) {
      WHERE user_id = ?
      ORDER BY updated_at DESC`,
   );
-  const merged = users.map((user) => mergeUserStatuses(user, statusQuery.all(user.id)));
+  const merged = users.map((user) => mergeUserStatuses(user, statusQuery.all(user.id), nowMs));
   return { you: merged[0], friends: merged.slice(1) };
 }
 

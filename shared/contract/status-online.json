@@ -1,9 +1,8 @@
 {
   "device_id": "device-marcus-macbook",
   "device_label": "MacBook",
-  "mode": "broadcasting",
+  "mode": "online",
   "manual_status": "working on Vibes",
-  "derived_status": "vibing",
   "day": "2026-06-06",
   "updated_at": "2026-06-06T18:02:00.000Z",
   "cards": [

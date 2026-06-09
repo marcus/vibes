@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 final class AppModel: ObservableObject {
   @Published var config: VibesConfig?
   @Published var token: String = ""
-  @Published var mode: PresenceMode = .broadcasting
+  @Published var mode: PresenceMode = .online
   @Published var manualStatus: String = ""
   @Published var feed: FeedResponse?
   @Published var stats = DailyGitStats()
@@ -45,7 +45,7 @@ final class AppModel: ObservableObject {
         config = loaded
       }
       token = try keychain.readToken() ?? ""
-      mode = config?.presence.mode ?? .broadcasting
+      mode = config?.presence.mode ?? .online
       manualStatus = config?.presence.manualStatus ?? ""
       if isConfigured {
         startLoop()

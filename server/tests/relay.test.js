@@ -283,40 +283,64 @@ describe("invites", () => {
 });
 
 describe("statuses and feed", () => {
-  it("stores a broadcasting payload and returns the caller in their feed", () => {
+  // Reference clock a few minutes after the fixtures' updated_at so online rows
+  // read as fresh; recency is asserted explicitly in its own test.
+  const FEED_NOW = Date.parse("2026-06-06T18:10:00.000Z");
+
+  it("stores an online payload and returns the caller in their feed", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
-    const payload = fixture("status-broadcasting");
+    const payload = fixture("status-online");
 
     upsertStatus(db, user, payload);
-    const feed = getFeed(db, user);
+    const feed = getFeed(db, user, FEED_NOW);
 
-    expect(feed.you.mode).toBe("broadcasting");
+    expect(feed.you.mode).toBe("online");
     expect(feed.you.manual_status).toBe("working on Vibes");
     expect(feed.you.cards.find((card) => card.type === "git_stats").data.commits).toBe(7);
     expect(feed.friends).toHaveLength(0);
   });
 
-  it("quiet replaces share cards instead of preserving old broadcast details", () => {
+  it("offline replaces share cards and surfaces no last-seen time", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
-    const payload = fixture("status-broadcasting");
+    const payload = fixture("status-online");
     upsertStatus(db, user, payload);
     upsertStatus(db, user, {
       ...payload,
-      mode: "quiet",
+      mode: "offline",
       manual_status: "do not leak",
-      derived_status: "quiet",
       updated_at: "2026-06-06T18:05:00.000Z",
     });
 
-    const feed = getFeed(db, user);
-    expect(feed.you.mode).toBe("quiet");
+    const feed = getFeed(db, user, FEED_NOW);
+    expect(feed.you.mode).toBe("offline");
     expect(feed.you.manual_status).toBeNull();
     expect(feed.you.cards).toEqual([]);
+    // Toggled offline → hidden, no "online … ago" timestamp leaks.
+    expect(feed.you.updated_at).toBeNull();
+  });
+
+  it("reports a fresh online row as online and a stale one as offline with a last-seen time", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const payload = fixture("status-online");
+    upsertStatus(db, user, payload);
+    const updatedAt = Date.parse(payload.updated_at);
+
+    const fresh = getFeed(db, user, updatedAt + 5 * 60 * 1000);
+    expect(fresh.you.mode).toBe("online");
+    expect(fresh.you.updated_at).toBe(payload.updated_at);
+    expect(fresh.you.cards.length).toBeGreaterThan(0);
+
+    const stale = getFeed(db, user, updatedAt + 30 * 60 * 1000);
+    expect(stale.you.mode).toBe("offline");
+    // Sharing but idle → last-seen timestamp preserved for "online … ago".
+    expect(stale.you.updated_at).toBe(payload.updated_at);
+    expect(stale.you.cards).toEqual([]);
+    expect(stale.you.manual_status).toBeNull();
   });
 
   it("merges multi-device stats for the newest shared client day without exposing legacy agent cards", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
-    const payload = fixture("status-broadcasting");
+    const payload = fixture("status-online");
     upsertStatus(db, user, payload);
     upsertStatus(db, user, {
       ...payload,
@@ -347,7 +371,7 @@ describe("statuses and feed", () => {
       ],
     });
 
-    const feed = getFeed(db, user);
+    const feed = getFeed(db, user, FEED_NOW);
     const stats = feed.you.cards.find((card) => card.type === "git_stats").data;
     expect(stats.commits).toBe(9);
     expect(stats.insertions).toBe(1258);
@@ -356,32 +380,31 @@ describe("statuses and feed", () => {
 
   it("does not expose device identifiers or labels in merged feed output", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
-    upsertStatus(db, user, fixture("status-broadcasting"));
+    upsertStatus(db, user, fixture("status-online"));
 
-    const json = JSON.stringify(getFeed(db, user));
+    const json = JSON.stringify(getFeed(db, user, FEED_NOW));
     expect(json).not.toContain("device_id");
     expect(json).not.toContain("device-marcus-macbook");
     expect(json).not.toContain("MacBook");
   });
 
-  it("uses the newest contributing broadcast row for merged updated_at", () => {
+  it("uses the newest contributing online row for merged updated_at, ignoring offline rows", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
-    const payload = fixture("status-broadcasting");
+    const payload = fixture("status-online");
     upsertStatus(db, user, {
       ...payload,
-      device_id: "broadcast-device",
+      device_id: "online-device",
       updated_at: "2026-06-06T18:02:00.000Z",
     });
     upsertStatus(db, user, {
       ...payload,
-      device_id: "quiet-device",
-      mode: "quiet",
-      derived_status: "quiet",
+      device_id: "offline-device",
+      mode: "offline",
       updated_at: "2026-06-06T19:02:00.000Z",
     });
 
-    const feed = getFeed(db, user);
-    expect(feed.you.mode).toBe("broadcasting");
+    const feed = getFeed(db, user, FEED_NOW);
+    expect(feed.you.mode).toBe("online");
     expect(feed.you.updated_at).toBe("2026-06-06T18:02:00.000Z");
   });
 
@@ -391,7 +414,7 @@ describe("statuses and feed", () => {
     const invite = createInvite(db, marcus.id);
     acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     upsertStatus(db, ken, {
-      ...fixture("status-broadcasting"),
+      ...fixture("status-online"),
       device_id: "device-ken",
       manual_status: "refactoring",
     });
@@ -406,7 +429,7 @@ describe("statuses and feed", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
     expect(() =>
       upsertStatus(db, user, {
-        ...fixture("status-broadcasting"),
+        ...fixture("status-online"),
         cards: [
           {
             type: "git_stats",
@@ -423,8 +446,8 @@ describe("statuses and feed", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
     expect(() =>
       upsertStatus(db, user, {
-        ...fixture("status-broadcasting"),
-        mode: "quiet",
+        ...fixture("status-online"),
+        mode: "offline",
         cards: [
           {
             type: "disabled_blob",
@@ -440,7 +463,7 @@ describe("statuses and feed", () => {
 
 describe("contract fixtures", () => {
   it("keeps the shared JSON examples parseable", () => {
-    expect(fixture("status-broadcasting").mode).toBe("broadcasting");
+    expect(fixture("status-online").mode).toBe("online");
     expect(fixture("feed-response").you.user.handle).toBe("marcus");
     expect(fixture("error").error.code).toBe("unauthorized");
   });

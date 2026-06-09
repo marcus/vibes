@@ -15,7 +15,7 @@ import {
   adminRemoveFriendship,
   adminRevokeInvite,
   adminRevokeToken,
-  currentlyBroadcasting,
+  currentlyOnline,
   dashboardStats,
   deleteUser,
   getUserDetail,
@@ -39,16 +39,15 @@ beforeEach(() => {
   db = openDb(":memory:");
 });
 
-function broadcastPayload(overrides = {}) {
+function onlinePayload(overrides = {}) {
   return {
     device_id: "device-1",
     device_label: "MacBook",
-    mode: "broadcasting",
+    mode: "online",
     day: "2026-06-06",
     client_day: "2026-06-06",
     updated_at: "2026-06-06T18:00:00.000Z",
     manual_status: "working",
-    derived_status: "vibing",
     cards: [],
     ...overrides,
   };
@@ -72,7 +71,7 @@ describe("listUsers", () => {
     const invite = createInvite(db, marcus.id);
     const ken = createUser(db, { handle: "ken", displayName: "Ken" });
     acceptInvite(db, invite.code, { acceptingUserId: ken.id });
-    upsertStatus(db, marcus, broadcastPayload());
+    upsertStatus(db, marcus, onlinePayload());
 
     const users = listUsers(db);
     expect(users).toHaveLength(2);
@@ -80,7 +79,7 @@ describe("listUsers", () => {
     expect(row.token_count).toBe(1);
     expect(row.friend_count).toBe(1);
     expect(row.device_count).toBe(1);
-    expect(row.presence).toBe("broadcasting");
+    expect(row.presence).toBe("online");
     expect(row.disabled).toBe(false);
   });
 
@@ -112,7 +111,7 @@ describe("getUserDetail", () => {
     const ken = createUser(db, { handle: "ken", displayName: "Ken" });
     acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     createToken(db, ken.id, "Ken laptop");
-    upsertStatus(db, ken, broadcastPayload({ device_id: "ken-1" }));
+    upsertStatus(db, ken, onlinePayload({ device_id: "ken-1" }));
 
     const detail = getUserDetail(db, ken.id);
     expect(detail.profile.handle).toBe("ken");
@@ -175,28 +174,28 @@ describe("dashboardStats", () => {
     const ken = createUser(db, { handle: "ken", displayName: "Ken" });
     acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     createInvite(db, marcus.id); // an extra open invite
-    upsertStatus(db, marcus, broadcastPayload());
+    upsertStatus(db, marcus, onlinePayload());
 
     const stats = dashboardStats(db);
     expect(stats.users.total).toBe(2);
     expect(stats.active_tokens).toBeGreaterThanOrEqual(1);
     expect(stats.invites.accepted).toBe(1);
     expect(stats.invites.open).toBe(1);
-    expect(stats.presence.broadcasting).toBe(1);
+    expect(stats.presence.online).toBe(1);
     expect(stats.presence.offline).toBe(1);
   });
 });
 
-describe("currentlyBroadcasting", () => {
-  it("lists broadcasting users, newest first, skipping disabled", () => {
+describe("currentlyOnline", () => {
+  it("lists online users, newest first, skipping disabled", () => {
     const a = createUser(db, { handle: "amy", displayName: "Amy" });
     const b = createUser(db, { handle: "bob", displayName: "Bob" });
-    upsertStatus(db, a, broadcastPayload({ updated_at: "2026-06-06T10:00:00.000Z" }));
-    upsertStatus(db, b, broadcastPayload({ updated_at: "2026-06-06T12:00:00.000Z" }));
-    expect(currentlyBroadcasting(db).map((u) => u.handle)).toEqual(["bob", "amy"]);
+    upsertStatus(db, a, onlinePayload({ updated_at: "2026-06-06T10:00:00.000Z" }));
+    upsertStatus(db, b, onlinePayload({ updated_at: "2026-06-06T12:00:00.000Z" }));
+    expect(currentlyOnline(db).map((u) => u.handle)).toEqual(["bob", "amy"]);
 
     setUserDisabled(db, b.id, true);
-    expect(currentlyBroadcasting(db).map((u) => u.handle)).toEqual(["amy"]);
+    expect(currentlyOnline(db).map((u) => u.handle)).toEqual(["amy"]);
   });
 });
 
@@ -227,7 +226,7 @@ describe("deleteUser", () => {
     const ken = createUser(db, { handle: "ken", displayName: "Ken" });
     acceptInvite(db, invite.code, { acceptingUserId: ken.id });
     createToken(db, ken.id, "Ken laptop");
-    upsertStatus(db, ken, broadcastPayload({ device_id: "ken-1" }));
+    upsertStatus(db, ken, onlinePayload({ device_id: "ken-1" }));
 
     deleteUser(db, ken.id);
 

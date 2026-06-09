@@ -11,7 +11,7 @@ Core v1 flow:
 1. A Mac user configures local Git repos.
 2. The app scans aggregate daily activity.
 3. The user adds an optional manual status.
-4. The user chooses Broadcasting, Quiet, or Offline.
+4. Presence is automatic — online while recently active, with a one-tap Offline toggle to hide.
 5. Friends see each other's latest status through the relay.
 
 ## Repo Map

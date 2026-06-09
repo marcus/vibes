@@ -2,17 +2,17 @@
   <title>Vibes</title>
   <meta
     name="description"
-    content="Private ambient presence for small coding groups."
+    content="See which friends are online and coding — private ambient presence for small groups."
   />
 </svelte:head>
 
 <main>
   <section class="intro" aria-labelledby="home-title">
     <p class="eyebrow">vibes</p>
-    <h1 id="home-title">A quiet presence layer for coding friends.</h1>
-    <p class="subhead">See who is around, what kind of day they are having, and when they prefer quiet.</p>
+    <h1 id="home-title">See who's coding right now.</h1>
+    <p class="subhead">Vibes shows which friends are online and how much they've shipped today. Ambient presence for people who code at odd hours.</p>
     <p class="description">
-      Vibes is a Mac app for small groups. It turns local Git activity and an optional status into a simple friend feed.
+      A Mac app for small groups. It turns your local Git activity into a simple, private friend feed — no chat, no noise.
     </p>
     <p class="privacy">
       Shares aggregate activity only. No repo paths, branches, commit messages, filenames, editor activity, process history, or transcripts.
@@ -23,7 +23,7 @@
   <figure class="product-visual">
     <img
       src="/images/vibes-aspirational-screenshot.png"
-      alt="Stylized mockup of the Vibes Mac app showing a quiet friend presence feed."
+      alt="Stylized mockup of the Vibes Mac app showing a feed of which friends are online and coding."
       width="1536"
       height="1024"
     />
@@ -44,7 +44,7 @@
         <span>Tap Add Friend to send a one-time invite link, or accept one you were sent.</span>
       </li>
       <li>
-        <span>Add your local repos and choose Broadcasting, Quiet, or Offline.</span>
+        <span>Add your local repos. You're online while you're coding, and one tap takes you offline.</span>
       </li>
     </ol>
   </section>

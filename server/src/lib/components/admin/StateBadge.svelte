@@ -1,10 +1,9 @@
 <script module>
   // Map a state string to a visual tone + label. The accent is reserved for
-  // genuinely "live" or actionable states (a current broadcast, an open invite,
+  // genuinely "live" or actionable states (an online friend, an open invite,
   // an active token); everything terminal reads in neutral grays.
   const TONES = {
-    broadcasting: { tone: "live", label: "broadcasting" },
-    quiet: { tone: "neutral", label: "quiet" },
+    online: { tone: "live", label: "online" },
     offline: { tone: "faint", label: "offline" },
     open: { tone: "accent", label: "open" },
     accepted: { tone: "neutral", label: "accepted" },
