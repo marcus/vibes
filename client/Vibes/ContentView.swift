@@ -123,10 +123,6 @@ private struct MainPanel: View {
         Header(title: "vibes", subtitle: model.config?.identity.displayName ?? "")
         Spacer()
         HStack(spacing: 10) {
-          Button("Invite") {
-            showInviteFriend = true
-          }
-          .buttonStyle(PlainVibeButtonStyle())
           PresenceToggle(
             mode: model.mode,
             setMode: { model.setMode($0) }
@@ -142,9 +138,12 @@ private struct MainPanel: View {
         }
       }
 
-      HomeView(openInviteFriend: { showInviteFriend = true })
+      HomeView()
 
-      Footer(openSettings: { openSettings() })
+      Footer(
+        openInviteFriend: { showInviteFriend = true },
+        openSettings: { openSettings() }
+      )
     }
     .padding(22)
     .sheet(item: $model.pendingInvite) { invite in
@@ -429,7 +428,6 @@ private struct EditableSettingField: View {
 // of FriendCards — "you" first, then each friend, EmptyState when none.
 private struct HomeView: View {
   @EnvironmentObject private var model: AppModel
-  var openInviteFriend: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -460,9 +458,7 @@ private struct HomeView: View {
           let friends = model.feed?.friends ?? []
           if friends.isEmpty {
             EmptyState(
-              text: "No friends yet. Create one invite link and send it directly.",
-              actionTitle: "Invite",
-              action: openInviteFriend
+              text: "No friends yet. Create one invite link and send it directly."
             )
           } else {
             ForEach(friends) { status in
@@ -755,6 +751,7 @@ private struct InviteSheet: View {
 
 private struct Footer: View {
   @EnvironmentObject private var model: AppModel
+  var openInviteFriend: () -> Void
   var openSettings: () -> Void
 
   var body: some View {
@@ -772,13 +769,21 @@ private struct Footer: View {
           .foregroundStyle(VibeColor.muted)
       }
       Spacer()
-      Button {
-        openSettings()
-      } label: {
-        Image(systemName: "gearshape")
+      HStack(spacing: 8) {
+        Button("Invite") {
+          openInviteFriend()
+        }
+        .buttonStyle(FooterTextButtonStyle())
+        .accessibilityLabel("Invite a Friend")
+
+        Button {
+          openSettings()
+        } label: {
+          Image(systemName: "gearshape")
+        }
+        .buttonStyle(IconButtonStyle())
+        .accessibilityLabel("Open Settings")
       }
-      .buttonStyle(IconButtonStyle())
-      .accessibilityLabel("Open Settings")
     }
     .font(.caption)
   }
@@ -946,6 +951,17 @@ private struct PlainVibeButtonStyle: ButtonStyle {
       .font(.system(size: 13, weight: .regular))
       .padding(.horizontal, 11)
       .padding(.vertical, 8)
+      .background(VibeColor.field.opacity(configuration.isPressed ? 0.6 : 1))
+      .clipShape(RoundedRectangle(cornerRadius: 4))
+  }
+}
+
+private struct FooterTextButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: 13, weight: .regular))
+      .padding(.horizontal, 11)
+      .frame(height: 30)
       .background(VibeColor.field.opacity(configuration.isPressed ? 0.6 : 1))
       .clipShape(RoundedRectangle(cornerRadius: 4))
   }
