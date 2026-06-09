@@ -158,6 +158,7 @@ private struct MainPanel: View {
 private struct SettingsView: View {
   @EnvironmentObject private var model: AppModel
   var dismiss: () -> Void
+  @State private var showLLMEditor = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -177,6 +178,123 @@ private struct SettingsView: View {
           ReposSection()
           Divider()
           FriendsSection()
+          Divider()
+          AdvancedSettingsSection(showLLMEditor: $showLLMEditor)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+      }
+    }
+    .frame(width: 460, height: 620)
+    .background(VibeColor.background)
+    .foregroundStyle(VibeColor.foreground)
+    .sheet(isPresented: $showLLMEditor) {
+      LLMSettingsEditor(dismiss: { showLLMEditor = false })
+        .environmentObject(model)
+    }
+  }
+}
+
+private struct AdvancedSettingsSection: View {
+  @Binding var showLLMEditor: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("advanced")
+        .font(.caption)
+        .foregroundStyle(VibeColor.muted)
+      Text("Edit any setting by chatting with an LLM, then pasting its reply back. No need to hand-edit files.")
+        .font(.system(size: 13))
+        .foregroundStyle(VibeColor.muted)
+      Button {
+        showLLMEditor = true
+      } label: {
+        Label("Edit settings with an LLM", systemImage: "wand.and.stars")
+      }
+      .buttonStyle(PlainVibeButtonStyle())
+    }
+  }
+}
+
+// Paste-back-and-validate pop-out: copy a prompt to take to any LLM, then paste
+// the returned JSON here to validate + persist. The user never hand-edits
+// config.json. Backed by AppModel.copySettingsPrompt / applyPastedConfig.
+private struct LLMSettingsEditor: View {
+  @EnvironmentObject private var model: AppModel
+  var dismiss: () -> Void
+
+  @State private var pastedJSON = ""
+  @State private var validationError: String?
+  @State private var didSave = false
+  @State private var didCopy = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        Text("edit settings with an llm")
+          .font(.system(size: 22, weight: .light))
+        Spacer()
+        Button("Done") { dismiss() }
+          .buttonStyle(AccentButtonStyle())
+      }
+      .padding(.horizontal, 24)
+      .padding(.top, 22)
+      .padding(.bottom, 16)
+
+      ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+          VStack(alignment: .leading, spacing: 8) {
+            Text("1 · copy the prompt")
+              .font(.caption)
+              .foregroundStyle(VibeColor.muted)
+            Text("Copy this prompt and paste it to your LLM. Describe the change you want, then bring its JSON reply back here.")
+              .font(.system(size: 13))
+              .foregroundStyle(VibeColor.muted)
+            Button {
+              model.copySettingsPrompt()
+              didCopy = true
+            } label: {
+              Label(didCopy ? "Prompt copied" : "Copy prompt", systemImage: "doc.on.doc")
+            }
+            .buttonStyle(PlainVibeButtonStyle())
+          }
+
+          VStack(alignment: .leading, spacing: 8) {
+            Text("2 · paste the reply")
+              .font(.caption)
+              .foregroundStyle(VibeColor.muted)
+            Text("Paste your LLM's JSON reply below, then validate and save.")
+              .font(.system(size: 13))
+              .foregroundStyle(VibeColor.muted)
+            TextEditor(text: $pastedJSON)
+              .font(.system(size: 12, design: .monospaced))
+              .scrollContentBackground(.hidden)
+              .padding(8)
+              .frame(height: 220)
+              .background(VibeColor.field)
+              .clipShape(RoundedRectangle(cornerRadius: 4))
+          }
+
+          if let validationError {
+            Text(validationError)
+              .font(.system(size: 13))
+              .foregroundStyle(VibeColor.accent)
+              .fixedSize(horizontal: false, vertical: true)
+          } else if didSave {
+            Text("Settings validated and saved.")
+              .font(.system(size: 13))
+              .foregroundStyle(VibeColor.online)
+          }
+
+          Button {
+            didSave = false
+            let error = model.applyPastedConfig(pastedJSON)
+            validationError = error
+            didSave = (error == nil)
+          } label: {
+            Label("Validate & Save", systemImage: "checkmark.seal")
+          }
+          .buttonStyle(AccentButtonStyle())
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 24)
