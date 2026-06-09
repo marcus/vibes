@@ -419,6 +419,26 @@ describe("statuses and feed", () => {
     expect(feed.you.cards.find((card) => card.type === "git_stats").data.commits).toBe(7);
   });
 
+  it("offline without cards preserves the existing device snapshot", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const payload = fixture("status-online");
+    upsertStatus(db, user, payload);
+    upsertStatus(db, user, {
+      ...payload,
+      mode: "offline",
+      day: "2026-06-07",
+      manual_status: null,
+      cards: [],
+      updated_at: "2026-06-06T18:05:00.000Z",
+    });
+
+    const feed = getFeed(db, user, FEED_NOW);
+    expect(feed.you.mode).toBe("offline");
+    expect(feed.you.manual_status).toBeNull();
+    expect(feed.you.day).toBe("2026-06-06");
+    expect(feed.you.cards.find((card) => card.type === "git_stats").data.commits).toBe(7);
+  });
+
   it("reports a fresh online row as online and a stale one as offline with a last-seen time", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
     const payload = fixture("status-online");

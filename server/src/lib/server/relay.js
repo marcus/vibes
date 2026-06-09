@@ -586,7 +586,31 @@ export function upsertStatus(db, user, input) {
     throw new RelayError("invalid_device_id", "Device id is required.", 400);
   }
   const deviceLabel = String(input?.device_label ?? "").trim().slice(0, 64) || null;
-  const { payload, mode, clientDay, updatedAt } = normalizeStatusPayload(user, input, receivedAt);
+  let { payload, mode, clientDay, updatedAt } = normalizeStatusPayload(user, input, receivedAt);
+  if (mode === "offline" && payload.cards.length === 0) {
+    const previous = db
+      .prepare(
+        `SELECT client_day, payload_json
+         FROM statuses
+         WHERE user_id = ? AND device_id = ?`,
+      )
+      .get(user.id, deviceId);
+    if (previous) {
+      const previousPayload = JSON.parse(previous.payload_json);
+      if (Array.isArray(previousPayload.cards) && previousPayload.cards.length > 0) {
+        payload = {
+          ...payload,
+          day: previousPayload.day ?? previous.client_day ?? payload.day,
+          ...(previousPayload.day_timezone ? { day_timezone: previousPayload.day_timezone } : {}),
+          ...(previousPayload.day_start_at ? { day_start_at: previousPayload.day_start_at } : {}),
+          ...(previousPayload.day_end_at ? { day_end_at: previousPayload.day_end_at } : {}),
+          cards: previousPayload.cards,
+        };
+        clientDay = previous.client_day ?? previousPayload.day ?? clientDay;
+        assertStatusPayloadSize(payload);
+      }
+    }
+  }
 
   writeTx(db, () => {
     db.prepare(

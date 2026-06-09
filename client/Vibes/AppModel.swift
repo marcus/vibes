@@ -53,6 +53,7 @@ final class AppModel: ObservableObject {
   private let scanner = GitScanner()
   private var loopTask: Task<Void, Never>?
   private var successMessageDismissTask: Task<Void, Never>?
+  private var lastDeviceStatusPayload: StatusPayload?
 
   var isConfigured: Bool {
     config != nil && !token.isEmpty
@@ -288,7 +289,8 @@ final class AppModel: ObservableObject {
         dayWindow: dayWindow
       )
       try await client(for: config).publish(payload)
-      feed = try await client(for: config).feed()
+      lastDeviceStatusPayload = payload
+      feed = preservingYouSnapshot(try await client(for: config).feed(), fallbackPayload: payload)
       lastSyncedAt = Date()
       persistPresence()
     } catch {
@@ -310,7 +312,11 @@ final class AppModel: ObservableObject {
   func setMode(_ next: PresenceMode) {
     mode = next
     persistPresence()
-    Task { await scanPublishAndFetch() }
+    if next == .offline {
+      Task { await publishCurrentSnapshotAndFetch() }
+    } else {
+      Task { await scanPublishAndFetch() }
+    }
   }
 
   func updateManualStatus(_ value: String) {
@@ -645,17 +651,28 @@ final class AppModel: ObservableObject {
   func publishOfflineForQuit() async {
     guard let config, isConfigured else { return }
     do {
-      let payload = StatusBuilder.payload(
-        config: config,
-        mode: .offline,
-        manualStatus: manualStatus,
-        stats: stats,
-        now: Date()
-      )
+      let payload = currentSnapshotPayload(config: config, mode: .offline, now: Date())
       try await client(for: config).publish(payload)
     } catch {
       lastError = error.localizedDescription
     }
+  }
+
+  private func publishCurrentSnapshotAndFetch() async {
+    guard let config, isConfigured else { return }
+    isBusy = true
+    lastError = nil
+    let now = Date()
+    let payload = currentSnapshotPayload(config: config, mode: .offline, now: now)
+    do {
+      try await client(for: config).publish(payload)
+      lastDeviceStatusPayload = payload
+      feed = preservingYouSnapshot(try await client(for: config).feed(), fallbackPayload: payload)
+      lastSyncedAt = Date()
+    } catch {
+      lastError = error.localizedDescription
+    }
+    isBusy = false
   }
 
   private func startLoop() {
@@ -678,6 +695,45 @@ final class AppModel: ObservableObject {
 
   private func client(for config: VibesConfig) -> RelayClient {
     RelayClient(baseURL: config.server.relayURL, token: token)
+  }
+
+  private func currentSnapshotPayload(config: VibesConfig, mode: PresenceMode, now: Date) -> StatusPayload {
+    let dayWindow = VibesDayWindow.current(
+      now: now,
+      timezone: config.identity.timezone ?? TimeZone.current.identifier
+    )
+    var payload = StatusBuilder.payload(
+      config: config,
+      mode: mode,
+      manualStatus: manualStatus,
+      stats: stats,
+      now: now,
+      dayWindow: dayWindow
+    )
+    if mode == .offline {
+      if let lastDeviceStatusPayload {
+        payload.day = lastDeviceStatusPayload.day
+        payload.dayTimezone = lastDeviceStatusPayload.dayTimezone
+        payload.dayStartAt = lastDeviceStatusPayload.dayStartAt
+        payload.dayEndAt = lastDeviceStatusPayload.dayEndAt
+        payload.cards = lastDeviceStatusPayload.cards
+      } else {
+        payload.cards = []
+      }
+    }
+    return payload
+  }
+
+  private func preservingYouSnapshot(_ nextFeed: FeedResponse, fallbackPayload: StatusPayload) -> FeedResponse {
+    guard fallbackPayload.mode == .offline, nextFeed.you.cards.isEmpty, !fallbackPayload.cards.isEmpty else {
+      return nextFeed
+    }
+    var snapshot = nextFeed
+    snapshot.you.cards = fallbackPayload.cards
+    snapshot.you.manualStatus = fallbackPayload.manualStatus
+    snapshot.you.day = fallbackPayload.day
+    snapshot.you.updatedAt = fallbackPayload.updatedAt
+    return snapshot
   }
 
   private func accountHydratedConfig(_ config: VibesConfig, token rawToken: String) async throws -> VibesConfig {
