@@ -192,22 +192,6 @@
     width: 100%;
     overflow: hidden;
     background:
-      linear-gradient(to bottom, transparent 45%, var(--bg) 100%),
-      radial-gradient(
-        95% 78% at 14% 42%,
-        rgba(155, 15, 82, 0.55),
-        transparent 62%
-      ),
-      radial-gradient(
-        95% 78% at 86% 42%,
-        rgba(4, 86, 125, 0.6),
-        transparent 62%
-      ),
-      var(--vibe-ink);
-  }
-
-  :global(:root[data-theme="light"]) .hero {
-    background:
       linear-gradient(to bottom, transparent 45%, var(--vibe-ink) 100%),
       radial-gradient(
         95% 78% at 14% 42%,
