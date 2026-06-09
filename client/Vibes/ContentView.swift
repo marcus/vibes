@@ -113,7 +113,7 @@ private struct SetupPanel: View {
 
 private struct MainPanel: View {
   @EnvironmentObject private var model: AppModel
-  @State private var showSettings = false
+  @Environment(\.openSettings) private var openSettings
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -137,27 +137,21 @@ private struct MainPanel: View {
 
       HomeView()
 
-      Footer(openSettings: { showSettings = true })
+      Footer(openSettings: { openSettings() })
     }
     .padding(22)
     .sheet(item: $model.pendingInvite) { invite in
       InviteSheet(invite: invite)
         .environmentObject(model)
     }
-    .sheet(isPresented: $showSettings) {
-      SettingsView(dismiss: { showSettings = false })
-        .environmentObject(model)
-    }
   }
 }
 
-// Dedicated Settings screen reached from the footer gear. Contains the
-// repositories UI and the outgoing add-friend / invite-management flow,
-// clearly sectioned, with a Done button back to Home. (The incoming-invite
-// sheet stays on MainPanel.)
-private struct SettingsView: View {
+// Temporary native Settings content. Phase 2 will split this into settings
+// panes and move friend invites out of Settings.
+struct SettingsView: View {
   @EnvironmentObject private var model: AppModel
-  var dismiss: () -> Void
+  @Environment(\.dismiss) private var dismiss
   @State private var showLLMEditor = false
 
   var body: some View {

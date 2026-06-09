@@ -51,6 +51,11 @@ struct VibesApp: App {
       }
     }
 
+    Settings {
+      SettingsView()
+        .environmentObject(model)
+    }
+
     MenuBarExtra("Vibes", systemImage: "dot.radiowaves.left.and.right") {
       Button("Show Vibes") {
         NSApp.activate(ignoringOtherApps: true)
