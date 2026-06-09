@@ -657,8 +657,9 @@ private struct EditableSettingField: View {
   }
 }
 
-// The primary view: manual-status field, local stats, then a scrolling column
-// of FriendCards — "you" first, then each friend, EmptyState when none.
+// The primary view: manual-status field, then the Aurora II presence column —
+// "you" first, online friends as full cards, offline friends compressed into
+// quiet rows under an "away" divider. EmptyState when there are no friends.
 private struct HomeView: View {
   @EnvironmentObject private var model: AppModel
 
@@ -681,11 +682,6 @@ private struct HomeView: View {
         }
       }
 
-      LocalStatsView(
-        stats: model.stats,
-        isSyncing: model.lastSyncedAt == nil && model.isBusy
-      )
-
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
           if let you = model.feed?.you {
@@ -697,8 +693,17 @@ private struct HomeView: View {
               text: "No friends yet. Create one invite link and send it directly."
             )
           } else {
-            ForEach(friends) { status in
-              FriendCard(status: status, isYou: false)
+            let online = friends.filter { $0.mode == .online }
+            let away = friends.filter { $0.mode != .online }
+            ForEach(online) { status in
+              FriendCard(status: status)
+            }
+            if !away.isEmpty {
+              AwaySectionHeader()
+                .padding(.top, 6)
+              ForEach(away) { status in
+                AwayFriendRow(status: status)
+              }
             }
           }
         }
@@ -745,30 +750,6 @@ private struct PresenceToggle: View {
         .contentShape(Capsule())
     }
     .buttonStyle(.plain)
-  }
-}
-
-private struct LocalStatsView: View {
-  var stats: DailyGitStats
-  var isSyncing: Bool
-
-  var body: some View {
-    Group {
-      if isSyncing {
-        Text("syncing activity")
-          .font(.system(size: 13))
-          .foregroundStyle(VibeColor.muted)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      } else {
-        HStack(spacing: 18) {
-          StatCell(value: "\(stats.reposTouched)", label: "repos")
-          StatCell(value: "\(stats.commits)", label: "commits")
-          StatCell(value: "+\(stats.insertions)", label: "added")
-          StatCell(value: "-\(stats.deletions)", label: "removed")
-        }
-      }
-    }
-    .padding(.vertical, 8)
   }
 }
 
@@ -1060,22 +1041,6 @@ private struct Field: View {
         .background(VibeColor.field)
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
-  }
-}
-
-private struct StatCell: View {
-  var value: String
-  var label: String
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(value)
-        .font(.system(size: 22, weight: .light))
-      Text(label)
-        .font(.caption)
-        .foregroundStyle(VibeColor.muted)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
