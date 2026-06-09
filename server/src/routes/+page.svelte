@@ -1,6 +1,10 @@
 <script>
+  // Seconds to hold on the last frame before the clip replays.
+  const LOOP_PAUSE_MS = 10000;
+
   let muted = $state(true);
   let video = $state(null);
+  let loopTimer;
 
   function toggleSound() {
     if (!video) return;
@@ -8,6 +12,17 @@
     video.muted = muted;
     // Some browsers pause on first unmute gesture; make sure we keep playing.
     if (!muted) video.play?.();
+  }
+
+  // Replaced the native `loop` with a paced loop: when the clip ends, hold the
+  // final frame for LOOP_PAUSE_MS, then rewind and play again.
+  function onEnded() {
+    clearTimeout(loopTimer);
+    loopTimer = setTimeout(() => {
+      if (!video) return;
+      video.currentTime = 0;
+      video.play?.();
+    }, LOOP_PAUSE_MS);
   }
 </script>
 
@@ -28,9 +43,9 @@
       poster="/hero/website-hero-poster.jpg"
       autoplay
       muted
-      loop
       playsinline
       preload="auto"
+      onended={onEnded}
     >
       <source src="/hero/website-hero.webm" type="video/webm" />
       <source src="/hero/website-hero.mp4" type="video/mp4" />
