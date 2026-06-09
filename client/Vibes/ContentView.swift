@@ -113,57 +113,28 @@ private struct SetupPanel: View {
 
 private struct MainPanel: View {
   @EnvironmentObject private var model: AppModel
-  @State private var section = Section.feed
-
-  enum Section: String, CaseIterable, Identifiable {
-    case feed
-    case repos
-    case friends
-
-    var id: String { rawValue }
-  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       HStack(alignment: .top) {
         Header(title: "vibes", subtitle: model.config?.identity.displayName ?? "")
         Spacer()
-        Picker("Presence", selection: Binding(
-          get: { model.mode },
-          set: { model.setMode($0) }
-        )) {
-          ForEach(PresenceMode.allCases) { mode in
-            Text(mode.label).tag(mode)
+        HStack(spacing: 10) {
+          PresenceToggle(
+            mode: model.mode,
+            setMode: { model.setMode($0) }
+          )
+          Button {
+            Task { await model.scanPublishAndFetch() }
+          } label: {
+            Image(systemName: model.isBusy ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
           }
+          .buttonStyle(IconButtonStyle())
+          .disabled(model.isBusy)
         }
-        .labelsHidden()
-        .pickerStyle(.segmented)
-        .frame(width: 160)
       }
 
-      HStack(spacing: 8) {
-        ForEach(Section.allCases) { item in
-          Button(item.rawValue) { section = item }
-            .buttonStyle(SegmentButtonStyle(isSelected: section == item))
-        }
-        Spacer()
-        Button {
-          Task { await model.scanPublishAndFetch() }
-        } label: {
-          Image(systemName: model.isBusy ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-        }
-        .buttonStyle(IconButtonStyle())
-        .disabled(model.isBusy)
-      }
-
-      switch section {
-      case .feed:
-        FeedSection()
-      case .repos:
-        ReposSection()
-      case .friends:
-        FriendsSection()
-      }
+      HomeView()
 
       Footer()
     }
@@ -175,7 +146,9 @@ private struct MainPanel: View {
   }
 }
 
-private struct FeedSection: View {
+// The primary view: manual-status field, local stats, then a scrolling column
+// of FriendCards — "you" first, then each friend, EmptyState when none.
+private struct HomeView: View {
   @EnvironmentObject private var model: AppModel
 
   var body: some View {
@@ -202,19 +175,60 @@ private struct FeedSection: View {
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
           if let you = model.feed?.you {
-            StatusRow(status: you, isYou: true)
+            FriendCard(status: you, isYou: true)
           }
           let friends = model.feed?.friends ?? []
           if friends.isEmpty {
             EmptyState(text: "No friends yet. Create one invite link and send it directly.")
           } else {
             ForEach(friends) { status in
-              StatusRow(status: status, isYou: false)
+              FriendCard(status: status, isYou: false)
             }
           }
         }
       }
     }
+  }
+}
+
+// TE-inspired tactile two-state presence control. Online = "lit" (saturated
+// accent), Offline = "at-rest" (dimmed neutral). A pill track with two segments
+// you press — reads as a labeled Online/Offline state, not a checkbox. Shares
+// the DESIGN.md token vocabulary with FriendCard; the menu-bar control (td-583670)
+// reuses this shape.
+private struct PresenceToggle: View {
+  var mode: PresenceMode
+  var setMode: (PresenceMode) -> Void
+
+  private let controlHeight: CGFloat = 34
+  private let segmentMinWidth: CGFloat = 64
+
+  var body: some View {
+    HStack(spacing: 0) {
+      segment(.online, label: "Online")
+      segment(.offline, label: "Offline")
+    }
+    .padding(3)
+    .background(VibeColor.chassis)
+    .clipShape(Capsule())
+    .overlay(Capsule().stroke(VibeColor.cardBorder, lineWidth: 1))
+  }
+
+  private func segment(_ target: PresenceMode, label: String) -> some View {
+    let isSelected = mode == target
+    return Button {
+      setMode(target)
+    } label: {
+      Text(label)
+        .font(.system(size: 13, weight: .medium))
+        .frame(minWidth: segmentMinWidth)
+        .frame(height: controlHeight - 6)
+        .foregroundStyle(isSelected ? VibeColor.controlLitForeground : VibeColor.controlAtRestForeground)
+        .background(isSelected ? VibeColor.controlLit : Color.clear)
+        .clipShape(Capsule())
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
   }
 }
 
@@ -229,93 +243,6 @@ private struct LocalStatsView: View {
       StatCell(value: "-\(stats.deletions)", label: "removed")
     }
     .padding(.vertical, 8)
-  }
-}
-
-private struct StatusRow: View {
-  var status: MergedStatus
-  var isYou: Bool
-  @State private var showDetail = false
-
-  var body: some View {
-    Button {
-      showDetail.toggle()
-    } label: {
-      VStack(alignment: .leading, spacing: 7) {
-        HStack(alignment: .firstTextBaseline) {
-          Circle()
-            .fill(status.mode == .online ? VibeColor.online : VibeColor.muted)
-            .frame(width: 7, height: 7)
-          Text(isYou ? "you" : status.user.displayName)
-            .font(.system(size: 16, weight: .medium))
-          Spacer()
-          Text(relative(status.updatedAt))
-            .font(.caption)
-            .foregroundStyle(VibeColor.muted)
-        }
-
-        if status.mode == .online, let manual = status.manualStatus, !manual.isEmpty {
-          Text(manual)
-            .font(.system(size: 14))
-            .foregroundStyle(VibeColor.foreground)
-            .lineLimit(2)
-        } else {
-          Text(presenceText)
-            .font(.system(size: 14))
-            .foregroundStyle(VibeColor.muted)
-        }
-
-        if let stats = status.cards.first(where: { $0.type == "git_stats" })?.summary {
-          Text(stats)
-            .font(.system(size: 13))
-            .foregroundStyle(VibeColor.muted)
-        }
-      }
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .padding(.vertical, 10)
-    .popover(isPresented: $showDetail) {
-      DetailPopover(status: status)
-    }
-  }
-
-  // Online → "online". Offline but with a recent timestamp (sharing, just idle)
-  // → "online {relative} ago". Offline with no timestamp (hidden) → "offline".
-  private var presenceText: String {
-    if status.mode == .online { return "online" }
-    guard let updatedAt = status.updatedAt else { return "offline" }
-    return "online \(updatedAt.formatted(.relative(presentation: .numeric)))"
-  }
-
-  private func relative(_ date: Date?) -> String {
-    guard let date else { return "never" }
-    return date.formatted(.relative(presentation: .named))
-  }
-}
-
-private struct DetailPopover: View {
-  var status: MergedStatus
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text(status.user.displayName)
-        .font(.headline)
-      Text(status.mode.label)
-        .foregroundStyle(VibeColor.muted)
-      ForEach(status.cards) { card in
-        if let summary = card.summary {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(card.type.replacingOccurrences(of: "_", with: " "))
-              .font(.caption)
-              .foregroundStyle(VibeColor.muted)
-            Text(summary)
-          }
-        }
-      }
-    }
-    .padding(16)
-    .frame(width: 260)
   }
 }
 
@@ -725,20 +652,6 @@ private struct IconButtonStyle: ButtonStyle {
     configuration.label
       .frame(width: 30, height: 30)
       .background(VibeColor.field.opacity(configuration.isPressed ? 0.6 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 4))
-  }
-}
-
-private struct SegmentButtonStyle: ButtonStyle {
-  var isSelected: Bool
-
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.system(size: 13))
-      .foregroundStyle(isSelected ? VibeColor.accentForeground : VibeColor.foreground)
-      .padding(.horizontal, 11)
-      .padding(.vertical, 7)
-      .background(isSelected ? VibeColor.foreground : VibeColor.field)
       .clipShape(RoundedRectangle(cornerRadius: 4))
   }
 }
