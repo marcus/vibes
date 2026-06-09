@@ -14,8 +14,6 @@
       spotify: "Starburster · Fontaines D.C.", weather: "Sunny 72°" },
     { handle: "theo",  name: "Theo",   g: ["#34d399", "#0ea5e9"], online: true,  status: "shipping the billing fix...", commits: 4, plus: 188, minus: 240, repos: ["billing"],       when: "just now",
       spotify: null, weather: "Rain 54°" },
-    { handle: "june",  name: "June",   g: ["#a78bfa", "#f472b6"], online: true,  status: "vibing with claude",          commits: 2, plus: 95,  minus: 12,  repos: ["sidecar", "infra"], when: "8 min ago",
-      spotify: "Weird Fishes / Arpeggi · Radiohead", weather: null },
     { handle: "priya", name: "Priya",  g: ["#fb7185", "#fdba74"], online: false, status: "",                            commits: 5, plus: 301, minus: 77,  repos: ["api"],           when: "3 hr ago" },
     { handle: "sam",   name: "Sam",    g: ["#60a5fa", "#34d399"], online: false, status: "",                            commits: 0, plus: 0,   minus: 0,   repos: [],                when: "yesterday" },
     { handle: "kofi",  name: "Kofi",   g: ["#facc15", "#fb923c"], online: false, status: "",                            commits: 1, plus: 24,  minus: 3,   repos: ["zine"],          when: "5 hr ago" },
