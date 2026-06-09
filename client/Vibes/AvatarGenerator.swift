@@ -19,7 +19,7 @@ import ImagePlayground
 
 // Single user-facing failure surface. Every ImageCreator error maps to one of
 // these; callers show a "try a different prompt / try later" message.
-enum AvatarGenerationError: LocalizedError {
+enum AvatarGenerationError: LocalizedError, Equatable {
   case unavailable
   case cancelled
   case failed
@@ -60,6 +60,26 @@ struct AvatarGenerator {
     }
   }
 
+  // Cheap, synchronous capability gate. `ImagePlaygroundViewController.isAvailable`
+  // reports eligibility (AI-capable HW + enabled + supported language) — NOT model
+  // readiness, so it can be `true` while the model is still downloading and every
+  // `images(...)` call still fails. We use it as a fast pre-check to decide whether
+  // to offer the AI path at all; the real readiness signal is a failed generation.
+  @MainActor
+  static var isAvailableSync: Bool {
+    ImagePlaygroundViewController.isAvailable
+  }
+
+  // Open the system Image Playground app, which surfaces the model download and
+  // primes it. There is no URL scheme, so we resolve it by bundle id and launch.
+  static func openImagePlayground() {
+    let bundleID = "com.apple.GenerativePlaygroundApp"
+    guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+      return
+    }
+    NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+  }
+
   // Generate a square PNG for `prompt` under the server `house` style. Returns
   // the raw PNG bytes (ready to POST to /api/avatar) plus the style id actually
   // chosen by the creator, which may differ from `house.styles.first`. Throws
@@ -79,18 +99,41 @@ struct AvatarGenerator {
 
     let full = house.promptPrefix + prompt + house.promptSuffix
 
+    // The very first generation after a cold model often returns `.creationFailed`
+    // as a warm-up transient. Retry once before surfacing the error so the common
+    // case "just worked on the second try" doesn't reach the user.
     do {
-      let stream = creator.images(for: [.text(full)], style: chosen, limit: 1)
+      do {
+        return try await attempt(creator: creator, prompt: full, style: chosen, size: house.imageSize)
+      } catch let error as ImageCreator.Error where error == .creationFailed {
+        return try await attempt(creator: creator, prompt: full, style: chosen, size: house.imageSize)
+      }
+    } catch let error as ImageCreator.Error {
+      throw map(error)
+    }
+  }
+
+  // One generation pass. Throws ImageCreator.Error verbatim (so the caller can see
+  // `.creationFailed` for its retry) and maps everything else to the user-facing
+  // AvatarGenerationError.
+  private func attempt(
+    creator: ImageCreator,
+    prompt: String,
+    style: ImagePlaygroundStyle,
+    size: Int
+  ) async throws -> GeneratedAvatar {
+    do {
+      let stream = creator.images(for: [.text(prompt)], style: style, limit: 1)
       for try await created in stream {
-        let data = try encodeSquarePNG(created.cgImage, size: house.imageSize)
-        return GeneratedAvatar(data: data, style: chosen.id)
+        let data = try encodeSquarePNG(created.cgImage, size: size)
+        return GeneratedAvatar(data: data, style: style.id)
       }
       // Stream finished with no image.
       throw AvatarGenerationError.failed
+    } catch let error as ImageCreator.Error {
+      throw error
     } catch let error as AvatarGenerationError {
       throw error
-    } catch let error as ImageCreator.Error {
-      throw map(error)
     } catch is CancellationError {
       throw AvatarGenerationError.cancelled
     } catch {

@@ -46,12 +46,16 @@ struct AvatarView: View {
     .accessibilityLabel(isOnline ? "\(status.user.displayName), online" : "\(status.user.displayName), offline")
   }
 
-  // The image when present, otherwise initials on a neutral VibeColor fill. The
-  // initials view is also the AsyncImage placeholder/error state.
+  // Choose the representation by the user's explicit `avatarKind`:
+  //   "image"    → AI-generated PNG (AsyncImage, initials on empty/failure)
+  //   "gradient" → a two-color LinearGradient (topLeading → bottomTrailing)
+  //   else       → initials on a neutral VibeColor fill
+  // The presence ring is applied once in `body` and is identical in every case.
   @ViewBuilder
   private var avatarFill: some View {
-    if let url = avatarURL {
-      AsyncImage(url: url) { phase in
+    switch status.user.avatarKind {
+    case "image" where avatarURL != nil:
+      AsyncImage(url: avatarURL!) { phase in
         switch phase {
         case .success(let image):
           image.resizable().scaledToFill()
@@ -61,7 +65,13 @@ struct AvatarView: View {
           initials
         }
       }
-    } else {
+    case "gradient" where gradientColors != nil:
+      LinearGradient(
+        colors: gradientColors!,
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+    default:
       initials
     }
   }
@@ -80,6 +90,17 @@ struct AvatarView: View {
   private var avatarURL: URL? {
     guard let raw = status.user.avatarUrl, !raw.isEmpty else { return nil }
     return URL(string: raw)
+  }
+
+  // The gradient's two ends as SwiftUI Colors, or nil if absent/unparseable (the
+  // switch then falls back to initials).
+  private var gradientColors: [Color]? {
+    guard
+      let gradient = status.user.avatarGradient,
+      let start = Color(hex: gradient.start),
+      let end = Color(hex: gradient.end)
+    else { return nil }
+    return [start, end]
   }
 
   // First letters of up to the first two words of the display name, uppercased.

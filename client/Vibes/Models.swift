@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 
 enum PresenceMode: String, Codable, CaseIterable, Identifiable {
   case online
@@ -321,12 +323,26 @@ struct StatusCard: Codable, Equatable, Identifiable {
   var data: [String: JSONValue]
 }
 
+// A two-color gradient profile icon, rendered client-side (no PNG asset). Synced
+// to all the user's devices and to friends via the feed. Both ends are
+// "#RRGGBB" hex strings (server-validated `^#[0-9a-fA-F]{6}$`).
+struct AvatarGradient: Codable, Equatable {
+  var start: String
+  var end: String
+}
+
 struct UserSummary: Codable, Equatable, Identifiable {
   var id: String?
   var handle: String
   var displayName: String
   var timezone: String?
   var avatarUrl: String?
+  // Explicit selector for which avatar representation to render:
+  //   "image"    → AI-generated PNG at `avatarUrl`
+  //   "gradient" → the two-color `avatarGradient`
+  //   nil        → initials fallback
+  var avatarKind: String?
+  var avatarGradient: AvatarGradient?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -334,6 +350,8 @@ struct UserSummary: Codable, Equatable, Identifiable {
     case displayName = "display_name"
     case timezone
     case avatarUrl = "avatar_url"
+    case avatarKind = "avatar_kind"
+    case avatarGradient = "avatar_gradient"
   }
 }
 
@@ -406,6 +424,33 @@ struct MergedStatus: Codable, Equatable, Identifiable {
 struct FeedResponse: Codable, Equatable {
   var you: MergedStatus
   var friends: [MergedStatus]
+}
+
+// Color <-> "#RRGGBB" hex bridging via NSColor (so SwiftUI ColorPicker selections
+// round-trip to the server's stored hex). Parsing tolerates a leading "#" and is
+// case-insensitive; emission is always 6-digit uppercase with a leading "#",
+// matching the server's `^#[0-9a-fA-F]{6}$` validation.
+extension Color {
+  init?(hex: String) {
+    var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+    if s.hasPrefix("#") { s.removeFirst() }
+    guard s.count == 6, let value = UInt64(s, radix: 16) else { return nil }
+    let r = Double((value >> 16) & 0xFF) / 255.0
+    let g = Double((value >> 8) & 0xFF) / 255.0
+    let b = Double(value & 0xFF) / 255.0
+    self = Color(.sRGB, red: r, green: g, blue: b, opacity: 1)
+  }
+
+  // "#RRGGBB" uppercase. Converts through NSColor's sRGB space so display-P3 or
+  // named colors clamp to a representable 8-bit-per-channel value.
+  var hexRGB: String {
+    let ns = NSColor(self).usingColorSpace(.sRGB) ?? NSColor(self)
+    let r = Int((ns.redComponent * 255).rounded())
+    let g = Int((ns.greenComponent * 255).rounded())
+    let b = Int((ns.blueComponent * 255).rounded())
+    let clamp = { (v: Int) in max(0, min(255, v)) }
+    return String(format: "#%02X%02X%02X", clamp(r), clamp(g), clamp(b))
+  }
 }
 
 struct InviteSummary: Codable, Equatable, Identifiable {

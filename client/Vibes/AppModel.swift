@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
@@ -32,6 +33,16 @@ final class AppModel: ObservableObject {
   @Published var isGeneratingAvatar = false
   @Published var isUploadingAvatar = false
   @Published var avatarError: String?
+  // Set when an AI generation fails with a likely "model still downloading"
+  // transient (`.creationFailed`), so the UI can offer an "Open Image Playground"
+  // button + clearer copy. Cleared on the next generate attempt.
+  @Published var avatarMaySetupNeeded = false
+
+  // Gradient-fallback state for the Profile Icon pane: two picker selections that
+  // default to the brand accent → a complementary teal. `setGradientAvatar()` PUTs
+  // them as "#RRGGBB" hex and refreshes the feed.
+  @Published var gradientStart: Color = Color(hex: "#E05420") ?? .orange
+  @Published var gradientEnd: Color = Color(hex: "#1F6F8B") ?? .teal
 
   private let configStore = ConfigStore()
   private let keychain = KeychainStore()
@@ -407,7 +418,18 @@ final class AppModel: ObservableObject {
   // Probe on-device ImageCreator support and load the server house-style template
   // if it isn't cached yet. Called when the Profile Icon pane appears.
   func prepareAvatarSettings() async {
+    // Seed the gradient pickers from the user's already-saved gradient so
+    // re-opening the pane shows their current colors (not the defaults) and a
+    // stray "Use gradient" tap can't silently overwrite them.
+    if let g = feed?.you.user.avatarGradient,
+       let start = Color(hex: g.start), let end = Color(hex: g.end) {
+      gradientStart = start
+      gradientEnd = end
+    }
     if #available(macOS 15.4, *) {
+      // Cheap synchronous eligibility gate shows/hides the AI path instantly;
+      // the async probe then refines it (it also catches a missing model).
+      avatarSupported = AvatarGenerator.isAvailableSync
       avatarSupported = await AvatarGenerator.isSupported
     } else {
       avatarSupported = false
@@ -448,6 +470,7 @@ final class AppModel: ObservableObject {
     }
 
     avatarError = nil
+    avatarMaySetupNeeded = false
     isGeneratingAvatar = true
     do {
       let generated = try await AvatarGenerator().generate(prompt: prompt, house: house)
@@ -456,11 +479,45 @@ final class AppModel: ObservableObject {
       // Record the style the creator actually used (it may fall back from the
       // server's first preference) so the upload header reflects what was used.
       avatarLastStyle = generated.style
+    } catch let error as AvatarGenerationError {
+      avatarPreviewPNG = nil
+      avatarError = error.localizedDescription
+      // A `.failed` after the generator's own one retry is the warm-up/"model
+      // still downloading" case — offer the Image Playground affordance.
+      avatarMaySetupNeeded = (error == .failed)
     } catch {
       avatarPreviewPNG = nil
       avatarError = error.localizedDescription
     }
     isGeneratingAvatar = false
+  }
+
+  // Open the system Image Playground app (surfaces/primes the model download).
+  func openImagePlayground() {
+    if #available(macOS 15.4, *) {
+      AvatarGenerator.openImagePlayground()
+    }
+  }
+
+  // Apply the two selected gradient colors as the profile icon. PUTs them as
+  // "#RRGGBB" hex, then refreshes the feed so the gradient shows on "you" and
+  // propagates to friends.
+  func setGradientAvatar() async {
+    guard let config, isConfigured else { return }
+    avatarError = nil
+    isUploadingAvatar = true
+    do {
+      _ = try await client(for: config).setAvatarGradient(
+        start: gradientStart.hexRGB,
+        end: gradientEnd.hexRGB
+      )
+      avatarPreviewPNG = nil
+      await refreshFeedOnly()
+      successMessage = "Profile icon updated."
+    } catch {
+      avatarError = error.localizedDescription
+    }
+    isUploadingAvatar = false
   }
 
   // Upload the current preview PNG as the profile icon, then refresh the feed so
@@ -492,6 +549,7 @@ final class AppModel: ObservableObject {
   func removeAvatar() async {
     guard let config, isConfigured else { return }
     avatarError = nil
+    avatarMaySetupNeeded = false
     isUploadingAvatar = true
     do {
       try await client(for: config).deleteAvatar()
