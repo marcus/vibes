@@ -529,11 +529,43 @@ private struct SharingSettingsPane: View {
 }
 
 private struct AdvancedSettingsPane: View {
+  @EnvironmentObject private var model: AppModel
+  @State private var copied = false
+
   var body: some View {
     SettingsPane {
       SettingsHeading(
         title: "advanced"
       )
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("setup help")
+          .font(.caption)
+          .foregroundStyle(VibeColor.muted)
+        Text("Copy this summary into your agent chat if you'd like help configuring repos.")
+          .font(.system(size: 13))
+          .foregroundStyle(VibeColor.muted)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("diagnostics")
+          .font(.caption)
+          .foregroundStyle(VibeColor.muted)
+        Text(model.diagnosticSummary())
+          .font(.system(size: 12))
+          .foregroundStyle(VibeColor.muted)
+          .textSelection(.enabled)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      Button {
+        model.copyDiagnosticSummary()
+        copied = true
+      } label: {
+        Label(copied ? "Copied" : "Copy Summary", systemImage: "doc.on.doc")
+      }
+      .buttonStyle(PlainVibeButtonStyle())
     }
   }
 }
