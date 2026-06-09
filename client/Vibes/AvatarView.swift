@@ -66,14 +66,25 @@ struct AvatarView: View {
         }
       }
     case "gradient" where gradientColors != nil:
-      LinearGradient(
-        colors: gradientColors!,
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
+      ZStack {
+        LinearGradient(
+          colors: gradientColors!,
+          startPoint: .topLeading,
+          endPoint: .bottomTrailing
+        )
+        Text(handleInitial)
+          .font(.system(size: metrics.initialsFontSize, weight: .medium, design: .rounded))
+          .foregroundStyle(.white.opacity(0.9))
+          .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+      }
     default:
       initials
     }
+  }
+
+  // The first letter of the handle, shown over the gradient fill.
+  private var handleInitial: String {
+    (status.user.handle.first.map(String.init) ?? "?").uppercased()
   }
 
   private var initials: some View {
