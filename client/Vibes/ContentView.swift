@@ -654,6 +654,47 @@ private enum VibeColor {
       : ink.withAlphaComponent(0.045)
   })
   static let accentForeground = Color(nsColor: paper)
+
+  // --- TE-derived tokens (see client/Vibes/DESIGN.md). Shared by the presence
+  // Online/Offline control AND the friend card. ---
+
+  // Chassis & surfaces — the neutral body controls sit on.
+  static let chassis = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.149, green: 0.133, blue: 0.114, alpha: 1)
+      : NSColor(red: 0.894, green: 0.871, blue: 0.812, alpha: 1)
+  })
+  static let cardSurface = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.188, green: 0.169, blue: 0.145, alpha: 1)
+      : NSColor(red: 0.984, green: 0.973, blue: 0.949, alpha: 1)
+  })
+  static let cardBorder = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? paper.withAlphaComponent(0.09)
+      : ink.withAlphaComponent(0.08)
+  })
+
+  // Secondary accent — petrol blue. Orange leads; use this sparingly.
+  static let accentSecondary = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.243, green: 0.561, blue: 0.722, alpha: 1)
+      : NSColor(red: 0.173, green: 0.431, blue: 0.569, alpha: 1)
+  })
+
+  // Control state language: "lit" (saturated/active) vs "at-rest" (dimmed/idle).
+  static let controlLit = accent
+  static let controlLitForeground = Color(nsColor: paper)
+  static let controlAtRest = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.227, green: 0.204, blue: 0.176, alpha: 1)
+      : NSColor(red: 0.847, green: 0.820, blue: 0.753, alpha: 1)
+  })
+  static let controlAtRestForeground = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.isDarkMode
+      ? NSColor(red: 0.659, green: 0.624, blue: 0.573, alpha: 1)
+      : NSColor(red: 0.431, green: 0.400, blue: 0.357, alpha: 1)
+  })
 }
 
 private struct AccentButtonStyle: ButtonStyle {
