@@ -57,10 +57,20 @@ struct VibesApp: App {
       }
       CheckForUpdatesView(updater: updaterController.updater)
       Divider()
-      Toggle("Online", isOn: Binding(
-        get: { model.mode == .online },
-        set: { model.setMode($0 ? .online : .offline) }
-      ))
+      // Compact variant of the in-app PresenceToggle (ContentView.swift).
+      // A native menu can't honor the Capsule/lit-accent styling, so we mirror
+      // the same Online/Offline two-segment vocabulary as discrete menu items:
+      // the active mode is "lit" (filled dot + checkmark), the other is at-rest.
+      Button {
+        model.setMode(.online)
+      } label: {
+        Label("Online", systemImage: model.mode == .online ? "largecircle.fill.circle" : "circle")
+      }
+      Button {
+        model.setMode(.offline)
+      } label: {
+        Label("Offline", systemImage: model.mode == .offline ? "largecircle.fill.circle" : "circle")
+      }
       Button("Scan Now") {
         Task { await model.scanPublishAndFetch() }
       }
