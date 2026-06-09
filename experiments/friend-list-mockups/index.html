@@ -251,6 +251,96 @@
   .d-aurora .off-row .recent { flex: 1; font-size: 11.5px; color: #5b6070; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ============================================================
+     DESIGN E — "Aurora II"  (primary candidate: Aurora layout +
+     Hearth avatar ring + full-width add/remove bar; dark & light)
+     ============================================================ */
+  .d-aurora2.dark {
+    --bg: #14151a; --bar-bg: #1a1c22; --ink: #e9eaf0; --muted: #a7acbd;
+    --faint: #6c7180; --card: #1c1e25; --card-border: #2a2d37;
+    --me-card: #232633; --me-border: #343a4d;
+    --add-bg: #1d3a2b; --add-ink: #7fe0a7; --del-bg: #3d2526; --del-ink: #f1958b;
+    --divider: #262932; --off-bg: rgba(255,255,255,.025);
+    --label: #5b6070; --wash-opacity: .14;
+  }
+  .d-aurora2.light {
+    --bg: #f3efe7; --bar-bg: #faf7f1; --ink: #2b2620; --muted: #6f675b;
+    --faint: #a39a8b; --card: #fdfbf6; --card-border: #e7e1d5;
+    --me-card: #ece6d8; --me-border: #ddd5c2;
+    --add-bg: #d9ecdd; --add-ink: #1f7a4d; --del-bg: #f4ddd6; --del-ink: #b3503e;
+    --divider: #e4ddcf; --off-bg: rgba(255,255,255,.45);
+    --label: #b3aa99; --wash-opacity: .08;
+  }
+  .d-aurora2 { background: var(--bg); color: var(--ink); }
+  .d-aurora2 .titlebar { background: var(--bar-bg); border-bottom: 1px solid var(--card-border); color: var(--ink); }
+  .d-aurora2 .body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  .d-aurora2 .card {
+    position: relative; border-radius: 18px; padding: 15px 16px;
+    background: var(--card); border: 1px solid var(--card-border);
+    overflow: hidden;
+  }
+  .d-aurora2 .card.me { background: var(--me-card); border-color: var(--me-border); }
+  .d-aurora2 .card .aurora {
+    position: absolute; inset: -60% -30%;
+    background:
+      radial-gradient(45% 60% at 25% 35%, var(--c1) 0%, transparent 65%),
+      radial-gradient(50% 65% at 75% 65%, var(--c2) 0%, transparent 65%);
+    opacity: var(--wash-opacity); filter: blur(18px);
+    animation: auroraDrift 18s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+  .d-aurora2 .card .row { position: relative; display: flex; align-items: center; gap: 13px; }
+  .d-aurora2 .card .avatar { width: 42px; height: 42px; font-size: 15px; }
+  .d-aurora2 .ring { position: relative; flex: 0 0 auto; }
+  .d-aurora2 .ring::after {
+    content: ""; position: absolute; inset: -4px; border-radius: 50%;
+    border: 2px solid var(--c1);
+    opacity: .6;
+    animation: breathe 3.4s ease-in-out infinite;
+  }
+  .d-aurora2 .card .who { flex: 1; min-width: 0; }
+  .d-aurora2 .card .name { font-size: 15px; font-weight: 700; }
+  .d-aurora2 .card .status { font-size: 12.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-aurora2 .when { font-size: 11px; color: var(--faint); white-space: nowrap; align-self: flex-start; margin-top: 2px; }
+
+  /* full-width add/remove bar: additions left, deletions right, numbers inside */
+  .d-aurora2 .locbar {
+    position: relative; display: flex; margin-top: 13px;
+    height: 22px; border-radius: 99px; overflow: hidden;
+    font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .d-aurora2 .locbar .add {
+    flex: 1 1 0; min-width: 64px;
+    background: var(--add-bg); color: var(--add-ink);
+    display: flex; align-items: center; padding: 0 12px;
+  }
+  .d-aurora2 .locbar .del {
+    flex: 1 1 0; min-width: 64px;
+    background: var(--del-bg); color: var(--del-ink);
+    display: flex; align-items: center; justify-content: flex-end; padding: 0 12px;
+  }
+  .d-aurora2 .legend {
+    position: relative; display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 9px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .d-aurora2 .legend b { color: var(--ink); font-weight: 700; }
+  .d-aurora2 .legend .repos { color: var(--faint); font-weight: 600; }
+
+  .d-aurora2 .divider {
+    display: flex; align-items: center; gap: 10px; margin: 8px 2px 0;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--label);
+  }
+  .d-aurora2 .divider::after { content: ""; flex: 1; height: 1px; background: var(--divider); }
+  .d-aurora2 .off-row {
+    display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+    border-radius: 11px; background: var(--off-bg);
+  }
+  .d-aurora2 .off-row .avatar { width: 26px; height: 26px; font-size: 10px; filter: saturate(.3) brightness(.9); }
+  .d-aurora2 .off-row .name { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .d-aurora2 .off-row .recent { flex: 1; font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-aurora2 .off-row .when { margin: 0; align-self: center; }
+
+  /* ============================================================
      DESIGN C — "Campfire"  (playful bubbles, friends as presence)
      ============================================================ */
   .d-campfire { background: linear-gradient(170deg, #faf6ee 0%, #f2ecdf 100%); color: #2b2620; }
@@ -500,6 +590,47 @@ function aurora() {
   </div>`;
 }
 
+/* ---------------- Design E: Aurora II (primary candidate) ---------------- */
+function aurora2() {
+  const card = (p, isMe) => `
+    <div class="card${isMe ? " me" : ""}" style="${vars(p)}">
+      <div class="aurora"></div>
+      <div class="row">
+        <span class="ring">${avatar(p)}</span>
+        <div class="who">
+          <div class="name">${isMe ? "you" : p.name}</div>
+          <div class="status">${p.status}</div>
+        </div>
+        <span class="when">${isMe ? "just now" : p.when}</span>
+      </div>
+      <div class="locbar">
+        <div class="add" style="flex-grow:${p.plus}">+${p.plus}</div>
+        <div class="del" style="flex-grow:${p.minus}">−${p.minus}</div>
+      </div>
+      <div class="legend">
+        <span><b>${p.commits}</b> commit${p.commits === 1 ? "" : "s"} today</span>
+        <span class="repos">${p.repos.join(", ")}</span>
+      </div>
+    </div>`;
+  const win = theme => `
+  <div class="mac-window d-aurora2 ${theme}">
+    <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">Vibes</span></div>
+    <div class="body">
+      ${card(ME, true)}
+      ${online.map(p => card(p, false)).join("")}
+      <div class="divider">Away</div>
+      ${offline.map(p => `
+      <div class="off-row">
+        ${avatar(p)}
+        <span class="name">${p.name}</span>
+        <span class="recent">${offSummary(p)}</span>
+        <span class="when">${p.when}</span>
+      </div>`).join("")}
+    </div>
+  </div>`;
+  return win("dark") + win("light");
+}
+
 /* ---------------- Design C: Campfire ---------------- */
 function campfire() {
   return `
@@ -585,6 +716,19 @@ function ticker() {
 /* ---------------- design registry + notes ---------------- */
 const DESIGNS = [
   {
+    id: "aurora2", label: "★ Aurora II", render: aurora2,
+    notes: `
+      <h2>Aurora II — primary candidate</h2>
+      <p>Aurora's layout merged with the pieces we liked elsewhere; shown in dark and light.</p>
+      <ul>
+        <li><em>Avatar ring</em> from Hearth: a slow breathing ring in the friend's gradient color marks who's online.</li>
+        <li><em>LOC bar</em> is always full width — absolute scale isn't meaningful across people. Additions sit left, deletions right, numbers inside the bar; the split point reflects each person's own add/remove ratio.</li>
+        <li>Below the bar: commits on the left, repo list on the right.</li>
+        <li><em>Your card</em> gets the identical treatment and avatar size, distinguished only by a slightly different background tint.</li>
+        <li>Status line and updated-time keep their Aurora placement; away list unchanged.</li>
+      </ul>`
+  },
+  {
     id: "hearth", label: "A · Hearth", render: hearth,
     notes: `
       <h2>Hearth — warm evolution of today's look</h2>
@@ -655,7 +799,7 @@ function select(id) {
   history.replaceState(null, "", "#" + id);
 }
 const initial = location.hash.slice(1);
-select(DESIGNS.some(d => d.id === initial) ? initial : "hearth");
+select(DESIGNS.some(d => d.id === initial) ? initial : "aurora2");
 </script>
 </body>
 </html>
