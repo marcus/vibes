@@ -127,5 +127,6 @@ These requirements apply to sessions that change code (anything under `client/`,
 
 - Keep commits small and descriptive.
 - Every code-changing commit must be independently reviewed by a sub-agent with feedback incorporated (see Definition of Done).
+- When work is complete and validated, commit the finished changes before handing off unless the user explicitly asks you not to commit.
 - Do not rewrite unrelated user changes.
 - Keep generated build products out of git.

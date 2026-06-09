@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: check client server server-dev server-build server-check deploy mac-release
+.PHONY: check client server server-dev server-build server-check app-icon deploy mac-release
 
 check: server-check client
 
@@ -18,6 +18,10 @@ server: server-build
 
 server-check:
 	cd server && npm run check
+
+app-icon:
+	@test -n "$(ICON)" || (echo "usage: make app-icon ICON=assets/icons-3.jpeg" >&2; exit 1)
+	./scripts/set-app-icon.sh "$(ICON)"
 
 deploy:
 	./scripts/deploy-server.sh

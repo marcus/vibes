@@ -1,151 +1,163 @@
-# Vibes: Presence Model & Copy Rework
+# Vibes: Presence Simplification & Copy Rework (Online / Offline)
 
-Status: planning (not started). Captures intent and findings; refine before building.
+Status: planning (not started). Captures intent, the full touchpoint map, and concrete changes.
 
 ## Purpose
 
-Four related product changes:
+Collapse Vibes' presence model to **two states — online and offline — and nothing else**, and rewrite the copy to match. Specifically:
 
-1. **Rework presence.** Remove the "quiet" status entirely, move to an automatic recency-based signal ("online/green" if active recently, otherwise "last seen vibing N minutes ago"), and keep the fun status labels as a *flexible* list rather than hardcoded.
-2. **Rewrite the website (and in-app) copy** to match what Vibes is actually for.
-3. **Make multi-machine setup obvious on first launch.** The loading / first-run surface should ask whether the user already has Vibes installed somewhere else and explain how to connect both Macs to the same account.
-4. **Remove coding-agent attribution.** Vibes should not know or display which coding agent, editor, assistant, or workflow produced code. The product should keep local Git stats and leave optional Spotify/weather cards as future extensions.
+1. **Remove the "quiet" presence mode** entirely.
+2. **Remove the word "broadcasting"** everywhere it appears (UI, copy, internal mode names, docs). The sharing-on state is just **online**.
+3. **Remove the derived "vibe" labels** entirely (ship mode, wandering, yak shaving, vibing, warming up, quiet). There is no fun status word anymore.
+4. Make presence **mostly automatic** with **one manual override**: you are online when you've been active recently and haven't hidden yourself; you can flip yourself **offline** (invisible/paused) at will.
+5. **Rewrite website + in-app copy** to describe online/offline ambient presence with a for-fun glance at lines pushed.
 
-## Why remove "quiet"
+### Explicitly deferred to a later phase (do not touch here)
 
-"Quiet" was an "online but don't disturb" mode. But Vibes has no interruption mechanism — there is nothing to be disturbed by. The only planned social interaction is a subtle, opt-in acknowledgment ("wave"), not a message. So a do-not-disturb mode is meaningless. Presence should just reflect reality: are you active right now, and what's your vibe.
+- **Repo sharing defaults** (share-alias / share-git-stats toggles and their UI). Leave the existing config fields and toggles exactly as they are.
+- **Multi-device aggregation** (cross-device line summing, cross-device "last active"). This phase derives presence from the existing single merge source; it does not change `mergeGitStats`, the `client_day` summing, or per-device fan-in.
+- The **acknowledgment / "wave"** interaction — not designed yet.
+- **Agent / code-origin attribution** — already removed in a prior slice; out of scope and not to be reintroduced.
 
-## Current behavior (reference)
+## Target model
 
-### Presence modes (to change)
-- Server: `MODES = {broadcasting, quiet, offline}`, `MODE_RANK` offline<quiet<broadcasting — [relay.js:7-8](server/src/lib/server/relay.js).
-- Client: user-picked `PresenceMode` enum broadcasting/quiet/offline — [Models.swift:3-15](client/Vibes/Models.swift), menu in `MainPanel`.
-- Detail text "online, not broadcasting" (quiet) vs "offline" — [ContentView.swift:263](client/Vibes/ContentView.swift).
-- Admin tallies presence by these three — [admin.js:25-26,290-298](server/src/lib/server/admin.js), [admin/+page.svelte:60](server/src/routes/admin/+page.svelte).
+**Two states, derived by default, with one manual override.**
 
-### Derived "vibe" — the fun status (keep, but make flexible & drop "quiet")
-- `deriveVibe` maps daily git stats → one of **"ship mode", "wandering", "yak shaving", "vibing", "warming up", "quiet"** — [GitScanner.swift:345-353](client/Vibes/GitScanner.swift). This list is exactly the "flexible status list" we want to keep; **"quiet" is the no-activity fallback to remove.**
+- **Online** — the user is sharing *and* has published activity within a recency `THRESHOLD`. Friends see a green/"online" indicator plus the optional for-fun cards (aggregate Git stats, optional manual note, optional repo alias).
+- **Offline** — either the user has flipped themselves offline (invisible/paused), *or* they are sharing but haven't published within `THRESHOLD` (laptop asleep, app closed, idle). Friends see "offline" or, when we have a timestamp, **"last seen N minutes ago"** (rolling up to hours/days). No cards.
 
-### Multi-device aggregation (answers the "two machines" question)
-- Each machine publishes its own status row keyed by `(user_id, device_id)` — `upsertStatus`, [relay.js:383](server/src/lib/server/relay.js), `ON CONFLICT(user_id, device_id)`.
-- `getFeed` pulls **all** of a user's device rows and `mergeUserStatuses` combines them — [relay.js:491-540](server/src/lib/server/relay.js):
-  - **Presence** = strongest mode across devices (max `MODE_RANK`). If either machine is broadcasting, the user shows broadcasting.
-  - **Git stats** (commits/insertions/deletions/repos/uncommitted) **and** agent mix **are summed** across all broadcasting devices whose `client_day` equals the latest broadcasting device's day — `mergeGitStats` [relay.js:439-447], `mergeAgentMix` [relay.js:457-471]. **So yes: lines of code from both machines are combined** in the broadcast.
-  - **Caveat:** only devices on the *same latest `client_day`* are summed. If the two machines disagree on "today" (timezone, clock skew, or one is a day stale), the off-day machine's lines are dropped. Quiet/offline devices contribute nothing.
-  - `manual_status`, `derived_status`, and the non-summed cards (repo_aliases, spotify, weather) come from a **single source device** (latest broadcasting), not merged.
+**The only manual control** is an Online ⇄ Offline toggle (default Online). Flipping to Offline hides you immediately regardless of activity. There is no third mode, no "broadcasting" label, and no vibe word anywhere.
 
-This matters for the rework: keep per-device publishing + cross-device summing, and compute "online" recency from the **most recent activity across all devices**, not per device.
+**Words the user ever sees:** `online`, `offline`, and `last seen … ago`. That's it.
 
-### Agent attribution (removed in current slice)
-- Client config has repo-level agent labels via `AgentLabel`, `RepoConfig.agent`, and `SharingCards.agentMix` — [Models.swift:19-28,86-101,107-125](client/Vibes/Models.swift).
-- The repo settings UI lets the user choose an agent per repo and toggle "share agent mix" — [ContentView.swift:357-359,396-404](client/Vibes/ContentView.swift).
-- `GitScanner` counts commits by repo agent and emits an `agent_mix` status card — [GitScanner.swift:22,318-331](client/Vibes/GitScanner.swift).
-- Server feed merge recomputes a cross-device `agent_mix` card — [relay.js:457-484,519-521](server/src/lib/server/relay.js).
-- Tests and fixtures assert `agent_mix` behavior — [relay.test.js:342-352](server/tests/relay.test.js).
+### What stays (untouched by this phase)
 
-The bullets above describe the pre-removal behavior that was removed alongside the spec-v2 promotion. The new product decision is stronger than "hide it by default": the feature surface is gone and the client no longer publishes agent data. The only code-activity signal Vibes should share by default is aggregate Git stats. Repo aliases can remain optional; Spotify and weather can stay as dormant / future optional cards.
+- The **aggregate Git-stats card** (commits / insertions / deletions / repos / uncommitted) — this is the "for-fun glance at lines pushed" and is the whole point. Keep it.
+- The **optional free-text manual status note** (`manual_status`) — user-authored, not a derived label, so it survives. (Minor open question below on whether to keep it.)
+- **Optional repo aliases** card and all repo-sharing config fields/toggles — deferred phase owns these.
+- Dormant Spotify / weather card types in config/contract — leave as-is.
 
-## Goals
+## Why
 
-- Remove "quiet" as a selectable presence mode (server `MODES` + client `PresenceMode` + copy).
-- Remove "quiet" from the derived vibe vocabulary; no-activity becomes "offline / last seen …", not a vibe word.
-- Replace the manual mode picker with **automatic presence**: online (green) if last activity within a threshold; otherwise "last seen vibing N minutes ago".
-- Keep a **flexible, non-hardcoded** list of fun vibe labels — config/data-driven so labels can change without shipping a new app build. Exact set is intentionally TBD; only certain that "quiet" is out.
-- Keep multi-device line summing working.
-- On the loading / first-run screen, add a compact affordance: "Already using Vibes on another Mac?" Opening it explains that the same account token must be used on both machines, each machine publishes as its own device, and aggregate Git stats are combined in friends' feeds.
-- Remove agent labels, agent settings, agent config, `agent_mix` payloads, and agent feed rendering. Do not replace this with another source-of-code attribution model.
-- Rewrite website + in-app copy to match product intent.
+- **"Quiet" was a do-not-disturb mode, but Vibes has nothing to disturb you with.** There is no message, no ping, no interruption. A "online but don't disturb" state is meaningless, so it collapses into "offline."
+- **"Broadcasting" sounds posed/performative.** You're either online and coding or you're not — "online" carries that without the staged feeling.
+- **The derived vibe labels are guesswork dressed as status.** They inferred a mood from line counts ("ship mode", "yak shaving"). They add a hardcoded vocabulary to maintain, imply judgment about how someone's day is going, and aren't what the product is for. The honest signal is: are they around, and roughly how much have they shipped. The Git-stats card already says the second part; presence says the first.
 
-## Non-Goals / deferred
+## Current behavior (touchpoint map)
 
-- The acknowledgment / "wave" notification and its UI indication — **explicitly not designed yet**, out of scope here.
-- Finalizing the vibe-label set (left flexible/TBD).
-- Whether an explicit "go invisible" opt-out survives (see open questions).
-- Implementing Spotify or weather cards. They may remain in config / schema if already harmless, but this plan does not build them.
-- Any automatic detection of coding tools, editors, processes, agents, prompts, transcripts, or commit-message hints.
+Every place the three concepts (quiet mode, "broadcasting" wording, derived vibe) live today:
 
-## Proposed model (draft)
+### Presence mode — 3-way `broadcasting / quiet / offline`
 
-- **Presence is derived, not chosen:**
-  - online/green: most recent activity across the user's devices is within `THRESHOLD` (≈2 min, configurable).
-  - otherwise: "last seen vibing {N} minutes ago" (rolling up to hours/days), from the last-activity timestamp.
-- **Activity source:** simplest is the latest status row's `updated_at`; may want a dedicated `last_active` heartbeat (see open questions — current publish cadence is ~3 min, which is coarser than a 2-min window).
-- **Vibe label** stays a derived word from daily stats, but the mapping lives in a flexible place (a small server-driven config the app fetches, or a committed shared JSON), not a hardcoded Swift switch. "quiet" removed.
-- **Opt-out:** if we keep a "go invisible" option, it's a boolean "share presence" — not a 3-way mode. Open question.
-- **Multi-machine guidance:** first-run loading/onboarding should include a small disclosure or secondary action, not a full setup fork. Copy should say, in plain terms:
-  - If this is your first Mac, continue normally.
-  - If Vibes is already set up on another Mac, use the existing-account / token path so both installs belong to the same person.
-  - Each Mac can scan different repos; friends see one combined view for today's Git stats when both Macs are active.
-- **Shared data model:** keep `git_stats` as the core activity card. Keep `repo_aliases` as optional. Leave `spotify` and `weather` as optional future card types if they are already part of config/contracts. Remove `agent_mix` entirely from client output and server merge output.
+- **Client enum** `PresenceMode { broadcasting, quiet, offline }` + `.label` strings — [Models.swift:3-17](client/Vibes/Models.swift).
+- **Persisted config** `PresenceConfig.mode`, default `.broadcasting` — [Models.swift:121-131](client/Vibes/Models.swift).
+- **App state + publish** `AppModel.mode` default `.broadcasting`, `setMode`, restore from config — [AppModel.swift:10,48,158,255-259](client/Vibes/AppModel.swift).
+- **Main-panel mode picker** (menu, all cases) — [ContentView.swift:131-141](client/Vibes/ContentView.swift).
+- **Menu-bar mode picker** (duplicate, all cases) — [VibesApp.swift:60-67](client/Vibes/VibesApp.swift).
+- **Friend-row detail text** `"online, not broadcasting"` (quiet) vs `"offline"` — [ContentView.swift:262-266](client/Vibes/ContentView.swift).
+- **Detail popover** shows `status.mode.label` — [ContentView.swift:305](client/Vibes/ContentView.swift).
+- **Payload build** gates cards/manual/derived on `mode == .broadcasting`; sets `derivedStatus` to vibe when broadcasting else `mode.rawValue` — [GitScanner.swift:280-291](client/Vibes/GitScanner.swift).
+- **Server modes** `MODES = {broadcasting, quiet, offline}`, `MODE_RANK {offline:0, quiet:1, broadcasting:2}` — [relay.js:7-8](server/src/lib/server/relay.js).
+- **Server publish** validates mode; only `broadcasting` shares cards/manual/derived; offline/quiet replace blob — [relay.js:338,353-371](server/src/lib/server/relay.js).
+- **Server feed merge** strongest mode across devices via `MODE_RANK`; presence/derived derived from mode — [relay.js:460-540](server/src/lib/server/relay.js).
+- **Merged client model** `MergedStatus.mode` + detail rendering — [Models.swift:273-296](client/Vibes/Models.swift).
+- **Admin** `PRESENCE_CASE` / `RANK_TO_MODE` / per-user presence, tally `{broadcasting, quiet, offline}` — [admin.js:23-26,87,105,190-206,290-307](server/src/lib/server/admin.js).
+- **Admin UI** presence stat with `quiet` / `offline` sub-rows, "Broadcasting now" list — [admin/+page.svelte:55-83](server/src/routes/admin/+page.svelte).
+- **Admin badge** `StateBadge` tones for `broadcasting / quiet / offline` (+ `--admin-quiet` CSS var) — [StateBadge.svelte:6-8,58](server/src/lib/components/admin/StateBadge.svelte).
 
-## Affected code
+### Derived "vibe" label
 
-**Server**
-- [relay.js:7-8](server/src/lib/server/relay.js) — drop "quiet" from `MODES`/`MODE_RANK`; rethink as online/offline (or share/no-share).
-- [relay.js:491-540](server/src/lib/server/relay.js) `mergeUserStatuses` + `derived_status` — recency-based presence; compute last-active across devices.
-- [relay.js:457-484,519-521](server/src/lib/server/relay.js) — remove `mergeAgentMix` and stop adding an `agent_mix` card.
-- [admin.js:25-26,290-298](server/src/lib/server/admin.js) + [admin/+page.svelte:60](server/src/routes/admin/+page.svelte) — update presence tally to new states.
-- [relay.test.js:342-352](server/tests/relay.test.js) + fixtures — remove agent-mix expectations and add a regression that unknown/legacy `agent_mix` cards are not re-emitted by feed merge if desired.
+- `deriveVibe(stats)` → `"ship mode" | "wandering" | "yak shaving" | "vibing" | "warming up" | "quiet"` — [GitScanner.swift:328-335](client/Vibes/GitScanner.swift).
+- `derived_status` carried in payload, defaulted to `"vibing"` server-side, surfaced in feed — [relay.js:366-368,463,497](server/src/lib/server/relay.js).
+- `MergedStatus.derivedStatus` + the friend-row **dot tint** switch (`ship mode`=red, `vibing`=green, `yak shaving`=orange…) — [Models.swift:283-288](client/Vibes/Models.swift), [ContentView.swift:283-290](client/Vibes/ContentView.swift).
+- `derived_status` field in `StatusPayload` coding keys — [GitScanner.swift:133](client/Vibes/GitScanner.swift).
 
-**Client**
-- [Models.swift:3-15](client/Vibes/Models.swift) `PresenceMode` — remove `.quiet`; likely collapse to derived presence + optional opt-out.
-- [Models.swift:19-28,86-101,107-125](client/Vibes/Models.swift) — remove `AgentLabel`, `RepoConfig.agent`, and `SharingCards.agentMix`; keep config decoding tolerant of older files that still contain these keys.
-- `MainPanel` mode picker + [ContentView.swift:263](client/Vibes/ContentView.swift) detail text — replace with last-seen / online rendering.
-- [ContentView.swift:357-359,396-404](client/Vibes/ContentView.swift) — remove "share agent mix" and per-repo agent picker UI.
-- [GitScanner.swift:345-353](client/Vibes/GitScanner.swift) `deriveVibe` — remove "quiet"; move label list to flexible config.
-- [GitScanner.swift:22,318-331](client/Vibes/GitScanner.swift) — stop counting per-agent commits and stop building `agent_mix`.
-- First-run/loading view in `ContentView` / onboarding flow — add the "Already using Vibes on another Mac?" disclosure and route it to the existing-token / advanced path.
+### Copy
 
-**Copy**
-- [+page.svelte:12-13,26,47](server/src/routes/+page.svelte) — remove "A quiet presence layer", "when they prefer quiet", "Broadcasting, Quiet, or Offline"; rewrite per intent below.
-- First-run client copy — explain multiple Macs without making multi-device feel like an advanced feature:
-  - "Already using Vibes on another Mac?"
-  - "Use the same account token on both Macs. Each Mac publishes its own device status, and Vibes combines today's Git stats for your friends."
-  - "New to Vibes? Keep going and create your account here."
+- Homepage `<title>`/meta description, h1 "A quiet presence layer for coding friends.", subhead "…and when they prefer quiet.", image alt "quiet friend presence feed", step 4 "choose Broadcasting, Quiet, or Offline." — [+page.svelte:1-49](server/src/routes/+page.svelte).
+- AGENTS.md line 14 "The user chooses Broadcasting, Quiet, or Offline." (Note: line 64 "spare, premium, and quiet" is an *aesthetic* adjective — leave it.) — [AGENTS.md](AGENTS.md).
+- Client runbook "Presence Modes & Vibes … Broadcasting, Quiet, and Offline … Derived vibes …" — [client-runbook.md:32](docs/client-runbook.md).
+- spec-v2.md many references (modes, Quiet section, derived vibe list) — [spec-v2.md:30,51,69-79,116,127,249,261,615,659,679,846,979,992](docs/plans/active/spec-v2.md).
 
-## Website + in-app copy (folds in the earlier note)
+### Contract fixtures & tests
 
-**Product intent:** Vibes is a fun, lightweight way to see which of your friends are coding at the same time as you, plus a for-fun glance at how many lines they've pushed recently — ambient presence, not a productivity tool.
+- `shared/contract/status-broadcasting.json` and `feed-response.json` carry `"mode": "broadcasting"`, `"derived_status": "vibing"`.
+- `server/tests/relay.test.js` has quiet-specific cases (`mode/derived_status: "quiet"`) at lines 299-312, 377-379, 427.
+- `server/tests/admin.test.js:51` uses `derived_status: "vibing"`.
 
-**Audience (real people, accomplished/hobbyist engineers coding at odd hours):**
-- Justin — retired engineer from Google and Facebook.
-- Marcus's dad — retired engineer.
-- A good buddy who works elsewhere but codes a lot in his spare time.
-- They write code at all hours, often late at night. The joy is seeing someone else is online too.
+## Changes by area
 
-**Tone:** mostly for fun, with the *slightest* bit of friendly competition (lines pushed). Possible future feature: a subtle way to acknowledge a friend's presence (a "wave").
+### Client (SwiftUI)
 
-**Design north star:** Teenage Engineering — clean, minimal, tactile, but playful. Their design metaphor/philosophy is the target.
+1. **Collapse the enum.** `PresenceMode` → two cases: `online`, `offline` (rename `broadcasting`→`online`, delete `quiet`). Labels `"Online"` / `"Offline"`. — [Models.swift:3-17](client/Vibes/Models.swift)
+2. **Config + state defaults** flip `.broadcasting` → `.online`. Decode tolerantly: a stored `"broadcasting"` maps to `.online`, a stored `"quiet"` maps to `.offline` (custom `init(from:)` or a normalizing decoder), so existing config files don't break. — [Models.swift:121-131](client/Vibes/Models.swift), [AppModel.swift:10,48,158](client/Vibes/AppModel.swift)
+3. **Replace both mode pickers with an Online/Offline toggle.** The main panel (`ContentView`) and menu bar (`VibesApp`) currently render a 3-item `Picker` over `allCases`. Replace with a single toggle/segmented control (Online ⇄ Offline). `setMode` stays as the action. — [ContentView.swift:131-141](client/Vibes/ContentView.swift), [VibesApp.swift:60-67](client/Vibes/VibesApp.swift)
+4. **Delete `deriveVibe` and `derived_status`.** Remove the function, the `StatusPayload.derivedStatus` field and its coding key, and stop sending the field. — [GitScanner.swift:280-291,328-335,133](client/Vibes/GitScanner.swift)
+5. **Friend-row rendering.** Remove `derivedStatus` from `MergedStatus` and the vibe-based `tint` switch. The dot becomes a plain **online (green) / offline (muted)** indicator. Detail text: when online but stale → `"last seen N minutes ago"` (use `updatedAt`); when offline → `"offline"`; drop `"online, not broadcasting"`. Detail popover stops showing a vibe word. — [Models.swift:273-296](client/Vibes/Models.swift), [ContentView.swift:262-266,283-296,305](client/Vibes/ContentView.swift)
 
-**Homepage:** currently leans generic ("A quiet presence layer for coding friends"). Rewrite headline/subhead/steps toward the intent above; drop the mode-selection step. Keep it minimal. This supersedes the get-started copy touched in [[app-first-onboarding]] (which only updated the install steps).
+### Server (relay)
+
+6. **Modes → two values.** `MODES = {online, offline}`; `MODE_RANK {offline:0, online:1}`. On publish, accept legacy `"broadcasting"`→`online` and `"quiet"`→`offline` (normalize before validating) so older clients keep working during rollout. — [relay.js:7-8,338](server/src/lib/server/relay.js)
+7. **Sharing gate** keyed on `online` instead of `broadcasting`: cards/manual shared only when `online`; `offline` replaces the blob with no cards (same shape quiet/offline had). — [relay.js:353-371](server/src/lib/server/relay.js)
+8. **Remove `derived_status`.** Stop reading/defaulting/emitting it in publish and in `mergeUserStatuses`. — [relay.js:366-368,463,497](server/src/lib/server/relay.js)
+9. **Recency-based liveness in the feed.** In `mergeUserStatuses`, compute the friend's effective state: if mode is `online` *and* the source row's `updated_at` is within `THRESHOLD`, report `online`; if `online` but stale, report `offline` with a `last_seen` timestamp (= `updated_at`); if mode `offline`, report `offline` with no `last_seen`. Keep using the **existing single merge source / `client_day` logic untouched** — no multi-device changes. — [relay.js:460-540](server/src/lib/server/relay.js)
+10. **Contract + schema.** Update `shared/contract/status-broadcasting.json` (rename file/value to `online`, drop `derived_status`) and `feed-response.json`. Bump `schema_version` if the contract tests key on it. — [shared/contract/](shared/contract/)
+
+### Admin
+
+11. **Tally → `{online, offline}`**; update `PRESENCE_CASE`, `RANK_TO_MODE`, the per-user presence reduce, and the "Broadcasting now" query/label (→ "Online now"). — [admin.js:23-26,87,105,190-206,290-322](server/src/lib/server/admin.js)
+12. **Admin UI**: presence stat shows online/offline; rename "Broadcasting now" section; empty-state copy. — [admin/+page.svelte:55-83](server/src/routes/admin/+page.svelte)
+13. **`StateBadge`**: replace `broadcasting`/`quiet` tones with `online` (live) / `offline` (faint); drop the `quiet` entry and `--admin-quiet` usage if now unused. — [StateBadge.svelte:6-8,58](server/src/lib/components/admin/StateBadge.svelte)
+
+### Tests
+
+14. **`relay.test.js`**: rename `broadcasting`→`online` everywhere; delete/replace the three quiet-specific cases (299-312, 377-379, 427) with offline equivalents; remove `derived_status` assertions; add a regression that **legacy `"broadcasting"`/`"quiet"` payloads are normalized** to online/offline, and a test for the **recency → offline/"last seen"** transition. — [relay.test.js](server/tests/relay.test.js)
+15. **`admin.test.js`**: drop `derived_status`; update presence-tally expectations. — [admin.test.js:51](server/tests/admin.test.js)
+
+### Copy & docs
+
+16. **Homepage** — rewrite (concrete strings below). — [+page.svelte](server/src/routes/+page.svelte)
+17. **AGENTS.md:14** — replace "The user chooses Broadcasting, Quiet, or Offline." with the online/offline model. Leave the aesthetic "quiet" on line 64.
+18. **client-runbook.md:32** — replace the "Presence Modes & Vibes" line with "Presence: online / offline, derived from recent activity with a manual offline toggle."
+19. **spec-v2.md** — update the modes/quiet/derived-vibe sections to the two-state model (larger edit; can trail the code but should not stay contradictory).
+
+## Concrete homepage copy
+
+`server/src/routes/+page.svelte` — replace the marked strings. Tone target stays Teenage-Engineering minimal.
+
+| Element | Current | Proposed |
+|---|---|---|
+| `<title>` | `Vibes` | `Vibes` (keep) |
+| meta description | "Private ambient presence for small coding groups." | "See which friends are online and coding — private ambient presence for small groups." |
+| h1 | "A quiet presence layer for coding friends." | **"See who's coding right now."** |
+| subhead | "See who is around, what kind of day they are having, and when they prefer quiet." | **"Vibes shows which friends are online and how much they've shipped today. Ambient presence for people who code at odd hours."** |
+| description | "Vibes is a Mac app for small groups. It turns local Git activity and an optional status into a simple friend feed." | "A Mac app for small groups. It turns your local Git activity into a simple, private friend feed — no chat, no noise." |
+| privacy | (unchanged) | keep as-is |
+| image alt | "…showing a quiet friend presence feed." | "…showing a feed of which friends are online and coding." |
+| step 4 | "Add your local repos and choose Broadcasting, Quiet, or Offline." | **"Add your local repos. You're online while you're coding, and one tap takes you offline."** |
+
+(These are starting strings, not final — the only hard constraints are: no "quiet", no "broadcasting", no vibe-label words, online/offline only.)
+
+## Backward compatibility / rollout
+
+- **Old clients keep publishing** `mode: "broadcasting"` / `"quiet"` for a while. The server normalizes on ingest (step 6): `broadcasting→online`, `quiet→offline`. So a mixed fleet works.
+- **Old config files** on disk still say `mode: "broadcasting"`; client decode normalizes (step 2). No migration script needed.
+- **Old feed rows** with a stored `derived_status` are simply ignored by the new feed builder; nothing surfaces it.
+- Do the **server normalization before** shipping the new client, so an updated relay tolerates both old and new clients.
 
 ## Suggested implementation order
 
-1. **Done: Plan/spec cleanup:** `spec-v2.md` no longer lists Agent Detection, `agent_mix`, or per-repo agent settings as current behavior. Privacy language is explicit: no raw agent/tool transcripts and no coding-tool attribution.
-2. **Done: Client agent removal:** the repo agent picker and `agentMix` sharing toggle are gone. Config decoding remains backward-compatible because stale `agent` / `agent_mix` keys are ignored.
-3. **Done: Scanner/payload cleanup:** `DailyGitStats.agentCommitCounts` and the `agent_mix` card builder are gone. Published payloads include `git_stats`, optional `repo_aliases`, and dormant Spotify/weather cards only.
-4. **Done: Server merge cleanup:** `mergeAgentMix` is gone, tests/fixtures are updated, and legacy `agent_mix` device cards are not synthesized into feed output.
-5. **First-run multi-machine copy:** add the loading/onboarding disclosure after the app-first onboarding plan lands or alongside that slice if the first-run surface is already being touched.
-6. **Presence rework:** remove quiet and replace the manual mode picker with automatic recency once the smaller payload cleanup is stable.
+1. **Server normalization + two-state modes + drop `derived_status`** (steps 6-10) with legacy mapping. Ship first; tolerant of old clients.
+2. **Recency liveness** in the feed (step 9) + threshold decision.
+3. **Client enum/config/pickers/rendering** (steps 1-5).
+4. **Admin** (steps 11-13).
+5. **Tests + contract** (steps 14-15, 10).
+6. **Copy & docs** (steps 16-19).
 
-## Repo Sharing Defaults
+## Open questions / decisions
 
-Adding a repo should mean "share its aggregate Git stats and its friendly alias." Keep the underlying config fields for now so older configs and future advanced controls still have somewhere to land, but remove the default UI and public-site emphasis around opting out of these two basics.
-
-Implementation notes:
-
-- New repos should default `share_alias` to `true`.
-- The app should stop showing the "share Git stats" toggle in the main repo UI.
-- The app should stop showing the per-repo "share alias" toggle in the main repo UI.
-- Public website copy should not advertise repo-alias or Git-stats opt-outs as part of the core flow. Privacy copy can still say Vibes avoids raw repo paths, branch names, commit messages, and filenames.
-- Keep Git stats and repo aliases as privacy-aware aggregate payloads; do not reintroduce code-origin, agent, editor, harness, or process attribution.
-
-## Open questions
-
-- **Online threshold** — 2 min? configurable per relay?
-- **Recency source & heartbeat** — latest `updated_at` vs a dedicated `last_active`. Publishing is ~3 min today; a 2-min online window needs a tighter heartbeat or it will flicker.
-- **Keep an explicit "go invisible" opt-out**, or fully automatic presence?
-- **Where the flexible vibe-label list lives** — server config endpoint the app fetches vs a committed shared JSON.
-- **Multi-device "today" mismatch** — fix the `client_day` summing caveat as part of this, or leave it?
-- **Existing-account path wording** — should first-run link directly to an "I already have a token" screen, or show instructions first and keep the token entry in Advanced?
-- **Legacy agent payload handling** — should the server merely stop re-emitting merged `agent_mix`, or also strip legacy per-device `agent_mix` cards when choosing singleton cards from older clients? Recommendation: strip them in feed output so friends never see stale agent attribution.
+- **Online `THRESHOLD`.** Publish cadence is ~3 min today. A window tighter than that flickers; recommend `THRESHOLD ≈ 8–10 min` (≈3× cadence) unless we also tighten the heartbeat. Configurable per relay?
+- **`last seen` precision.** Source from the merge row's `updated_at` (cheap, single-source) — fine for this phase since multi-device "last active" is deferred. Confirm that's acceptable when a user has two machines (off-machine staleness could show "last seen" while the other is active — acceptable until the multi-device phase).
+- **Keep the manual note?** `manual_status` survives by default (it's user-authored, not a derived label). Confirm we want to keep it, or cut it for a purer online/offline UI. (Low stakes.)
+- **Offline-toggle wording in-app.** Toggle labeled `Online`/`Offline`, or a checkbox "Go offline"? Recommend a two-state toggle reading `Online` / `Offline`.
+- **`schema_version` bump?** Decide whether dropping `derived_status` and renaming the mode warrants a contract version increment, and whether contract tests assert on it.
