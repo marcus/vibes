@@ -18,6 +18,7 @@ Collapse Vibes' presence model to **two states — online and offline — and no
 - **Multi-device aggregation** (cross-device line summing, cross-device "last active"). This phase derives presence from the existing single merge source; it does not change `mergeGitStats`, the `client_day` summing, or per-device fan-in.
 - The **acknowledgment / "wave"** interaction — not designed yet.
 - **Agent / code-origin attribution** — already removed in a prior slice; out of scope and not to be reintroduced.
+- **The in-app UI rework** (TE-inspired presence control, merged feed+friends **cards**, settings screen, settings-as-LLM-prompt) — owned by [[app-ui-rework]]. This plan only changes the presence *data model*; it does not restyle the app shell.
 
 ## Target model
 
@@ -91,9 +92,9 @@ Every place the three concepts (quiet mode, "broadcasting" wording, derived vibe
 
 1. **Collapse the enum.** `PresenceMode` → two cases: `online`, `offline` (rename `broadcasting`→`online`, delete `quiet`). Labels `"Online"` / `"Offline"`. — [Models.swift:3-17](client/Vibes/Models.swift)
 2. **Config + state defaults** flip `.broadcasting` → `.online`. No tolerant decoding — just change the default and the cases. (Pre-public, two installs; the config on both machines gets rewritten on next launch. See [[no-legacy-until-public]].) — [Models.swift:121-131](client/Vibes/Models.swift), [AppModel.swift:10,48,158](client/Vibes/AppModel.swift)
-3. **Replace both mode pickers with an Online/Offline toggle.** The main panel (`ContentView`) and menu bar (`VibesApp`) currently render a 3-item `Picker` over `allCases`. Replace with a single toggle/segmented control (Online ⇄ Offline). `setMode` stays as the action. — [ContentView.swift:131-141](client/Vibes/ContentView.swift), [VibesApp.swift:60-67](client/Vibes/VibesApp.swift)
+3. **Reduce both mode pickers to two states.** The main panel (`ContentView`) and menu bar (`VibesApp`) currently render a 3-item `Picker` over `allCases`; with the enum collapsed they become Online/Offline. `setMode` stays as the action. **The actual in-app presentation (the TE-inspired Online/Offline control) is owned by [[app-ui-rework]]** — this plan only needs the two-state enum to flow through. — [ContentView.swift:131-141](client/Vibes/ContentView.swift), [VibesApp.swift:60-67](client/Vibes/VibesApp.swift)
 4. **Delete `deriveVibe` and `derived_status`.** Remove the function, the `StatusPayload.derivedStatus` field and its coding key, and stop sending the field. — [GitScanner.swift:280-291,328-335,133](client/Vibes/GitScanner.swift)
-5. **Friend-row rendering.** Remove `derivedStatus` from `MergedStatus` and the vibe-based `tint` switch. The dot becomes a plain **online (green) / offline (muted)** indicator. Detail text: when online and fresh → `"online"`; when stale → friendly **"online {relative} ago"** from `updatedAt` (e.g. "online 10 hours ago"); when offline-by-toggle with no timestamp → `"offline"`; drop `"online, not broadcasting"`. SwiftUI's `.formatted(.relative(...))` already gives the friendly phrasing. Detail popover stops showing a vibe word. — [Models.swift:273-296](client/Vibes/Models.swift), [ContentView.swift:262-266,283-296,305](client/Vibes/ContentView.swift)
+5. **Friend-row data model.** Remove `derivedStatus` from `MergedStatus` and the vibe-based `tint` switch. The presence signal is just **online / offline** plus, when offline-but-recent, the `last_seen` timestamp for **"online {relative} ago"** language (SwiftUI's `.formatted(.relative(...))` gives the phrasing). **The friend-row/card rendering itself is owned by [[app-ui-rework]]** (which reconceives the row as a friend card); this plan only removes the vibe data and ensures `mode` + `last_seen` are available. — [Models.swift:273-296](client/Vibes/Models.swift), [ContentView.swift:262-266,283-296,305](client/Vibes/ContentView.swift)
 
 ### Server (relay)
 
@@ -159,4 +160,4 @@ Pre-public, exactly two installs (this Mac + MacBook Pro), no external users. Ri
 
 ## Open questions
 
-- **Offline-toggle wording in-app.** A two-state toggle reading `Online` / `Offline` (recommended) vs a checkbox "Go offline". Low stakes — confirm during implementation.
+- **Offline-toggle wording in-app** — moved to [[app-ui-rework]], which owns the TE-inspired presence control. (Direction there: a labeled Online / Offline state, not a "Go offline" checkbox.)

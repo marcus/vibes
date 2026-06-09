@@ -76,9 +76,9 @@
   <section class="intro" aria-labelledby="home-title">
     <p class="eyebrow">vibes</p>
     <h1 id="home-title">See who's coding right now.</h1>
-    <p class="subhead">Vibes shows which friends are online and how much they've shipped today. Ambient presence for people who code at odd hours.</p>
+    <p class="subhead">Vibes shows which friends are online and how much they've coded today.</p>
     <p class="description">
-      A Mac app for small groups. It turns your local Git activity into a simple, private friend feed — no chat, no noise.
+      A Mac app for small groups. It turns your local Git activity into a simple, private friend feed.
     </p>
     <p class="privacy">
       Shares aggregate activity only. No repo paths, branches, commit messages, filenames, editor activity, process history, or transcripts.
