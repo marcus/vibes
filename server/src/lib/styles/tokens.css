@@ -69,8 +69,9 @@
   --field-bg: rgba(6, 19, 32, 0.04);
 }
 
+/* System preference fallback, unless overridden by an explicit data-theme */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: var(--vibe-ink);
     --fg: var(--vibe-paper);
     --muted: var(--vibe-ash-300);
@@ -78,4 +79,23 @@
     --hairline: rgba(242, 238, 230, 0.12);
     --field-bg: rgba(242, 238, 230, 0.06);
   }
+}
+
+/* Explicit theme overrides */
+:root[data-theme="light"] {
+  --bg: var(--vibe-paper);
+  --fg: var(--vibe-ink);
+  --muted: var(--vibe-ash-500);
+  --faint: var(--vibe-ash-300);
+  --hairline: rgba(6, 19, 32, 0.1);
+  --field-bg: rgba(6, 19, 32, 0.04);
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--vibe-ink);
+  --fg: var(--vibe-paper);
+  --muted: var(--vibe-ash-300);
+  --faint: var(--vibe-ash-500);
+  --hairline: rgba(242, 238, 230, 0.12);
+  --field-bg: rgba(242, 238, 230, 0.06);
 }

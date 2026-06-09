@@ -1,4 +1,6 @@
 <script>
+  import { onMount } from 'svelte';
+
   // Seconds to hold on the last frame before the clip replays.
   const LOOP_PAUSE_MS = 10000;
 
@@ -6,12 +8,29 @@
   let video = $state(null);
   let loopTimer;
 
+  let theme = $state('dark'); // Default to dark for SSR/initial load
+
+  onMount(() => {
+    // Read theme from document.documentElement set by head script, or fallback
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 
+      (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    theme = currentTheme;
+  });
+
   function toggleSound() {
     if (!video) return;
     muted = !muted;
     video.muted = muted;
     // Some browsers pause on first unmute gesture; make sure we keep playing.
     if (!muted) video.play?.();
+  }
+
+  function toggleTheme() {
+    theme = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem('theme', theme);
+    } catch (e) {}
   }
 
   // Replaced the native `loop` with a paced loop: when the clip ends, hold the
@@ -78,6 +97,39 @@
             stroke-linecap="round"
             stroke-linejoin="round"
             d="M4 9v6h3.5L13 19V5L7.5 9H4zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"
+          />
+        </svg>
+      {/if}
+    </button>
+
+    <button
+      type="button"
+      class="theme-toggle"
+      onclick={toggleTheme}
+      aria-label={theme === 'dark' ? "Switch to light theme" : "Switch to dark theme"}
+    >
+      {#if theme === 'dark'}
+        <!-- Moon icon -->
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+          />
+        </svg>
+      {:else}
+        <!-- Sun icon -->
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="1.8" />
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
           />
         </svg>
       {/if}
@@ -151,7 +203,7 @@
         rgba(4, 86, 125, 0.6),
         transparent 62%
       ),
-      var(--bg);
+      var(--vibe-ink);
   }
 
   .hero-inner {
@@ -193,10 +245,10 @@
     mask-composite: intersect;
   }
 
-  .sound-toggle {
+  .sound-toggle,
+  .theme-toggle {
     position: absolute;
     right: var(--space-4);
-    bottom: var(--space-4);
     width: 2.25rem;
     height: 2.25rem;
     display: inline-flex;
@@ -215,8 +267,18 @@
       opacity 0.15s ease;
   }
 
+  .sound-toggle {
+    bottom: var(--space-4);
+  }
+
+  .theme-toggle {
+    top: var(--space-4);
+  }
+
   .sound-toggle:hover,
-  .sound-toggle:focus-visible {
+  .sound-toggle:focus-visible,
+  .theme-toggle:hover,
+  .theme-toggle:focus-visible {
     background: rgba(0, 0, 0, 0.55);
     border-color: rgba(255, 255, 255, 0.4);
   }
