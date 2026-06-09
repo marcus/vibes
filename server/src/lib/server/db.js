@@ -99,6 +99,26 @@ const MIGRATIONS = [
       ALTER TABLE users ADD COLUMN timezone TEXT;
     `,
   },
+  {
+    version: 4,
+    name: "avatars",
+    sql: `
+      CREATE TABLE avatars (
+        id TEXT PRIMARY KEY,              -- short public slug, also the asset filename stem
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        store TEXT NOT NULL,              -- adapter that holds the bytes: 'filesystem' | 's3'
+        content_type TEXT NOT NULL,       -- 'image/png'
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        byte_size INTEGER NOT NULL,
+        prompt TEXT,                      -- user's short prompt (for history/regeneration)
+        style TEXT,                       -- ImagePlayground style used
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_avatars_user_id ON avatars(user_id);
+      ALTER TABLE users ADD COLUMN avatar_id TEXT REFERENCES avatars(id);
+    `,
+  },
 ];
 
 /**

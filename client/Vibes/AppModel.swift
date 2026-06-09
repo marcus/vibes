@@ -20,6 +20,19 @@ final class AppModel: ObservableObject {
   @Published var successMessage: String?
   @Published var lastSyncedAt: Date?
 
+  // AI profile-icon state. `houseStyle` is the server-owned art-direction
+  // template cached from /api/me. `avatarSupported` is the on-device ImageCreator
+  // probe (nil = not yet checked). The rest drive the Settings → Profile Icon
+  // pane's preview / progress / error display.
+  @Published var houseStyle: HouseStyle?
+  @Published var avatarSupported: Bool?
+  @Published var avatarPreviewPNG: Data?
+  @Published var avatarLastStyle: String?
+  @Published var avatarLastPrompt: String = ""
+  @Published var isGeneratingAvatar = false
+  @Published var isUploadingAvatar = false
+  @Published var avatarError: String?
+
   private let configStore = ConfigStore()
   private let keychain = KeychainStore()
   private let scanner = GitScanner()
@@ -389,6 +402,108 @@ final class AppModel: ObservableObject {
     NSPasteboard.general.setString(diagnosticSummary(), forType: .string)
   }
 
+  // MARK: - Profile icon (AI avatar)
+
+  // Probe on-device ImageCreator support and load the server house-style template
+  // if it isn't cached yet. Called when the Profile Icon pane appears.
+  func prepareAvatarSettings() async {
+    if #available(macOS 15.4, *) {
+      avatarSupported = await AvatarGenerator.isSupported
+    } else {
+      avatarSupported = false
+    }
+    if houseStyle == nil {
+      await refreshHouseStyle()
+    }
+  }
+
+  // Fetch (and cache) the server-owned house style from /api/me.
+  func refreshHouseStyle() async {
+    guard let config, isConfigured else { return }
+    do {
+      let account = try await client(for: config).me()
+      if let style = account.houseStyle {
+        houseStyle = style
+      }
+    } catch {
+      avatarError = error.localizedDescription
+    }
+  }
+
+  // Generate a preview PNG on device from the user's prompt + house style. Stores
+  // the bytes + chosen prompt/style for a subsequent `useGeneratedAvatar()`.
+  func generateAvatar(prompt rawPrompt: String) async {
+    let prompt = rawPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !prompt.isEmpty else {
+      avatarError = "Enter a short prompt first."
+      return
+    }
+    guard let house = houseStyle else {
+      avatarError = "Couldn't load the house style. Try again."
+      return
+    }
+    guard #available(macOS 15.4, *), avatarSupported == true else {
+      avatarError = "Profile-icon generation isn't available on this Mac."
+      return
+    }
+
+    avatarError = nil
+    isGeneratingAvatar = true
+    do {
+      let png = try await AvatarGenerator().generate(prompt: prompt, house: house)
+      avatarPreviewPNG = png
+      avatarLastPrompt = prompt
+      // Record the first style the server prefers (the generator picks the first
+      // available match) so the upload header reflects what was used.
+      avatarLastStyle = house.styles.first ?? ""
+    } catch {
+      avatarPreviewPNG = nil
+      avatarError = error.localizedDescription
+    }
+    isGeneratingAvatar = false
+  }
+
+  // Upload the current preview PNG as the profile icon, then refresh the feed so
+  // the new icon shows on "you" and propagates to friends.
+  func useGeneratedAvatar() async {
+    guard let config, isConfigured else { return }
+    guard let png = avatarPreviewPNG else {
+      avatarError = "Generate an icon first."
+      return
+    }
+    avatarError = nil
+    isUploadingAvatar = true
+    do {
+      _ = try await client(for: config).uploadAvatar(
+        pngData: png,
+        prompt: avatarLastPrompt,
+        style: avatarLastStyle ?? ""
+      )
+      avatarPreviewPNG = nil
+      await refreshFeedOnly()
+      successMessage = "Profile icon updated."
+    } catch {
+      avatarError = error.localizedDescription
+    }
+    isUploadingAvatar = false
+  }
+
+  // Clear the current profile icon (revert to initials) and refresh the feed.
+  func removeAvatar() async {
+    guard let config, isConfigured else { return }
+    avatarError = nil
+    isUploadingAvatar = true
+    do {
+      try await client(for: config).deleteAvatar()
+      avatarPreviewPNG = nil
+      await refreshFeedOnly()
+      successMessage = "Profile icon removed."
+    } catch {
+      avatarError = error.localizedDescription
+    }
+    isUploadingAvatar = false
+  }
+
   func createInvite() async {
     guard let config, isConfigured else { return }
     do {
@@ -494,6 +609,9 @@ final class AppModel: ObservableObject {
       next.identity.displayName = account.user.displayName
       if let timezone = account.user.timezone {
         next.identity.timezone = timezone
+      }
+      if let style = account.houseStyle {
+        houseStyle = style
       }
     } catch {
       if (error as? RelayClientError)?.statusCode == 404 {

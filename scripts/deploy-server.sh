@@ -54,7 +54,7 @@ echo "Running relay tests..."
 (cd server && npm run check)
 
 echo "Preparing ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}..."
-ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}/server' '${DEPLOY_PATH}/data' '${DEPLOY_PATH}/releases/downloads'"
+ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}/server' '${DEPLOY_PATH}/data' '${DEPLOY_PATH}/releases/downloads' '${DEPLOY_PATH}/avatars'"
 
 echo "Uploading relay source..."
 rsync "${RSYNC_FLAGS[@]}" server/ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/server/"

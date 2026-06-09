@@ -5,6 +5,9 @@ import { join } from "node:path";
 
 const dir = mkdtempSync(join(tmpdir(), "vibes-routes-"));
 process.env.VIBES_DB_PATH = join(dir, "routes.sqlite");
+process.env.VIBES_AVATAR_STORE = "filesystem";
+process.env.VIBES_AVATAR_DIR = join(dir, "avatars");
+process.env.VIBES_AVATAR_BASE_URL = "https://vibes.test/avatars";
 
 const [
   { getDb },
@@ -12,6 +15,7 @@ const [
   meRoute,
   invitesRoute,
   inviteAcceptRoute,
+  avatarRoute,
   shortInviteRoute,
   invitePageServer,
   relay,
@@ -21,6 +25,7 @@ const [
   import("../src/routes/api/me/+server.js"),
   import("../src/routes/api/invites/+server.js"),
   import("../src/routes/api/invites/[code]/accept/+server.js"),
+  import("../src/routes/api/avatar/+server.js"),
   import("../src/routes/i/[code]/+server.js"),
   import("../src/routes/invite/[code]/+page.server.js"),
   import("../src/lib/server/relay.js"),
@@ -174,9 +179,131 @@ describe("GET /api/me", () => {
           handle: "dana-scully",
           display_name: "Dana Scully",
           timezone: "America/Los_Angeles",
+          avatar_url: null,
+        },
+        house_style: {
+          styles: ["illustration", "animation", "sketch"],
+          image_size: 512,
         },
       },
     });
+  });
+});
+
+describe("POST /api/avatar", () => {
+  // Build a `type` chunk: [4-byte length][4-byte type][data][4-byte CRC]. The
+  // relay's validator/sanitizer does not check CRCs, so a zero placeholder is
+  // fine for the fixture.
+  function pngChunk(type, data = Buffer.alloc(0)) {
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    out.write(type, 4, "ascii");
+    data.copy(out, 8);
+    return out; // trailing 4 CRC bytes left as zero
+  }
+
+  // A complete minimal PNG (signature + IHDR + IDAT + IEND). `extraChunks` lets a
+  // test append metadata/trailing bytes to verify the sanitizer strips them.
+  function fakePng(width = 512, height = 512, extraChunks = []) {
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr[8] = 8; // bit depth
+    ihdr[9] = 6; // color type RGBA
+    return Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      pngChunk("IHDR", ihdr),
+      pngChunk("IDAT", Buffer.from([0x00])),
+      ...extraChunks,
+      pngChunk("IEND"),
+    ]);
+  }
+
+  function avatarEvent(body, { token = null, contentType = "image/png", headers = {} } = {}) {
+    const h = new Headers({ "content-type": contentType, ...headers });
+    if (token) h.set("authorization", `Bearer ${token}`);
+    const request = new Request("https://vibes.test/api/avatar", {
+      method: "POST",
+      headers: h,
+      body,
+    });
+    return { request, url: new URL(request.url), getClientAddress: () => "203.0.113.21" };
+  }
+
+  it("stores an uploaded PNG and returns { id, avatar_url }", async () => {
+    const { user, token } = registerUser(db, { displayName: "Dana", deviceLabel: "Mac" });
+    const response = await avatarRoute.POST(
+      avatarEvent(fakePng(), {
+        token: token.token,
+        headers: { "x-avatar-prompt": "a sleepy fox", "x-avatar-style": "illustration" },
+      }),
+    );
+    const { status, body } = await responseJson(response);
+
+    expect(status).toBe(200);
+    expect(body.id).toMatch(/^[-_a-zA-Z0-9]+$/);
+    expect(body.avatar_url).toMatch(/\/avatars\/.+\.png$/);
+    expect(db.prepare("SELECT avatar_id FROM users WHERE id = ?").get(user.id).avatar_id).toBe(
+      body.id,
+    );
+    const row = db.prepare("SELECT prompt, style FROM avatars WHERE id = ?").get(body.id);
+    expect(row).toMatchObject({ prompt: "a sleepy fox", style: "illustration" });
+  });
+
+  it("strips metadata chunks and trailing bytes before storing", async () => {
+    const { token } = registerUser(db, { displayName: "Dana", deviceLabel: "Mac" });
+    const tEXt = pngChunk("tEXt", Buffer.from("Comment secret-metadata"));
+    const png = fakePng(512, 512, [tEXt]);
+    const appended = Buffer.concat([png, Buffer.from("APPENDED-PAYLOAD")]);
+    const response = await avatarRoute.POST(
+      avatarEvent(appended, { token: token.token }),
+    );
+    const { status, body } = await responseJson(response);
+    expect(status).toBe(200);
+    // Stored byte_size reflects the sanitized PNG, not the appended/metadata bytes.
+    const row = db.prepare("SELECT byte_size FROM avatars WHERE id = ?").get(body.id);
+    expect(row.byte_size).toBeLessThan(appended.length);
+  });
+
+  it("rejects a non-PNG body", async () => {
+    const { token } = registerUser(db, { displayName: "Dana", deviceLabel: "Mac" });
+    const response = await avatarRoute.POST(
+      avatarEvent(Buffer.from("nope"), { token: token.token }),
+    );
+    expect(await responseJson(response)).toMatchObject({
+      status: 400,
+      body: { error: { code: "invalid_image" } },
+    });
+  });
+
+  it("requires authentication", async () => {
+    const response = await avatarRoute.POST(avatarEvent(fakePng()));
+    expect(await responseJson(response)).toMatchObject({
+      status: 401,
+      body: { error: { code: "unauthorized" } },
+    });
+  });
+
+  it("DELETE clears the avatar pointer", async () => {
+    const { user, token } = registerUser(db, { displayName: "Dana", deviceLabel: "Mac" });
+    await avatarRoute.POST(avatarEvent(fakePng(), { token: token.token }));
+    expect(
+      db.prepare("SELECT avatar_id FROM users WHERE id = ?").get(user.id).avatar_id,
+    ).toBeTruthy();
+
+    const delRequest = new Request("https://vibes.test/api/avatar", {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token.token}` },
+    });
+    const response = await avatarRoute.DELETE({
+      request: delRequest,
+      url: new URL(delRequest.url),
+      getClientAddress: () => "203.0.113.21",
+    });
+    expect(await responseJson(response)).toMatchObject({ status: 200, body: { ok: true } });
+    expect(
+      db.prepare("SELECT avatar_id FROM users WHERE id = ?").get(user.id).avatar_id,
+    ).toBeNull();
   });
 });
 
@@ -341,8 +468,8 @@ describe("POST /api/invites/[code]/accept", () => {
 
     expect(status).toBe(200);
     expect(body).toEqual({
-      inviter: { handle: "marcus", display_name: "Marcus" },
-      friend: { handle: "ken", display_name: "Ken" },
+      inviter: { handle: "marcus", display_name: "Marcus", avatar_url: null },
+      friend: { handle: "ken", display_name: "Ken", avatar_url: null },
     });
     expect(db.prepare("SELECT count(*) AS n FROM friendships").get().n).toBe(2);
   });

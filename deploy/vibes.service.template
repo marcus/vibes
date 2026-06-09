@@ -17,6 +17,12 @@ Environment=NODE_ENV=production
 # adapter-node validates form posts against ORIGIN for CSRF behind the proxy.
 Environment=ORIGIN=https://${DEPLOY_DOMAIN}
 Environment=VIBES_DB_PATH=${DEPLOY_PATH}/data/vibes.sqlite
+# Profile-icon storage. The filesystem store writes PNGs to VIBES_AVATAR_DIR
+# (served by the nginx /avatars/ alias, outside the deployed server/ tree) and
+# builds public URLs from VIBES_AVATAR_BASE_URL. Without these the relay falls
+# back to dev defaults (data/avatars + a localhost URL) and avatars 404.
+Environment=VIBES_AVATAR_DIR=${DEPLOY_PATH}/avatars
+Environment=VIBES_AVATAR_BASE_URL=https://${DEPLOY_DOMAIN}/avatars
 # Secrets (admin password, etc.) load from a root-only env file that is never
 # committed or rsynced. An absent file leaves the admin area disabled (404).
 # On the host:  install -m 600 /dev/null ${DEPLOY_PATH}/server/.env.local
