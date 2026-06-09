@@ -325,6 +325,88 @@ frameworks.
 
 ---
 
+## v2 — Gradient fallback + availability detection
+
+Apple's `ImageCreator` only works once the on-device Image Playground model has
+**finished downloading**. There is **no public API to detect the "downloading"
+state**: `ImagePlaygroundViewController.isAvailable` (AppKit) and
+`@Environment(\.supportsImagePlayground)` (SwiftUI) report *capability/eligibility*
+(AI-capable HW + enabled + supported language), not model readiness — both return
+`true` while the model is still downloading, yet every `images(...)` call returns
+`.creationFailed`. So we cannot pre-detect "not downloaded" cleanly; the signal is
+a failed generation. Two responses:
+
+1. **Better detection + an "Open Image Playground" affordance.** Gate the AI path
+   on `ImagePlaygroundViewController.isAvailable` (cheap, synchronous). On a
+   `.creationFailed`, show copy like "Apple Intelligence may still be setting up
+   image generation" plus a button that opens the system Image Playground app
+   (which shows the download and primes it). Open it via `NSWorkspace` by bundle
+   id — no URL scheme exists:
+   ```swift
+   if let url = NSWorkspace.shared.urlForApplication(
+        withBundleIdentifier: "com.apple.GenerativePlaygroundApp") {
+     NSWorkspace.shared.openApplication(at: url, configuration: .init())
+   }
+   ```
+   Add one automatic retry on `.creationFailed` to ride out first-call warm-up.
+
+2. **Gradient avatar fallback.** Let users pick **two colors** for a gradient
+   profile icon, so the feature is useful even when generation is unavailable or
+   they prefer not to use AI. Colors are stored in SQLite and synced to all the
+   user's devices and to friends via the feed (rendered client-side, not as a
+   PNG — no asset storage needed, crisp at any size).
+
+### DB migration v5 — `server/src/lib/server/db.js`
+
+Append a `{ version: 5, name: "avatar_kind" }` migration (v4 is `avatars`):
+
+```sql
+ALTER TABLE users ADD COLUMN avatar_kind TEXT;           -- 'image' | 'gradient' | NULL(initials)
+ALTER TABLE users ADD COLUMN avatar_gradient_start TEXT;  -- '#RRGGBB'
+ALTER TABLE users ADD COLUMN avatar_gradient_end TEXT;    -- '#RRGGBB'
+```
+
+`avatar_kind` is the explicit selector so a gradient cleanly supersedes an AI
+image and vice-versa (no precedence guessing). `avatar_id` stays as the image
+pointer; it's only consulted when `avatar_kind = 'image'`.
+
+### Server — `relay.js` + routes
+
+- Hex validation helper: `^#[0-9a-fA-F]{6}$`, throw `RelayError("invalid_color", …, 400)`.
+- `setUserGradient(db, user, { start, end })` (writeTx): set `avatar_kind='gradient'`,
+  store the two colors. `setUserAvatar` (image) now also sets `avatar_kind='image'`.
+  `clearUserAvatar` sets `avatar_kind=NULL` and nulls gradient cols + `avatar_id`.
+- Extend the user-shaping helpers (`feedUser`/`publicUser`/`registeredUser` + the
+  `getFeed` SELECTs + `/api/me`) to emit `avatar_kind` and
+  `avatar_gradient: { start, end } | null` alongside the existing `avatar_url`.
+- New route `PUT /api/avatar/gradient` (`server/src/routes/api/avatar/gradient/+server.js`):
+  `requireAuth`, `checkRateLimit("avatar:gradient", 30)`, `readJson` `{ start, end }`,
+  validate, `setUserGradient`, return the updated avatar fields.
+- Tests: migration v5 columns exist + recorded; gradient set/validate (good + bad
+  hex); kind transitions image→gradient→cleared; feed/me surface the gradient.
+
+### Client (SwiftUI)
+
+- **Models** (`Models.swift`): add `avatarKind` (`avatar_kind`) and
+  `avatarGradient` (`avatar_gradient` → `{ start, end }`) to `UserSummary`.
+  Add `Color`↔hex helpers (via `NSColor`).
+- **AvatarView** (`AvatarView.swift`): switch on `avatarKind` — `image` →
+  `AsyncImage`; `gradient` → `LinearGradient([start,end], topLeading→bottomTrailing)`
+  clipped to the `Circle`; else initials. Presence ring unchanged in all cases.
+- **AvatarGenerator** (`AvatarGenerator.swift`): use
+  `ImagePlaygroundViewController.isAvailable` for the capability gate; add a
+  static `openImagePlayground()` (NSWorkspace, bundle id above); one retry on
+  `.creationFailed`.
+- **Settings → Profile Icon pane** (`ContentView.swift`): keep the AI generate
+  section (now with an "Open Image Playground" button + clearer "still setting
+  up" copy on failure); add a **gradient** section — two native `ColorPicker`s, a
+  live circular gradient preview, and a "Use gradient" button wiring a new
+  `RelayClient.setAvatarGradient(start:end:)`.
+- **Networking** (`GitScanner.swift`): `setAvatarGradient(start:end:)` → `PUT
+  /api/avatar/gradient`.
+
+---
+
 ## Out of scope / follow-ups
 
 - Real S3/R2 adapter implementation + credential management (interface is built
