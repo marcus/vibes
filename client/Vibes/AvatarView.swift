@@ -87,8 +87,13 @@ struct AvatarView: View {
           endPoint: .bottomTrailing
         )
         Text(handleInitial)
+          // Exact size: scales with the avatar diameter (per AvatarMetrics), not
+          // Dynamic Type — the glyph must fit the fixed circle.
           .font(.system(size: metrics.initialsFontSize, weight: .medium, design: .rounded))
           .foregroundStyle(.white.opacity(0.9))
+          // Decorative shadow kept: lifts the initial off the user's custom
+          // avatar gradient for legibility (the Color(hex:) gradient is the
+          // sanctioned out-of-scope exception to the no-custom-color rule).
           .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
       }
     default:
@@ -105,6 +110,8 @@ struct AvatarView: View {
     ZStack {
       Color(nsColor: .quaternarySystemFill)
       Text(initialsText)
+        // Exact size: scales with the avatar diameter (per AvatarMetrics), not
+        // Dynamic Type — the glyph must fit the fixed circle.
         .font(.system(size: metrics.initialsFontSize, weight: .medium, design: .rounded))
         .foregroundStyle(.secondary)
     }
@@ -138,7 +145,7 @@ struct AvatarView: View {
   }
 
   private var ringColor: Color {
-    isOnline ? Color(nsColor: .systemGreen) : Color(nsColor: .tertiaryLabelColor)
+    isOnline ? Color(nsColor: .systemGreen) : .secondary
   }
 
   private var metrics: AvatarMetrics { AvatarMetrics(size: size) }

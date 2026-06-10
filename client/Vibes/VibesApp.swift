@@ -38,6 +38,9 @@ struct VibesApp: App {
     WindowGroup("Vibes", id: "main") {
       ContentView(showInviteFriend: $showInviteFriend)
         .environmentObject(model)
+        // Resizable main window (macOS 26): anchor the top-left during resizes
+        // so the header stays put and the window grows down/right.
+        .windowResizeAnchor(.topLeading)
         .onAppear {
           AppDelegate.model = model
         }
@@ -46,7 +49,10 @@ struct VibesApp: App {
           model.handleIncomingURL(url)
         }
     }
-    .windowResizability(.contentSize)
+    // First launch matches the historical 460×620 proportions; the window
+    // remembers user resizes thereafter. No .windowResizability(.contentSize)
+    // here — the main window is freely resizable (min frame set on ContentView).
+    .defaultSize(width: 460, height: 620)
     .commands {
       CommandGroup(after: .appInfo) {
         CheckForUpdatesView(updater: updaterController.updater)
