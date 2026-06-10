@@ -2,9 +2,9 @@
   // Props
   let { siteTheme = 'dark' } = $props();
 
-  let mockTheme = $state(siteTheme);
-
-  // Sync with website theme when siteTheme changes
+  // Window has its own theme that follows the site by default, but can be
+  // toggled independently. The effect resyncs it whenever the site theme flips.
+  let mockTheme = $state('dark');
   $effect(() => {
     mockTheme = siteTheme;
   });
@@ -148,23 +148,25 @@
 
 <style>
   /* Scoped mockup styles, aligned with Vibes tokens.css palette */
+  /* Dark palette mirrors the Mac app's VibeColor dark-mode values
+     (cool-neutral charcoal, not navy) — see client/Vibes/ContentView.swift. */
   .d-aurora2.dark {
-    --bg: #061320; /* vibes-ink */
-    --bar-bg: #0a1b2b;
-    --ink: #f2eee6; /* vibes-paper */
-    --muted: #a89f92; /* vibes-ash-300 */
-    --faint: #6e665b; /* vibes-ash-500 */
-    --card: #10263c;
-    --card-border: #1a3c5d;
-    --me-card: #14314c;
-    --me-border: #224d77;
-    --add-bg: #1d3a2b;
-    --add-ink: #7fe0a7;
-    --del-bg: #3d2526;
-    --del-ink: #f1958b;
-    --divider: #122b42;
-    --off-bg: rgba(255, 255, 255, .025);
-    --label: #6e665b;
+    --bg: #14151a; /* darkBg */
+    --bar-bg: #1a1c22; /* chassis */
+    --ink: #e9eaf0; /* darkInk */
+    --muted: #a7acbd; /* muted */
+    --faint: #6c7180; /* faint */
+    --card: #2d3035; /* cardSurface */
+    --card-border: #43464c; /* cardBorder */
+    --me-card: #353a45; /* meCardSurface */
+    --me-border: #4c5260; /* meCardBorder */
+    --add-bg: #1d3a2b; /* locAddedBg */
+    --add-ink: #7fe0a7; /* locAddedInk */
+    --del-bg: #3d2526; /* locRemovedBg */
+    --del-ink: #f1958b; /* locRemovedInk */
+    --divider: #262932; /* sectionDivider */
+    --off-bg: rgba(255, 255, 255, .025); /* awayRowSurface */
+    --label: #6c7180; /* faint */
   }
   .d-aurora2.light {
     --bg: #f2eee6; /* vibes-paper */
