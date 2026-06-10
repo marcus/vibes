@@ -38,7 +38,7 @@ note() { echo "==> $*"; }
 warn() { echo "warning: $*" >&2; }
 
 APP_NAME="Vibes"
-MINIMUM_MACOS="${VIBES_MINIMUM_MACOS:-14.0}"
+MINIMUM_MACOS="${VIBES_MINIMUM_MACOS:-26.0}"
 
 required_vars=(
   DEPLOY_USER
