@@ -70,10 +70,7 @@ struct FriendCard: View {
 
   private var legend: some View {
     HStack(alignment: .firstTextBaseline) {
-      (
-        Text("\(commitCount)").fontWeight(.bold).foregroundColor(VibeColor.foreground)
-        + Text(commitCount == 1 ? " commit today" : " commits today")
-      )
+      Text("\(Text("\(commitCount)").fontWeight(.bold).foregroundColor(VibeColor.foreground))\(commitCount == 1 ? " commit today" : " commits today")")
       .font(.system(size: 11.5))
       .foregroundStyle(VibeColor.muted)
       .monospacedDigit()
