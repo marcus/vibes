@@ -112,6 +112,10 @@ private struct SetupPanel: View {
       Spacer()
     }
     .padding(28)
+    // Clear the floating traffic lights (hidden-titlebar main window): drop the
+    // header below the ~28pt window-control band so the "vibes" wordmark doesn't
+    // collide with the red/yellow/green controls.
+    .safeAreaPadding(.top, 28)
   }
 }
 
@@ -151,6 +155,10 @@ private struct MainPanel: View {
       )
     }
     .padding(22)
+    // Clear the floating traffic lights (hidden-titlebar main window): drop the
+    // header row below the ~28pt window-control band so the "vibes" wordmark and
+    // the presence picker / refresh button don't collide with the controls.
+    .safeAreaPadding(.top, 28)
     .sheet(item: $model.pendingInvite) { invite in
       InviteSheet(invite: invite)
         .environmentObject(model)
