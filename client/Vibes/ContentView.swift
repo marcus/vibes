@@ -12,7 +12,10 @@ struct ContentView: View {
         SetupPanel()
       }
     }
-    .frame(width: 460, height: 620)
+    // Resizable main window: hold a sensible minimum and let the window grow
+    // freely. The feed caps card width internally so cards don't stretch
+    // edge-to-edge on wide windows.
+    .frame(minWidth: 460, maxWidth: .infinity, minHeight: 520, maxHeight: .infinity)
   }
 }
 
@@ -31,9 +34,9 @@ private struct SetupPanel: View {
 
       VStack(alignment: .leading, spacing: 8) {
         Text("Let's set you up.")
-          .font(.system(size: 18, weight: .light))
+          .font(.title3.weight(.light))
         Text("This stays on your Mac.")
-          .font(.system(size: 13))
+          .font(.subheadline)
           .foregroundStyle(Color.secondary)
       }
 
@@ -70,33 +73,35 @@ private struct SetupPanel: View {
             }
           }
 
-          HStack(spacing: 10) {
-            Button {
-              Task {
-                await model.completeManualSetup(
-                  relayURLText: relayURL,
-                  token: token,
-                  handle: handle,
-                  displayName: displayName,
-                  deviceLabel: deviceLabel
-                )
+          GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
+              Button {
+                Task {
+                  await model.completeManualSetup(
+                    relayURLText: relayURL,
+                    token: token,
+                    handle: handle,
+                    displayName: displayName,
+                    deviceLabel: deviceLabel
+                  )
+                }
+              } label: {
+                Label("Use token", systemImage: "key")
               }
-            } label: {
-              Label("Use token", systemImage: "key")
-            }
-            .buttonStyle(.glass)
+              .buttonStyle(.glass)
 
-            Button {
-              Task { await model.importConfigFile() }
-            } label: {
-              Label("Import JSON", systemImage: "square.and.arrow.down")
+              Button {
+                Task { await model.importConfigFile() }
+              } label: {
+                Label("Import JSON", systemImage: "square.and.arrow.down")
+              }
+              .buttonStyle(.glass)
             }
-            .buttonStyle(.glass)
           }
         }
         .padding(.top, 12)
       }
-      .font(.system(size: 13))
+      .font(.subheadline)
 
       if let error = model.lastError {
         Text(error)
@@ -392,8 +397,12 @@ private struct ProfileIconSettingsPane: View {
               )
             )
           Text(gradientPreviewInitial)
+            // Exact size: glyph must fit the fixed 72pt gradient preview circle,
+            // not scale with Dynamic Type.
             .font(.system(size: 28, weight: .medium, design: .rounded))
             .foregroundStyle(.white.opacity(0.9))
+            // Decorative shadow kept: lifts the initial off the user's custom
+            // avatar gradient (the out-of-scope Color(hex:) gradient exception).
             .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
         }
         .frame(width: 72, height: 72)
@@ -413,7 +422,7 @@ private struct ProfileIconSettingsPane: View {
               .labelsHidden()
           }
         }
-        .font(.system(size: 13))
+        .font(.subheadline)
 
         Button {
           Task { await model.setGradientAvatar() }
@@ -456,7 +465,7 @@ private struct ProfileIconSettingsPane: View {
 
   private var unavailableNote: some View {
     Text("On-device image generation isn't available on this Mac. It requires an Apple-Intelligence-capable Mac on the latest macOS, with the models downloaded. You can still remove an existing icon.")
-      .font(.system(size: 13))
+      .font(.subheadline)
       .foregroundStyle(Color.secondary)
       .fixedSize(horizontal: false, vertical: true)
       .padding(12)
@@ -640,7 +649,14 @@ private struct HomeView: View {
             }
           }
         }
+        // Cap the feed width and center it so cards stay readable instead of
+        // stretching edge-to-edge on a wide, resizable window.
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
       }
+      // Content scrolls under a soft system edge effect rather than hitting a
+      // hard divider against the header/status field above and footer below.
+      .scrollEdgeEffectStyle(.soft, for: .all)
     }
   }
 }
@@ -734,9 +750,9 @@ private struct InviteFriendView: View {
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 8) {
           Text("invite a friend")
-            .font(.system(size: 22, weight: .light))
+            .font(.title.weight(.light))
           Text("Send a one-time link. Each link connects one friend.")
-            .font(.system(size: 13))
+            .font(.subheadline)
             .foregroundStyle(Color.secondary)
         }
         Spacer()
@@ -760,7 +776,7 @@ private struct InviteFriendView: View {
       if let url = model.latestInviteURL {
         VStack(alignment: .leading, spacing: 8) {
           Text(url.absoluteString)
-            .font(.system(size: 12))
+            .font(.caption)
             .lineLimit(2)
             .textSelection(.enabled)
           GlassEffectContainer(spacing: 8) {
@@ -853,9 +869,9 @@ private struct InviteSheet: View {
     VStack(alignment: .leading, spacing: 18) {
       VStack(alignment: .leading, spacing: 8) {
         Text("You've been invited")
-          .font(.system(size: 22, weight: .light))
+          .font(.title.weight(.light))
         Text("Someone invited you to Vibes.")
-          .font(.system(size: 14))
+          .font(.callout)
           .foregroundStyle(Color.secondary)
         Text(invite.code)
           .font(.caption)
@@ -864,7 +880,7 @@ private struct InviteSheet: View {
       }
 
       Text("Accepting lets you both see each other's presence.")
-        .font(.system(size: 13))
+        .font(.subheadline)
         .foregroundStyle(Color.secondary)
 
       GlassEffectContainer(spacing: 10) {
@@ -936,10 +952,12 @@ private struct Header: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
       Text(title)
+        // Exact size kept: this is the "vibes" wordmark — a deliberate display
+        // size, not body text that should scale with Dynamic Type.
         .font(.system(size: 34, weight: .light))
       if let subtitle, !subtitle.isEmpty {
         Text(subtitle)
-          .font(.system(size: 13, weight: .regular))
+          .font(.subheadline)
           .foregroundStyle(Color.secondary)
       }
     }
@@ -979,7 +997,7 @@ private struct EmptyState: View {
   var body: some View {
     VStack(spacing: 12) {
       Text(text)
-        .font(.system(size: 14))
+        .font(.callout)
         .foregroundStyle(Color.secondary)
         .multilineTextAlignment(.center)
       if let actionTitle, let action {

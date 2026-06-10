@@ -49,17 +49,17 @@ struct FriendCard: View {
       AvatarView(status: status, size: .comfortable, isOnline: isOnline, breathes: isOnline)
       VStack(alignment: .leading, spacing: 2) {
         Text(isYou ? "you" : status.user.displayName)
-          .font(.system(size: 15, weight: .bold))
+          .font(.headline)
           .foregroundStyle(Color.primary)
           .lineLimit(1)
         Text(statusLine)
-          .font(.system(size: 12.5))
+          .font(.subheadline)
           .foregroundStyle(Color.secondary)
           .lineLimit(1)
       }
       Spacer(minLength: 4)
       Text(lastSeen)
-        .font(.system(size: 11))
+        .font(.caption)
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(.top, 2)
@@ -70,7 +70,7 @@ struct FriendCard: View {
   private var legend: some View {
     HStack(alignment: .firstTextBaseline) {
       Text("\(Text("\(commitCount)").fontWeight(.bold).foregroundColor(Color.primary))\(commitCount == 1 ? " commit today" : " commits today")")
-      .font(.system(size: 11.5))
+      .font(.caption)
       .foregroundStyle(Color.secondary)
       .monospacedDigit()
 
@@ -78,7 +78,7 @@ struct FriendCard: View {
 
       if !repoAliases.isEmpty {
         Text(repoAliases.joined(separator: ", "))
-          .font(.system(size: 11.5, weight: .semibold))
+          .font(.caption.weight(.semibold))
           .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           .lineLimit(1)
           .truncationMode(.tail)
@@ -92,7 +92,7 @@ struct FriendCard: View {
     HStack(alignment: .firstTextBaseline, spacing: 12) {
       if let track = spotifyLine {
         Text("♪ \(track)")
-          .font(.system(size: 11.5))
+          .font(.caption)
           .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           .lineLimit(1)
           .truncationMode(.tail)
@@ -100,7 +100,7 @@ struct FriendCard: View {
       Spacer(minLength: 0)
       if let weather = weatherLine {
         Text(weather)
-          .font(.system(size: 11.5))
+          .font(.caption)
           .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           .monospacedDigit()
           .lineLimit(1)
@@ -192,6 +192,9 @@ private struct LocBar: View {
           .frame(width: geo.size.width - addWidth, height: height, alignment: .trailing)
           .background(Color(nsColor: .systemRed).opacity(0.12))
       }
+      // Exact size kept: the numbers must fit inside the fixed-height (22pt)
+      // capsule with the per-half minimum width; monospaced digits keep the
+      // +/− counts aligned.
       .font(.system(size: 11, weight: .bold))
       .monospacedDigit()
       .clipShape(Capsule())
@@ -222,17 +225,17 @@ struct AwayFriendRow: View {
         .saturation(0.3)
         .opacity(0.8)
       Text(status.user.displayName)
-        .font(.system(size: 12.5, weight: .semibold))
+        .font(.subheadline.weight(.semibold))
         .foregroundStyle(Color.secondary)
         .lineLimit(1)
       Text(recentSummary)
-        .font(.system(size: 11.5))
+        .font(.caption)
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: 8)
       Text(lastSeen)
-        .font(.system(size: 11))
+        .font(.caption)
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
     }
     .padding(.vertical, 7)
@@ -264,7 +267,7 @@ struct AwaySectionHeader: View {
   var body: some View {
     HStack(spacing: 10) {
       Text("AWAY")
-        .font(.system(size: 10.5, weight: .bold))
+        .font(.caption2.weight(.bold))
         .tracking(1.2)
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
       Rectangle()

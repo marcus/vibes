@@ -50,9 +50,31 @@ Liquid Glass belongs to **floating controls and chrome**, never to content.
 - Must remain legible under Reduce Transparency, Increase Contrast, and Reduce
   Motion.
 
-## Out of scope here
+## Window
 
-The custom `ButtonStyle`s in `ContentView.swift` are still present pending the
-Phase 3 controls pass; they have been reduced to system fills in the interim.
-Window resizing, glass controls, and the grouped-`Form` settings conversion are
-also Phase 3.
+The main window is **resizable** (`VibesApp.swift`): no
+`.windowResizability(.contentSize)`, a `.defaultSize(460×620)` first-launch
+frame, `.windowResizeAnchor(.topLeading)`, and a `minWidth 460 / minHeight 520`
+floor on `ContentView`. The friend feed caps its card column at `maxWidth 640`
+and centers it so cards don't stretch edge-to-edge on wide windows; the
+`ScrollView` uses `.scrollEdgeEffectStyle(.soft, for: .all)` so content fades
+under the header/footer instead of meeting a hard divider. The **Settings**
+window stays fixed-size (`.windowResizability(.contentSize)`), standard for a
+settings scene.
+
+## Sanctioned exceptions
+
+The no-custom-color / no-fixed-size rules have a few deliberate, commented
+exceptions in the source:
+
+- The user's **avatar gradient** (`Color(hex:)` in `Models.swift`/`AppModel.swift`,
+  rendered in `AvatarView`/Profile Icon settings) — a user-chosen brand color,
+  not chrome. The small drop shadow on the gradient initial is kept for
+  legibility over that gradient.
+- A handful of **exact `.font(.system(size:))`** values where the glyph must fit
+  a fixed shape (avatar initials, the LOC-bar counts) or is a deliberate display
+  mark (the "vibes" wordmark). Everything else uses Dynamic-Type text styles.
+
+There are **zero** custom `VibeColor` tokens and **zero** custom `ButtonStyle`
+types in the target — controls use `.glass`/`.glassProminent`/`.bordered`/
+`.borderedProminent`, and surfaces use the system fills in the color table above.
