@@ -119,6 +119,10 @@ $EDITOR .env.release
 make mac-release
 ```
 
+Before building anything, `release-mac.sh` runs **`scripts/preflight-release.sh`**, which fails fast (milliseconds) if any of these are wrong: required env vars, `VIBES_RELEASE_VERSION` vs the project's `MARKETING_VERSION`, the release-notes file, the Developer ID signing identity in the keychain, the notarytool profile, and — critically — that the EdDSA signing key's public half equals the app's `SUPublicEDKey` (signing with the wrong key ships an update every installed app rejects). Run `make mac-preflight` any time to check readiness without building.
+
+If a step *after* the build fails (e.g. appcast signing or upload), don't rerun the whole thing — the build artifacts are already notarized. Resume with **`make mac-publish`**, which only signs the staged appcast and publishes.
+
 `scripts/release-mac.sh` validates that `VIBES_RELEASE_VERSION` equals the project's `MARKETING_VERSION`, uses `VIBES_BUILD_NUMBER` as `CURRENT_PROJECT_VERSION`, archives the app, exports a Developer ID build, notarizes and staples the app, verifies code signing/Gatekeeper, creates `release/appcast/Vibes-<version>.zip`, and with `VIBES_BUILD_DMG=1` creates/notarizes/staples `build/Vibes-<version>.dmg`.
 
 `scripts/generate-appcast.sh` signs the update archive with Sparkle's EdDSA private key and regenerates `release/appcast/appcast.xml`.

@@ -74,35 +74,15 @@ APPCAST_STAGING="release/appcast"
 RELEASE_NOTES_SRC="release/release-notes/${VIBES_RELEASE_VERSION}.md"
 UPDATE_ZIP="${APPCAST_STAGING}/${APP_NAME}-${VIBES_RELEASE_VERSION}.zip"
 
-# --- Validate version inputs against the project ----------------------------
+# --- Preflight: credentials, version sync, EdDSA key match (fail fast) -------
+# All cheap checks run here, before the slow archive + double notarization:
+# required vars, version sync, release notes, signing identity, notary profile,
+# and that the EdDSA key's public half equals the app's SUPublicEDKey. A missing
+# or mismatched credential dies in milliseconds instead of after minutes of work.
+# Inherits VIBES_ED_KEY_FILE if the caller set it. See preflight-release.sh.
+"${SCRIPT_DIR}/preflight-release.sh"
 
-project_marketing_version="$(xcodebuild -project "${PROJECT}" -scheme "${SCHEME}" \
-  -showBuildSettings -configuration Release 2>/dev/null \
-  | awk -F' = ' '/ MARKETING_VERSION =/ {print $2; exit}')"
-
-if [[ "${project_marketing_version}" != "${VIBES_RELEASE_VERSION}" ]]; then
-  die "VIBES_RELEASE_VERSION (${VIBES_RELEASE_VERSION}) does not match project MARKETING_VERSION (${project_marketing_version}). Bump MARKETING_VERSION in the project first so the two stay in sync."
-fi
-
-[[ "${VIBES_BUILD_NUMBER}" =~ ^[0-9]+$ ]] || die "VIBES_BUILD_NUMBER must be a positive integer."
 [[ -f "${EXPORT_OPTIONS}" ]] || die "missing ${EXPORT_OPTIONS}"
-[[ -f "${RELEASE_NOTES_SRC}" ]] || die "missing release notes: ${RELEASE_NOTES_SRC} (create it before releasing)"
-
-# --- Preflight: signing identity must exist before the (slow) archive --------
-# Without this, a missing Developer ID certificate fails deep inside xcodebuild
-# with a cryptic "No certificate for team ... found" only after the archive has
-# already run. Catch it here in milliseconds with an actionable message.
-if ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "${VIBES_CODESIGN_IDENTITY}"; then
-  available="$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/^[[:space:]]*[0-9][0-9]*) //p')"
-  die "code-signing identity not found in any keychain:
-    ${VIBES_CODESIGN_IDENTITY}
-Install the Developer ID Application certificate AND its private key, then retry:
-  - Xcode → Settings → Accounts → Manage Certificates → + → Developer ID Application
-  - or import a backed-up identity: security import DeveloperID.p12 -k login.keychain
-Verify with: security find-identity -v -p codesigning
-Code-signing identities currently available:
-${available:-  (none — the keychain has no valid signing certificates)}"
-fi
 
 note "Releasing ${APP_NAME} ${VIBES_RELEASE_VERSION} (build ${VIBES_BUILD_NUMBER}) as ${VIBES_BUNDLE_ID}"
 
