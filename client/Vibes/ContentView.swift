@@ -13,8 +13,6 @@ struct ContentView: View {
       }
     }
     .frame(width: 460, height: 620)
-    .background(VibeColor.background)
-    .foregroundStyle(VibeColor.foreground)
   }
 }
 
@@ -36,7 +34,7 @@ private struct SetupPanel: View {
           .font(.system(size: 18, weight: .light))
         Text("This stays on your Mac.")
           .font(.system(size: 13))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
       }
 
       Field("display name", text: $displayName, prompt: "Marcus")
@@ -64,7 +62,7 @@ private struct SetupPanel: View {
           VStack(alignment: .leading, spacing: 8) {
             Text("I already have a token")
               .font(.caption)
-              .foregroundStyle(VibeColor.muted)
+              .foregroundStyle(Color.secondary)
             Field("token", text: $token, prompt: "existing relay token")
             HStack(spacing: 12) {
               Field("handle", text: $handle, prompt: "marcus")
@@ -103,7 +101,7 @@ private struct SetupPanel: View {
       if let error = model.lastError {
         Text(error)
           .font(.caption)
-          .foregroundStyle(VibeColor.accent)
+          .foregroundStyle(Color.red)
       }
 
       Spacer()
@@ -188,8 +186,6 @@ struct SettingsView: View {
         }
     }
     .frame(width: 560, height: 500)
-    .background(VibeColor.background)
-    .foregroundStyle(VibeColor.foreground)
   }
 }
 
@@ -238,14 +234,14 @@ private struct GeneralSettingsPane: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("local identifiers")
           .font(.caption)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
         Text("Device ID: \(displayDeviceID)")
           .font(.system(size: 12))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
           .textSelection(.enabled)
         Text("Timezone: \(model.config?.identity.timezone ?? TimeZone.current.identifier)")
           .font(.system(size: 12))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
       }
     }
     .onAppear(perform: populate)
@@ -303,11 +299,11 @@ private struct ProfileIconSettingsPane: View {
       VStack(alignment: .leading, spacing: 6) {
         Text("prompt")
           .font(.caption)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
         TextField("a sleepy fox with headphones", text: $prompt)
           .textFieldStyle(.plain)
           .padding(10)
-          .background(VibeColor.field)
+          .background(Color(nsColor: .quaternarySystemFill))
           .clipShape(RoundedRectangle(cornerRadius: 4))
           .disabled(!canGenerate)
           .onSubmit { generate() }
@@ -349,7 +345,7 @@ private struct ProfileIconSettingsPane: View {
       if let status = workingStatus {
         Text(status)
           .font(.system(size: 12))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
       }
 
       if let error = model.avatarError {
@@ -357,7 +353,7 @@ private struct ProfileIconSettingsPane: View {
           if model.avatarMaySetupNeeded {
             Text("Apple Intelligence may still be setting up image generation. Open Image Playground once to finish the download, then try again.")
               .font(.system(size: 12))
-              .foregroundStyle(VibeColor.muted)
+              .foregroundStyle(Color.secondary)
               .fixedSize(horizontal: false, vertical: true)
             Button {
               model.openImagePlayground()
@@ -368,14 +364,13 @@ private struct ProfileIconSettingsPane: View {
           } else {
             Text(error)
               .font(.system(size: 12))
-              .foregroundStyle(VibeColor.accent)
+              .foregroundStyle(Color.red)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
       }
 
       Divider()
-        .overlay(VibeColor.cardBorder)
 
       gradientSection
     }
@@ -391,7 +386,7 @@ private struct ProfileIconSettingsPane: View {
     VStack(alignment: .leading, spacing: 12) {
       Text("gradient")
         .font(.caption)
-        .foregroundStyle(VibeColor.muted)
+        .foregroundStyle(Color.secondary)
 
       HStack(alignment: .center, spacing: 16) {
         ZStack {
@@ -409,7 +404,7 @@ private struct ProfileIconSettingsPane: View {
             .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
         }
         .frame(width: 72, height: 72)
-        .overlay(Circle().strokeBorder(VibeColor.cardBorder, lineWidth: 1))
+        .overlay(Circle().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
 
         // Labels in column 1, color wells in column 2 → the wells line up
         // vertically regardless of label width.
@@ -426,7 +421,6 @@ private struct ProfileIconSettingsPane: View {
           }
         }
         .font(.system(size: 13))
-        .foregroundStyle(VibeColor.foreground)
 
         Button {
           Task { await model.setGradientAvatar() }
@@ -453,14 +447,14 @@ private struct ProfileIconSettingsPane: View {
           .scaledToFill()
           .frame(width: previewDiameter, height: previewDiameter)
           .clipShape(Circle())
-          .overlay(Circle().strokeBorder(VibeColor.cardBorder, lineWidth: 1))
+          .overlay(Circle().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
       } else if let you = model.feed?.you {
         AvatarView(status: you, size: .comfortable, isOnline: you.mode == .online)
           .scaleEffect(previewDiameter / AvatarView.outerDiameter(for: .comfortable))
           .frame(width: previewDiameter, height: previewDiameter)
       } else {
         Circle()
-          .fill(VibeColor.controlAtRest)
+          .fill(Color(nsColor: .quaternarySystemFill))
           .frame(width: previewDiameter, height: previewDiameter)
       }
       Spacer()
@@ -470,11 +464,11 @@ private struct ProfileIconSettingsPane: View {
   private var unavailableNote: some View {
     Text("On-device image generation isn't available on this Mac. It requires an Apple-Intelligence-capable Mac on the latest macOS, with the models downloaded. You can still remove an existing icon.")
       .font(.system(size: 13))
-      .foregroundStyle(VibeColor.muted)
+      .foregroundStyle(Color.secondary)
       .fixedSize(horizontal: false, vertical: true)
       .padding(12)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(VibeColor.field)
+      .background(Color(nsColor: .quaternarySystemFill))
       .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 
@@ -519,7 +513,7 @@ private struct SharingSettingsPane: View {
       VStack(alignment: .leading, spacing: 12) {
         Text("cards")
           .font(.caption)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
 
         UnavailableCardRow(title: "Spotify", detail: "Not available yet")
         UnavailableCardRow(title: "Weather", detail: "Not available yet")
@@ -541,20 +535,20 @@ private struct AdvancedSettingsPane: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("setup help")
           .font(.caption)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
         Text("Copy this summary into your agent chat if you'd like help configuring repos.")
           .font(.system(size: 13))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
 
       VStack(alignment: .leading, spacing: 8) {
         Text("diagnostics")
           .font(.caption)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
         Text(model.diagnosticSummary())
           .font(.system(size: 12))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
           .textSelection(.enabled)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -581,15 +575,15 @@ private struct UnavailableCardRow: View {
           .font(.system(size: 14, weight: .regular))
         Text(detail)
           .font(.system(size: 12))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
       }
       Spacer()
       Text("Soon")
         .font(.caption)
-        .foregroundStyle(VibeColor.muted)
+        .foregroundStyle(Color.secondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(VibeColor.field)
+        .background(Color(nsColor: .quaternarySystemFill))
         .clipShape(Capsule())
     }
     .padding(.vertical, 8)
@@ -608,7 +602,6 @@ private struct SettingsPane<Content: View>: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .scrollContentBackground(.hidden)
-    .background(VibeColor.background)
   }
 }
 
@@ -623,7 +616,7 @@ private struct SettingsHeading: View {
       if let detail {
         Text(detail)
           .font(.system(size: 13))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
     }
@@ -640,12 +633,12 @@ private struct EditableSettingField: View {
     VStack(alignment: .leading, spacing: 6) {
       Text(label)
         .font(.caption)
-        .foregroundStyle(VibeColor.muted)
+        .foregroundStyle(Color.secondary)
       HStack(spacing: 8) {
         TextField(prompt, text: $text)
           .textFieldStyle(.plain)
           .padding(10)
-          .background(VibeColor.field)
+          .background(Color(nsColor: .quaternarySystemFill))
           .clipShape(RoundedRectangle(cornerRadius: 4))
           .onSubmit(save)
         Button("Save") {
@@ -668,14 +661,14 @@ private struct HomeView: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("status")
           .font(.caption)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
         TextField("what are you working on?", text: Binding(
           get: { model.manualStatus },
           set: { model.updateManualStatus($0) }
         ))
         .textFieldStyle(.plain)
         .padding(10)
-        .background(VibeColor.field)
+        .background(Color(nsColor: .quaternarySystemFill))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .onSubmit {
           Task { await model.scanPublishAndFetch() }
@@ -730,9 +723,9 @@ private struct PresenceToggle: View {
       segment(.offline, label: "Offline")
     }
     .padding(3)
-    .background(VibeColor.chassis)
+    .background(Color(nsColor: .quaternarySystemFill))
     .clipShape(Capsule())
-    .overlay(Capsule().stroke(VibeColor.cardBorder, lineWidth: 1))
+    .overlay(Capsule().stroke(Color(nsColor: .separatorColor), lineWidth: 1))
   }
 
   private func segment(_ target: PresenceMode, label: String) -> some View {
@@ -744,8 +737,8 @@ private struct PresenceToggle: View {
         .font(.system(size: 13, weight: .medium))
         .frame(minWidth: segmentMinWidth)
         .frame(height: controlHeight - 6)
-        .foregroundStyle(isSelected ? VibeColor.controlLitForeground : VibeColor.controlAtRestForeground)
-        .background(isSelected ? VibeColor.controlLit : Color.clear)
+        .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+        .background(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear))
         .clipShape(Capsule())
         .contentShape(Capsule())
     }
@@ -761,7 +754,7 @@ private struct ReposSection: View {
       HStack {
         Text("repositories")
           .font(.caption)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
         Spacer()
         Button {
           model.addRepo()
@@ -805,7 +798,7 @@ private struct RepoRow: View {
       }
       Text(repo.path)
         .font(.caption)
-        .foregroundStyle(VibeColor.muted)
+        .foregroundStyle(Color.secondary)
         .lineLimit(1)
         .truncationMode(.middle)
     }
@@ -825,7 +818,7 @@ private struct InviteFriendView: View {
             .font(.system(size: 22, weight: .light))
           Text("Send a one-time link. Each link connects one friend.")
             .font(.system(size: 13))
-            .foregroundStyle(VibeColor.muted)
+            .foregroundStyle(Color.secondary)
         }
         Spacer()
         Button {
@@ -868,12 +861,12 @@ private struct InviteFriendView: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("Have an invite code?")
           .font(.caption)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
         HStack(spacing: 8) {
           TextField("7Qm3-X2pK", text: $model.inviteCodeInput)
             .textFieldStyle(.plain)
             .padding(10)
-            .background(VibeColor.field)
+            .background(Color(nsColor: .quaternarySystemFill))
             .clipShape(RoundedRectangle(cornerRadius: 4))
             .onSubmit {
               Task { await model.acceptInvite(code: model.inviteCodeInput) }
@@ -889,7 +882,7 @@ private struct InviteFriendView: View {
 
       Text("Open invites")
         .font(.caption)
-        .foregroundStyle(VibeColor.muted)
+        .foregroundStyle(Color.secondary)
         .padding(.top, 2)
 
       VStack(alignment: .leading, spacing: 10) {
@@ -903,7 +896,7 @@ private struct InviteFriendView: View {
                   Text("Invite")
                   Text("expires \(relative(invite.expiresAt))")
                     .font(.caption)
-                    .foregroundStyle(VibeColor.muted)
+                    .foregroundStyle(Color.secondary)
                 }
                 Spacer()
                 Button("Revoke") {
@@ -918,8 +911,6 @@ private struct InviteFriendView: View {
     }
     .padding(24)
     .frame(width: 420)
-    .background(VibeColor.background)
-    .foregroundStyle(VibeColor.foreground)
     .task {
       await model.refreshInvites()
     }
@@ -942,16 +933,16 @@ private struct InviteSheet: View {
           .font(.system(size: 22, weight: .light))
         Text("Someone invited you to Vibes.")
           .font(.system(size: 14))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
         Text(invite.code)
           .font(.caption)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
           .textSelection(.enabled)
       }
 
       Text("Accepting lets you both see each other's presence.")
         .font(.system(size: 13))
-        .foregroundStyle(VibeColor.muted)
+        .foregroundStyle(Color.secondary)
 
       HStack(spacing: 10) {
         Button("Accept") {
@@ -968,8 +959,6 @@ private struct InviteSheet: View {
     }
     .padding(24)
     .frame(width: 340)
-    .background(VibeColor.background)
-    .foregroundStyle(VibeColor.foreground)
   }
 }
 
@@ -982,15 +971,15 @@ private struct Footer: View {
     HStack {
       if let error = model.lastError {
         Text(error)
-          .foregroundStyle(VibeColor.accent)
+          .foregroundStyle(Color.red)
           .lineLimit(1)
       } else if let message = model.successMessage {
         Text(message)
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
           .lineLimit(1)
       } else {
         Text(model.lastSyncedAt.map { "synced \($0.formatted(.relative(presentation: .named)))" } ?? "not synced")
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
       }
       Spacer()
       HStack(spacing: 8) {
@@ -1024,7 +1013,7 @@ private struct Header: View {
       if let subtitle, !subtitle.isEmpty {
         Text(subtitle)
           .font(.system(size: 13, weight: .regular))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
       }
     }
   }
@@ -1045,11 +1034,11 @@ private struct Field: View {
     VStack(alignment: .leading, spacing: 6) {
       Text(label)
         .font(.caption)
-        .foregroundStyle(VibeColor.muted)
+        .foregroundStyle(Color.secondary)
       TextField(prompt, text: $text)
         .textFieldStyle(.plain)
         .padding(10)
-        .background(VibeColor.field)
+        .background(Color(nsColor: .quaternarySystemFill))
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
   }
@@ -1064,7 +1053,7 @@ private struct EmptyState: View {
     VStack(spacing: 12) {
       Text(text)
         .font(.system(size: 14))
-        .foregroundStyle(VibeColor.muted)
+        .foregroundStyle(Color.secondary)
         .multilineTextAlignment(.center)
       if let actionTitle, let action {
         Button(actionTitle) {
@@ -1078,131 +1067,14 @@ private struct EmptyState: View {
   }
 }
 
-// Aurora II palette (see experiments/friend-list-mockups, design E). Dark mode is
-// a cool near-black with slightly-cool-gray cards; light mode keeps the original
-// warm cream. Card tints, the LOC bar pair, and the faint text tier are all part
-// of the same ramp — adjust them together.
-enum VibeColor {
-  static let ink = NSColor(red: 0.169, green: 0.149, blue: 0.125, alpha: 1)
-  static let paper = NSColor(red: 0.953, green: 0.937, blue: 0.906, alpha: 1)
-  static let darkBg = NSColor(red: 0.078, green: 0.082, blue: 0.102, alpha: 1)
-  static let darkInk = NSColor(red: 0.914, green: 0.918, blue: 0.941, alpha: 1)
-  static let accent = Color(red: 0.878, green: 0.325, blue: 0.122)
-  static let online = Color(red: 0.18, green: 0.55, blue: 0.34)
-  static let background = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode ? darkBg : paper
-  })
-  static let foreground = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode ? darkInk : ink
-  })
-  static let muted = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.655, green: 0.675, blue: 0.741, alpha: 1)
-      : NSColor(red: 0.435, green: 0.404, blue: 0.357, alpha: 1)
-  })
-  // The faintest text tier — timestamps, repo lists, spotify/weather extras.
-  static let faint = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.424, green: 0.443, blue: 0.502, alpha: 1)
-      : NSColor(red: 0.639, green: 0.604, blue: 0.545, alpha: 1)
-  })
-  static let field = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? darkInk.withAlphaComponent(0.06)
-      : ink.withAlphaComponent(0.045)
-  })
-  static let accentForeground = Color(nsColor: paper)
-
-  // Chassis & surfaces — the neutral body controls sit on.
-  static let chassis = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.102, green: 0.110, blue: 0.133, alpha: 1)
-      : NSColor(red: 0.894, green: 0.871, blue: 0.812, alpha: 1)
-  })
-  static let cardSurface = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.176, green: 0.188, blue: 0.208, alpha: 1)
-      : NSColor(red: 0.992, green: 0.984, blue: 0.965, alpha: 1)
-  })
-  static let cardBorder = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.263, green: 0.275, blue: 0.298, alpha: 1)
-      : NSColor(red: 0.906, green: 0.882, blue: 0.835, alpha: 1)
-  })
-  // "You" card: identical treatment to friends, slightly different tint.
-  static let meCardSurface = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.208, green: 0.227, blue: 0.271, alpha: 1)
-      : NSColor(red: 0.925, green: 0.902, blue: 0.847, alpha: 1)
-  })
-  static let meCardBorder = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.298, green: 0.322, blue: 0.376, alpha: 1)
-      : NSColor(red: 0.867, green: 0.835, blue: 0.761, alpha: 1)
-  })
-  // LOC bar halves: additions left, deletions right, numbers inside.
-  static let locAddedBg = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.114, green: 0.227, blue: 0.169, alpha: 1)
-      : NSColor(red: 0.851, green: 0.925, blue: 0.867, alpha: 1)
-  })
-  static let locAddedInk = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.498, green: 0.878, blue: 0.655, alpha: 1)
-      : NSColor(red: 0.122, green: 0.478, blue: 0.302, alpha: 1)
-  })
-  static let locRemovedBg = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.239, green: 0.145, blue: 0.149, alpha: 1)
-      : NSColor(red: 0.957, green: 0.867, blue: 0.839, alpha: 1)
-  })
-  static let locRemovedInk = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.945, green: 0.584, blue: 0.545, alpha: 1)
-      : NSColor(red: 0.702, green: 0.314, blue: 0.243, alpha: 1)
-  })
-  // Away rows: quiet, barely raised off the window background.
-  static let awayRowSurface = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor.white.withAlphaComponent(0.025)
-      : NSColor.white.withAlphaComponent(0.45)
-  })
-  static let sectionDivider = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.149, green: 0.161, blue: 0.196, alpha: 1)
-      : NSColor(red: 0.894, green: 0.867, blue: 0.812, alpha: 1)
-  })
-
-  // Secondary accent — petrol blue. Orange leads; use this sparingly.
-  static let accentSecondary = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.243, green: 0.561, blue: 0.722, alpha: 1)
-      : NSColor(red: 0.173, green: 0.431, blue: 0.569, alpha: 1)
-  })
-
-  // Control state language: "lit" (saturated/active) vs "at-rest" (dimmed/idle).
-  static let controlLit = accent
-  static let controlLitForeground = Color(nsColor: paper)
-  static let controlAtRest = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.231, green: 0.247, blue: 0.282, alpha: 1)
-      : NSColor(red: 0.847, green: 0.820, blue: 0.753, alpha: 1)
-  })
-  static let controlAtRestForeground = Color(nsColor: NSColor(name: nil) { appearance in
-    appearance.isDarkMode
-      ? NSColor(red: 0.655, green: 0.675, blue: 0.741, alpha: 1)
-      : NSColor(red: 0.431, green: 0.400, blue: 0.357, alpha: 1)
-  })
-}
-
 private struct AccentButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.system(size: 13, weight: .regular))
       .padding(.horizontal, 13)
       .padding(.vertical, 9)
-      .background(VibeColor.accent.opacity(configuration.isPressed ? 0.8 : 1))
-      .foregroundStyle(VibeColor.accentForeground)
+      .background(.tint.opacity(configuration.isPressed ? 0.8 : 1))
+      .foregroundStyle(.white)
       .clipShape(RoundedRectangle(cornerRadius: 4))
   }
 }
@@ -1213,7 +1085,7 @@ private struct PlainVibeButtonStyle: ButtonStyle {
       .font(.system(size: 13, weight: .regular))
       .padding(.horizontal, 11)
       .padding(.vertical, 8)
-      .background(VibeColor.field.opacity(configuration.isPressed ? 0.6 : 1))
+      .background(Color(nsColor: .quaternarySystemFill).opacity(configuration.isPressed ? 0.6 : 1))
       .clipShape(RoundedRectangle(cornerRadius: 4))
   }
 }
@@ -1224,7 +1096,7 @@ private struct FooterTextButtonStyle: ButtonStyle {
       .font(.system(size: 13, weight: .regular))
       .padding(.horizontal, 11)
       .frame(height: 30)
-      .background(VibeColor.field.opacity(configuration.isPressed ? 0.6 : 1))
+      .background(Color(nsColor: .quaternarySystemFill).opacity(configuration.isPressed ? 0.6 : 1))
       .clipShape(RoundedRectangle(cornerRadius: 4))
   }
 }
@@ -1233,14 +1105,8 @@ private struct IconButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .frame(width: 30, height: 30)
-      .background(VibeColor.field.opacity(configuration.isPressed ? 0.6 : 1))
+      .background(Color(nsColor: .quaternarySystemFill).opacity(configuration.isPressed ? 0.6 : 1))
       .clipShape(RoundedRectangle(cornerRadius: 4))
-  }
-}
-
-private extension NSAppearance {
-  var isDarkMode: Bool {
-    bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
   }
 }
 

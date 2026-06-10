@@ -4,10 +4,9 @@ import SwiftUI
 // presence indicator (replacing the old standalone dot in FriendCard.header).
 // The AI-generated PNG (or initials fallback) fills a Circle; a stroked ring sits
 // just outside it with a small gap. Ring color is the presence state:
-//   online  → VibeColor.online        ("lit")
-//   offline → VibeColor.controlAtRest ("at-rest")
-// All dimensions scale with the FriendCard size enum and all colors are pure
-// VibeColor tokens (see client/Vibes/DESIGN.md).
+//   online  → system green
+//   offline → secondary label
+// All dimensions scale with the FriendCard size enum (see client/Vibes/DESIGN.md).
 struct AvatarView: View {
   var status: MergedStatus
   var size: FriendCardSize
@@ -64,7 +63,7 @@ struct AvatarView: View {
   // Choose the representation by the user's explicit `avatarKind`:
   //   "image"    → AI-generated PNG (AsyncImage, initials on empty/failure)
   //   "gradient" → a two-color LinearGradient (topLeading → bottomTrailing)
-  //   else       → initials on a neutral VibeColor fill
+  //   else       → initials on a neutral system fill
   // The presence ring is applied once in `body` and is identical in every case.
   @ViewBuilder
   private var avatarFill: some View {
@@ -104,10 +103,10 @@ struct AvatarView: View {
 
   private var initials: some View {
     ZStack {
-      VibeColor.controlAtRest
+      Color(nsColor: .quaternarySystemFill)
       Text(initialsText)
         .font(.system(size: metrics.initialsFontSize, weight: .medium, design: .rounded))
-        .foregroundStyle(VibeColor.controlAtRestForeground)
+        .foregroundStyle(.secondary)
     }
   }
 
@@ -139,7 +138,7 @@ struct AvatarView: View {
   }
 
   private var ringColor: Color {
-    isOnline ? VibeColor.online : VibeColor.controlAtRest
+    isOnline ? Color(nsColor: .systemGreen) : Color(nsColor: .tertiaryLabelColor)
   }
 
   private var metrics: AvatarMetrics { AvatarMetrics(size: size) }
@@ -192,5 +191,4 @@ private struct AvatarMetrics {
     }
   }
   .padding(40)
-  .background(VibeColor.chassis)
 }
