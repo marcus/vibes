@@ -11,9 +11,8 @@ import SwiftUI
 //   legend  — commit count left, repo list right
 //   extras  — optional spotify track / weather, faintest tier, only when shared
 //
-// "You" gets the identical treatment on a slightly different tint
-// (VibeColor.meCardSurface). Offline friends don't use this card — they render
-// as AwayFriendRow below.
+// "You" gets the identical treatment on a subtle accent-tinted wash. Offline
+// friends don't use this card — they render as AwayFriendRow below.
 
 enum FriendCardSize {
   case comfortable
@@ -35,11 +34,11 @@ struct FriendCard: View {
     }
     .padding(15)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(isYou ? VibeColor.meCardSurface : VibeColor.cardSurface)
+    .background(isYou ? AnyShapeStyle(.tint.opacity(0.12)) : AnyShapeStyle(.background.secondary))
     .clipShape(RoundedRectangle(cornerRadius: 16))
     .overlay(
       RoundedRectangle(cornerRadius: 16)
-        .stroke(isYou ? VibeColor.meCardBorder : VibeColor.cardBorder, lineWidth: 1)
+        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
     )
   }
 
@@ -51,17 +50,17 @@ struct FriendCard: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(isYou ? "you" : status.user.displayName)
           .font(.system(size: 15, weight: .bold))
-          .foregroundStyle(VibeColor.foreground)
+          .foregroundStyle(Color.primary)
           .lineLimit(1)
         Text(statusLine)
           .font(.system(size: 12.5))
-          .foregroundStyle(VibeColor.muted)
+          .foregroundStyle(Color.secondary)
           .lineLimit(1)
       }
       Spacer(minLength: 4)
       Text(lastSeen)
         .font(.system(size: 11))
-        .foregroundStyle(VibeColor.faint)
+        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(.top, 2)
     }
@@ -70,9 +69,9 @@ struct FriendCard: View {
 
   private var legend: some View {
     HStack(alignment: .firstTextBaseline) {
-      Text("\(Text("\(commitCount)").fontWeight(.bold).foregroundColor(VibeColor.foreground))\(commitCount == 1 ? " commit today" : " commits today")")
+      Text("\(Text("\(commitCount)").fontWeight(.bold).foregroundColor(Color.primary))\(commitCount == 1 ? " commit today" : " commits today")")
       .font(.system(size: 11.5))
-      .foregroundStyle(VibeColor.muted)
+      .foregroundStyle(Color.secondary)
       .monospacedDigit()
 
       Spacer(minLength: 8)
@@ -80,7 +79,7 @@ struct FriendCard: View {
       if !repoAliases.isEmpty {
         Text(repoAliases.joined(separator: ", "))
           .font(.system(size: 11.5, weight: .semibold))
-          .foregroundStyle(VibeColor.faint)
+          .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           .lineLimit(1)
           .truncationMode(.tail)
       }
@@ -94,7 +93,7 @@ struct FriendCard: View {
       if let track = spotifyLine {
         Text("♪ \(track)")
           .font(.system(size: 11.5))
-          .foregroundStyle(VibeColor.faint)
+          .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           .lineLimit(1)
           .truncationMode(.tail)
       }
@@ -102,7 +101,7 @@ struct FriendCard: View {
       if let weather = weatherLine {
         Text(weather)
           .font(.system(size: 11.5))
-          .foregroundStyle(VibeColor.faint)
+          .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           .monospacedDigit()
           .lineLimit(1)
       }
@@ -183,15 +182,15 @@ private struct LocBar: View {
       let addWidth = addedWidth(in: geo.size.width)
       HStack(spacing: 0) {
         Text("+\(added)")
-          .foregroundStyle(VibeColor.locAddedInk)
+          .foregroundStyle(Color(nsColor: .systemGreen))
           .padding(.leading, 12)
           .frame(width: addWidth, height: height, alignment: .leading)
-          .background(VibeColor.locAddedBg)
+          .background(Color(nsColor: .systemGreen).opacity(0.15))
         Text("\u{2212}\(removed)")
-          .foregroundStyle(VibeColor.locRemovedInk)
+          .foregroundStyle(Color(nsColor: .systemRed))
           .padding(.trailing, 12)
           .frame(width: geo.size.width - addWidth, height: height, alignment: .trailing)
-          .background(VibeColor.locRemovedBg)
+          .background(Color(nsColor: .systemRed).opacity(0.12))
       }
       .font(.system(size: 11, weight: .bold))
       .monospacedDigit()
@@ -224,21 +223,21 @@ struct AwayFriendRow: View {
         .opacity(0.8)
       Text(status.user.displayName)
         .font(.system(size: 12.5, weight: .semibold))
-        .foregroundStyle(VibeColor.muted)
+        .foregroundStyle(Color.secondary)
         .lineLimit(1)
       Text(recentSummary)
         .font(.system(size: 11.5))
-        .foregroundStyle(VibeColor.faint)
+        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: 8)
       Text(lastSeen)
         .font(.system(size: 11))
-        .foregroundStyle(VibeColor.faint)
+        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
     }
     .padding(.vertical, 7)
     .padding(.horizontal, 10)
-    .background(VibeColor.awayRowSurface)
+    .background(Color(nsColor: .quaternarySystemFill))
     .clipShape(RoundedRectangle(cornerRadius: 11))
   }
 
@@ -267,9 +266,9 @@ struct AwaySectionHeader: View {
       Text("AWAY")
         .font(.system(size: 10.5, weight: .bold))
         .tracking(1.2)
-        .foregroundStyle(VibeColor.faint)
+        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
       Rectangle()
-        .fill(VibeColor.sectionDivider)
+        .fill(Color(nsColor: .separatorColor))
         .frame(height: 1)
     }
     .padding(.horizontal, 2)
@@ -362,7 +361,6 @@ private func sampleStatus(
   }
   .padding(16)
   .frame(width: 420)
-  .background(VibeColor.background)
 }
 
 #Preview("Zero day") {
@@ -372,5 +370,4 @@ private func sampleStatus(
   ))
   .padding()
   .frame(width: 420)
-  .background(VibeColor.background)
 }
