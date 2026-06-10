@@ -49,6 +49,10 @@ struct VibesApp: App {
           model.handleIncomingURL(url)
         }
     }
+    // Seamless macOS 26 Liquid Glass titlebar: hide the titlebar chrome so the
+    // content flows continuously up under the (now floating) traffic lights —
+    // no separator line between the window controls and the app content.
+    .windowStyle(.hiddenTitleBar)
     // First launch matches the historical 460×620 proportions; the window
     // remembers user resizes thereafter. No .windowResizability(.contentSize)
     // here — the main window is freely resizable (min frame set on ContentView).
