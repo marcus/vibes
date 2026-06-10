@@ -815,15 +815,26 @@ private struct RepoRow: View {
 
 private struct InviteFriendView: View {
   @EnvironmentObject private var model: AppModel
+  @Environment(\.dismiss) private var dismiss
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
-      VStack(alignment: .leading, spacing: 8) {
-        Text("invite a friend")
-          .font(.system(size: 22, weight: .light))
-        Text("Send a one-time link. Each link connects one friend.")
-          .font(.system(size: 13))
-          .foregroundStyle(VibeColor.muted)
+      HStack(alignment: .top) {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("invite a friend")
+            .font(.system(size: 22, weight: .light))
+          Text("Send a one-time link. Each link connects one friend.")
+            .font(.system(size: 13))
+            .foregroundStyle(VibeColor.muted)
+        }
+        Spacer()
+        Button {
+          dismiss()
+        } label: {
+          Image(systemName: "xmark")
+        }
+        .buttonStyle(IconButtonStyle())
+        .accessibilityLabel("Close")
       }
 
       Button {
