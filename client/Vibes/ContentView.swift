@@ -187,7 +187,7 @@ struct SettingsView: View {
           Label("Advanced", systemImage: "wrench.and.screwdriver")
         }
     }
-    .frame(width: 560, height: 500)
+    .frame(width: 600, height: 520)
   }
 }
 
@@ -199,53 +199,55 @@ private struct GeneralSettingsPane: View {
   @State private var relayURL = ""
 
   var body: some View {
-    SettingsPane {
-      SettingsHeading(
-        title: "general",
-        detail: "Account and relay details for this Mac."
-      )
+    Form {
+      Section {
+        Text("Account and relay details for this Mac.")
+          .foregroundStyle(.secondary)
+      }
 
-      EditableSettingField(
-        label: "display name",
-        prompt: "Marcus",
-        text: $displayName,
-        save: { model.updateDisplayName(displayName) }
-      )
+      Section("Identity") {
+        EditableSettingField(
+          label: "Display Name",
+          prompt: "Marcus",
+          text: $displayName,
+          save: { model.updateDisplayName(displayName) }
+        )
+        EditableSettingField(
+          label: "Handle",
+          prompt: "marcus",
+          text: $handle,
+          save: { model.updateHandle(handle) }
+        )
+        EditableSettingField(
+          label: "Device Label",
+          prompt: "MacBook",
+          text: $deviceLabel,
+          save: { model.updateDeviceLabel(deviceLabel) }
+        )
+      }
 
-      EditableSettingField(
-        label: "handle",
-        prompt: "marcus",
-        text: $handle,
-        save: { model.updateHandle(handle) }
-      )
+      Section("Relay") {
+        EditableSettingField(
+          label: "Relay URL",
+          prompt: "https://vibes.opentangle.com",
+          text: $relayURL,
+          save: { model.updateRelayURL(relayURL) }
+        )
+      }
 
-      EditableSettingField(
-        label: "device label",
-        prompt: "MacBook",
-        text: $deviceLabel,
-        save: { model.updateDeviceLabel(deviceLabel) }
-      )
-
-      EditableSettingField(
-        label: "relay url",
-        prompt: "https://vibes.opentangle.com",
-        text: $relayURL,
-        save: { model.updateRelayURL(relayURL) }
-      )
-
-      VStack(alignment: .leading, spacing: 8) {
-        Text("local identifiers")
-          .font(.caption)
-          .foregroundStyle(Color.secondary)
-        Text("Device ID: \(displayDeviceID)")
-          .font(.system(size: 12))
-          .foregroundStyle(Color.secondary)
-          .textSelection(.enabled)
-        Text("Timezone: \(model.config?.identity.timezone ?? TimeZone.current.identifier)")
-          .font(.system(size: 12))
-          .foregroundStyle(Color.secondary)
+      Section("Local Identifiers") {
+        LabeledContent("Device ID") {
+          Text(displayDeviceID)
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+        }
+        LabeledContent("Timezone") {
+          Text(model.config?.identity.timezone ?? TimeZone.current.identifier)
+            .foregroundStyle(.secondary)
+        }
       }
     }
+    .formStyle(.grouped)
     .onAppear(perform: populate)
   }
 
@@ -268,13 +270,14 @@ private struct GeneralSettingsPane: View {
 
 private struct RepositoriesSettingsPane: View {
   var body: some View {
-    SettingsPane {
-      SettingsHeading(
-        title: "repositories",
-        detail: "Added repos contribute the repo name and daily activity to your friends' feed."
-      )
+    Form {
+      Section {
+        Text("Added repos contribute the repo name and daily activity to your friends' feed.")
+          .foregroundStyle(.secondary)
+      }
       ReposSection()
     }
+    .formStyle(.grouped)
   }
 }
 
@@ -289,73 +292,66 @@ private struct ProfileIconSettingsPane: View {
   private let previewDiameter: CGFloat = 96
 
   var body: some View {
-    SettingsPane {
-      SettingsHeading(title: "profile icon")
-
+    Form {
       if model.avatarSupported == false {
-        unavailableNote
+        Section {
+          unavailableNote
+        }
       }
 
-      preview
+      Section {
+        preview
+      }
 
-      VStack(alignment: .leading, spacing: 6) {
-        Text("prompt")
-          .font(.caption)
-          .foregroundStyle(Color.secondary)
-        TextField("a sleepy fox with headphones", text: $prompt)
-          .textFieldStyle(.plain)
-          .padding(10)
-          .background(Color(nsColor: .quaternarySystemFill))
-          .clipShape(RoundedRectangle(cornerRadius: 4))
+      Section("Generate") {
+        TextField("Prompt", text: $prompt, prompt: Text("a sleepy fox with headphones"))
           .disabled(!canGenerate)
           .onSubmit { generate() }
-      }
 
-      HStack(spacing: 10) {
-        Button {
-          generate()
-        } label: {
-          Label(model.avatarPreviewPNG == nil ? "Generate" : "Regenerate", systemImage: "sparkles")
-        }
-        .buttonStyle(.bordered)
-        .disabled(!canGenerate || isWorking)
-
-        if model.avatarPreviewPNG != nil {
+        HStack(spacing: 10) {
           Button {
-            Task { await model.useGeneratedAvatar() }
+            generate()
           } label: {
-            Label("Use this", systemImage: "checkmark")
+            Label(model.avatarPreviewPNG == nil ? "Generate" : "Regenerate", systemImage: "sparkles")
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(!canGenerate || isWorking)
+
+          if model.avatarPreviewPNG != nil {
+            Button {
+              Task { await model.useGeneratedAvatar() }
+            } label: {
+              Label("Use this", systemImage: "checkmark")
+            }
+            .buttonStyle(.bordered)
+            .disabled(isWorking)
+          }
+
+          Button {
+            Task { await model.removeAvatar() }
+          } label: {
+            Label("Remove", systemImage: "trash")
           }
           .buttonStyle(.bordered)
-          .disabled(isWorking)
+          .disabled(isWorking || !hasCurrentAvatar)
+
+          if isWorking {
+            ProgressView()
+              .controlSize(.small)
+          }
         }
 
-        Button {
-          Task { await model.removeAvatar() }
-        } label: {
-          Label("Remove", systemImage: "trash")
+        if let status = workingStatus {
+          Text(status)
+            .font(.callout)
+            .foregroundStyle(.secondary)
         }
-        .buttonStyle(.bordered)
-        .disabled(isWorking || !hasCurrentAvatar)
 
-        if isWorking {
-          ProgressView()
-            .controlSize(.small)
-        }
-      }
-
-      if let status = workingStatus {
-        Text(status)
-          .font(.system(size: 12))
-          .foregroundStyle(Color.secondary)
-      }
-
-      if let error = model.avatarError {
-        VStack(alignment: .leading, spacing: 8) {
+        if let error = model.avatarError {
           if model.avatarMaySetupNeeded {
             Text("Apple Intelligence may still be setting up image generation. Open Image Playground once to finish the download, then try again.")
-              .font(.system(size: 12))
-              .foregroundStyle(Color.secondary)
+              .font(.callout)
+              .foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)
             Button {
               model.openImagePlayground()
@@ -365,17 +361,16 @@ private struct ProfileIconSettingsPane: View {
             .buttonStyle(.bordered)
           } else {
             Text(error)
-              .font(.system(size: 12))
-              .foregroundStyle(Color.red)
+              .font(.callout)
+              .foregroundStyle(.red)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
       }
 
-      Divider()
-
       gradientSection
     }
+    .formStyle(.grouped)
     .task {
       await model.prepareAvatarSettings()
     }
@@ -385,11 +380,7 @@ private struct ProfileIconSettingsPane: View {
   // "Use gradient" button. Works regardless of Apple-Intelligence availability.
   @ViewBuilder
   private var gradientSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("gradient")
-        .font(.caption)
-        .foregroundStyle(Color.secondary)
-
+    Section("Gradient") {
       HStack(alignment: .center, spacing: 16) {
         ZStack {
           Circle()
@@ -506,21 +497,18 @@ private struct ProfileIconSettingsPane: View {
 
 private struct SharingSettingsPane: View {
   var body: some View {
-    SettingsPane {
-      SettingsHeading(
-        title: "sharing",
-        detail: "Optional cards will appear here as they become available."
-      )
+    Form {
+      Section {
+        Text("Optional cards will appear here as they become available.")
+          .foregroundStyle(.secondary)
+      }
 
-      VStack(alignment: .leading, spacing: 12) {
-        Text("cards")
-          .font(.caption)
-          .foregroundStyle(Color.secondary)
-
+      Section("Cards") {
         UnavailableCardRow(title: "Spotify", detail: "Not available yet")
         UnavailableCardRow(title: "Weather", detail: "Not available yet")
       }
     }
+    .formStyle(.grouped)
   }
 }
 
@@ -529,40 +517,32 @@ private struct AdvancedSettingsPane: View {
   @State private var copied = false
 
   var body: some View {
-    SettingsPane {
-      SettingsHeading(
-        title: "advanced"
-      )
-
-      VStack(alignment: .leading, spacing: 8) {
-        Text("setup help")
-          .font(.caption)
-          .foregroundStyle(Color.secondary)
+    Form {
+      Section("Setup Help") {
         Text("Copy this summary into your agent chat if you'd like help configuring repos.")
-          .font(.system(size: 13))
-          .foregroundStyle(Color.secondary)
+          .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
 
-      VStack(alignment: .leading, spacing: 8) {
-        Text("diagnostics")
-          .font(.caption)
-          .foregroundStyle(Color.secondary)
+      Section {
         Text(model.diagnosticSummary())
-          .font(.system(size: 12))
-          .foregroundStyle(Color.secondary)
+          .font(.callout)
+          .foregroundStyle(.secondary)
           .textSelection(.enabled)
           .fixedSize(horizontal: false, vertical: true)
+      } header: {
+        Text("Diagnostics")
+      } footer: {
+        Button {
+          model.copyDiagnosticSummary()
+          copied = true
+        } label: {
+          Label(copied ? "Copied" : "Copy Summary", systemImage: "doc.on.doc")
+        }
+        .buttonStyle(.borderedProminent)
       }
-
-      Button {
-        model.copyDiagnosticSummary()
-        copied = true
-      } label: {
-        Label(copied ? "Copied" : "Copy Summary", systemImage: "doc.on.doc")
-      }
-      .buttonStyle(.bordered)
     }
+    .formStyle(.grouped)
   }
 }
 
@@ -571,60 +551,24 @@ private struct UnavailableCardRow: View {
   var detail: String
 
   var body: some View {
-    HStack {
-      VStack(alignment: .leading, spacing: 4) {
-        Text(title)
-          .font(.system(size: 14, weight: .regular))
-        Text(detail)
-          .font(.system(size: 12))
-          .foregroundStyle(Color.secondary)
-      }
-      Spacer()
+    LabeledContent {
       Text("Soon")
         .font(.caption)
-        .foregroundStyle(Color.secondary)
+        .foregroundStyle(.secondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Color(nsColor: .quaternarySystemFill))
         .clipShape(Capsule())
-    }
-    .padding(.vertical, 8)
-  }
-}
-
-private struct SettingsPane<Content: View>: View {
-  @ViewBuilder var content: Content
-
-  var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 22) {
-        content
-      }
-      .padding(28)
-      .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    .scrollContentBackground(.hidden)
-  }
-}
-
-private struct SettingsHeading: View {
-  var title: String
-  var detail: String? = nil
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    } label: {
       Text(title)
-        .font(.system(size: 22, weight: .light))
-      if let detail {
-        Text(detail)
-          .font(.system(size: 13))
-          .foregroundStyle(Color.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
+      Text(detail)
     }
   }
 }
 
+// A standard grouped-Form row: a labeled TextField that persists on submit or
+// via an explicit Save button. The Save closure is the same binding-backed
+// persistence path used before the macOS 26 Form conversion.
 private struct EditableSettingField: View {
   var label: String
   var prompt: String
@@ -632,21 +576,15 @@ private struct EditableSettingField: View {
   var save: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(label)
-        .font(.caption)
-        .foregroundStyle(Color.secondary)
+    LabeledContent(label) {
       HStack(spacing: 8) {
-        TextField(prompt, text: $text)
-          .textFieldStyle(.plain)
-          .padding(10)
-          .background(Color(nsColor: .quaternarySystemFill))
-          .clipShape(RoundedRectangle(cornerRadius: 4))
+        TextField(label, text: $text, prompt: Text(prompt))
+          .labelsHidden()
+          .multilineTextAlignment(.trailing)
           .onSubmit(save)
-        Button("Save") {
-          save()
-        }
-        .buttonStyle(.bordered)
+        Button("Save", action: save)
+          .buttonStyle(.bordered)
+          .controlSize(.small)
       }
     }
   }
@@ -734,28 +672,26 @@ private struct ReposSection: View {
   @EnvironmentObject private var model: AppModel
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
+    Section {
+      if let repos = model.config?.repos, !repos.isEmpty {
+        ForEach(repos) { repo in
+          RepoRow(repo: repo)
+        }
+      } else {
+        Text("Add local Git repositories to share aggregate daily activity.")
+          .foregroundStyle(.secondary)
+      }
+    } header: {
       HStack {
-        Text("repositories")
-          .font(.caption)
-          .foregroundStyle(Color.secondary)
+        Text("Repositories")
         Spacer()
         Button {
           model.addRepo()
         } label: {
           Label("Add", systemImage: "plus")
         }
-        .buttonStyle(.bordered)
-      }
-
-      if let repos = model.config?.repos, !repos.isEmpty {
-        VStack(spacing: 12) {
-          ForEach(repos) { repo in
-            RepoRow(repo: repo)
-          }
-        }
-      } else {
-        EmptyState(text: "Add local Git repositories to share aggregate daily activity.")
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
       }
     }
   }
@@ -766,27 +702,26 @@ private struct RepoRow: View {
   @State var repo: RepoConfig
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack {
+    HStack {
+      VStack(alignment: .leading, spacing: 4) {
         TextField("repo name", text: $repo.alias)
           .textFieldStyle(.plain)
           .onSubmit { model.updateRepo(repo) }
-        Spacer()
-        Button {
-          model.removeRepo(repo)
-        } label: {
-          Image(systemName: "minus")
-        }
-        .buttonStyle(.bordered)
-        .accessibilityLabel("Remove Repository")
+        Text(repo.path)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
       }
-      Text(repo.path)
-        .font(.caption)
-        .foregroundStyle(Color.secondary)
-        .lineLimit(1)
-        .truncationMode(.middle)
+      Spacer()
+      Button {
+        model.removeRepo(repo)
+      } label: {
+        Image(systemName: "minus")
+      }
+      .buttonStyle(.bordered)
+      .accessibilityLabel("Remove Repository")
     }
-    .padding(.vertical, 8)
   }
 }
 
