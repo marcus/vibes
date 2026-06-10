@@ -31,7 +31,7 @@
       </div>
 
       <div class="release-meta">
-        <p>macOS 14 or newer. Signed and notarized.</p>
+        <p>macOS 26 or newer. Signed and notarized.</p>
         {#if data.release?.version}
           <p>Current version <b>{data.release.version}</b></p>
         {/if}
