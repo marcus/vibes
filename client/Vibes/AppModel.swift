@@ -437,14 +437,10 @@ final class AppModel: ObservableObject {
       gradientStart = start
       gradientEnd = end
     }
-    if #available(macOS 15.4, *) {
-      // Cheap synchronous eligibility gate shows/hides the AI path instantly;
-      // the async probe then refines it (it also catches a missing model).
-      avatarSupported = AvatarGenerator.isAvailableSync
-      avatarSupported = await AvatarGenerator.isSupported
-    } else {
-      avatarSupported = false
-    }
+    // Cheap synchronous eligibility gate shows/hides the AI path instantly;
+    // the async probe then refines it (it also catches a missing model).
+    avatarSupported = AvatarGenerator.isAvailableSync
+    avatarSupported = await AvatarGenerator.isSupported
     if houseStyle == nil {
       await refreshHouseStyle()
     }
@@ -475,7 +471,7 @@ final class AppModel: ObservableObject {
       avatarError = "Couldn't load the house style. Try again."
       return
     }
-    guard #available(macOS 15.4, *), avatarSupported == true else {
+    guard avatarSupported == true else {
       avatarError = "Profile-icon generation isn't available on this Mac."
       return
     }
@@ -505,9 +501,7 @@ final class AppModel: ObservableObject {
 
   // Open the system Image Playground app (surfaces/primes the model download).
   func openImagePlayground() {
-    if #available(macOS 15.4, *) {
-      AvatarGenerator.openImagePlayground()
-    }
+    AvatarGenerator.openImagePlayground()
   }
 
   // Patch the locally-displayed "you" avatar fields from an authoritative server

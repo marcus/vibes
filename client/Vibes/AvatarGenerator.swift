@@ -5,7 +5,7 @@ import ImagePlayground
 
 // AvatarGenerator — on-device profile-icon generation via Apple Intelligence's
 // programmatic ImageCreator (ImagePlayground). Generation runs on device only;
-// it cannot run on the relay. The whole API is gated to macOS 15.4+ and degrades
+// it cannot run on the relay. The API degrades
 // gracefully when the device is not Apple-Intelligence-capable or the models are
 // still downloading — `isSupported` is the runtime probe the UI checks before
 // offering the feature.
@@ -44,7 +44,6 @@ struct GeneratedAvatar {
   let style: String
 }
 
-@available(macOS 15.4, *)
 struct AvatarGenerator {
   // Runtime capability probe: ImageCreator() throws when the device/model is
   // unusable, and an empty `availableStyles` means nothing to generate with.
