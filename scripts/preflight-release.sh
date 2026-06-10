@@ -8,6 +8,7 @@ set -euo pipefail
 # Checks, in order of how expensive the failure is to discover late:
 #   1. Required release env vars are set.
 #   2. VIBES_RELEASE_VERSION matches the project's MARKETING_VERSION.
+#   2b. The active macOS SDK is >= 26 (the app's deployment target).
 #   3. Release notes exist for the version.
 #   4. Developer ID code-signing identity is in the keychain.
 #   5. notarytool keychain profile resolves.
@@ -65,6 +66,17 @@ project_mv="$(xcodebuild -project "${PROJECT}" -scheme "${SCHEME}" \
   "VIBES_RELEASE_VERSION (${VIBES_RELEASE_VERSION}) != project MARKETING_VERSION (${project_mv}). Bump the project first."
 [[ "${VIBES_BUILD_NUMBER}" =~ ^[0-9]+$ ]] || die "VIBES_BUILD_NUMBER must be a positive integer."
 ok "version ${VIBES_RELEASE_VERSION} (build ${VIBES_BUILD_NUMBER}) matches the project"
+
+# --- 2b. Build SDK is recent enough ----------------------------------------
+# The app deploys to macOS 26.0, so it must be built against the macOS 26 SDK
+# or newer. Building with an older SDK silently drops the macOS 26 Liquid Glass
+# APIs the app links against.
+sdk_version="$(xcrun --show-sdk-version --sdk macosx 2>/dev/null || true)"
+[[ -n "${sdk_version}" ]] || die "could not determine the macOS SDK version (xcrun --show-sdk-version --sdk macosx). Install the Xcode command line tools / select a current Xcode."
+sdk_major="${sdk_version%%.*}"
+[[ "${sdk_major}" =~ ^[0-9]+$ ]] || die "unexpected macOS SDK version string: ${sdk_version}"
+(( sdk_major >= 26 )) || die "macOS SDK ${sdk_version} is too old; the app requires the macOS 26 SDK or newer. Select an Xcode that ships it: sudo xcode-select -s /Applications/Xcode.app"
+ok "macOS SDK ${sdk_version} (>= 26)"
 
 # --- 3. Release notes -------------------------------------------------------
 NOTES="release/release-notes/${VIBES_RELEASE_VERSION}.md"
