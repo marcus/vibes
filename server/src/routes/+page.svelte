@@ -132,10 +132,16 @@
     z-index: -1; pointer-events: none;
   }
   .hero-ribbons svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-  /* readability scrim — fades ribbons into the page base in both themes */
+  /* readability scrim — a stronger feathered core right behind the copy,
+     plus an outer fade that blends ribbons into the page base (both themes) */
   .hero-ribbons::after {
     content: ""; position: absolute; inset: 0;
-    background: radial-gradient(ellipse 62% 60% at 50% 40%, transparent 18%, var(--bg-base) 82%);
+    background:
+      radial-gradient(ellipse 56% 50% at 50% 40%,
+        color-mix(in srgb, var(--bg-base) 80%, transparent) 0%,
+        color-mix(in srgb, var(--bg-base) 55%, transparent) 34%,
+        transparent 70%),
+      radial-gradient(ellipse 62% 60% at 50% 40%, transparent 18%, var(--bg-base) 82%);
   }
   .hero-ribbons .rib-blur { filter: blur(14px) saturate(1.3); opacity: 0.85; }
   .hero-ribbons .rib-sharp { opacity: 0.9; }
