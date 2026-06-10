@@ -88,6 +88,22 @@ fi
 [[ -f "${EXPORT_OPTIONS}" ]] || die "missing ${EXPORT_OPTIONS}"
 [[ -f "${RELEASE_NOTES_SRC}" ]] || die "missing release notes: ${RELEASE_NOTES_SRC} (create it before releasing)"
 
+# --- Preflight: signing identity must exist before the (slow) archive --------
+# Without this, a missing Developer ID certificate fails deep inside xcodebuild
+# with a cryptic "No certificate for team ... found" only after the archive has
+# already run. Catch it here in milliseconds with an actionable message.
+if ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "${VIBES_CODESIGN_IDENTITY}"; then
+  available="$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/^[[:space:]]*[0-9][0-9]*) //p')"
+  die "code-signing identity not found in any keychain:
+    ${VIBES_CODESIGN_IDENTITY}
+Install the Developer ID Application certificate AND its private key, then retry:
+  - Xcode → Settings → Accounts → Manage Certificates → + → Developer ID Application
+  - or import a backed-up identity: security import DeveloperID.p12 -k login.keychain
+Verify with: security find-identity -v -p codesigning
+Code-signing identities currently available:
+${available:-  (none — the keychain has no valid signing certificates)}"
+fi
+
 note "Releasing ${APP_NAME} ${VIBES_RELEASE_VERSION} (build ${VIBES_BUILD_NUMBER}) as ${VIBES_BUNDLE_ID}"
 
 # --- Clean and build an archive ---------------------------------------------

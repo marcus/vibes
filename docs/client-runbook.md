@@ -141,6 +141,7 @@ Do this against the public release channel after `make mac-release`: the old ins
 
 ### Troubleshooting
 
+- **`No certificate for team … found` / `0 valid identities found`** — the Developer ID Application certificate and/or its private key is not in the keychain on this machine. `release-mac.sh` now preflights this and fails fast before archiving. Fix by installing the cert **with its private key**: Xcode → Settings → Accounts → Manage Certificates → + → Developer ID Application, or `security import DeveloperID.p12 -k login.keychain`. A cert created on another Mac needs its private key exported there (`.p12`) and imported here — the public certificate alone cannot sign. Verify with `security find-identity -v -p codesigning`. This is an environment-only failure; it never touches the published release.
 - **appcast 404 / invalid TLS** — appcast URL or host misconfigured; verify it loads over HTTPS.
 - **`generate-appcast.sh` hangs** — it's blocked on a macOS Keychain prompt for the EdDSA key; click "Always Allow", or set `VIBES_ED_KEY_FILE` to sign non-interactively.
 - **missing `CFBundleVersion`** — the app must carry version keys (it now does); a release with none breaks Sparkle version comparison.
