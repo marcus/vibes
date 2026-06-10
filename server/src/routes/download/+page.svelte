@@ -1,16 +1,19 @@
 <script>
   import MarketingShell from '$lib/components/MarketingShell.svelte';
+  import SocialMeta from '$lib/components/SocialMeta.svelte';
 
   let { data } = $props();
+
+  const description =
+    "Download Vibes for macOS — private ambient presence for small coding groups. For Apple Silicon.";
 </script>
 
 <svelte:head>
   <title>Download Vibes for Mac</title>
-  <meta
-    name="description"
-    content="Download Vibes for macOS — private ambient presence for small coding groups. For Apple Silicon."
-  />
+  <meta name="description" content={description} />
 </svelte:head>
+
+<SocialMeta title="Download Vibes for Mac" {description} path="/download" />
 
 <MarketingShell>
   {#snippet children()}

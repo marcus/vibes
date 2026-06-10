@@ -1,14 +1,17 @@
 <script>
   import MarketingShell from '$lib/components/MarketingShell.svelte';
+  import SocialMeta from '$lib/components/SocialMeta.svelte';
+
+  const description =
+    "Vibes shares aggregate coding activity only. No repo paths, branches, commit messages, filenames, editor activity, process history, or transcripts.";
 </script>
 
 <svelte:head>
   <title>Privacy — Vibes</title>
-  <meta
-    name="description"
-    content="Vibes shares aggregate coding activity only. No repo paths, branches, commit messages, filenames, editor activity, process history, or transcripts."
-  />
+  <meta name="description" content={description} />
 </svelte:head>
+
+<SocialMeta title="Privacy — Vibes" {description} path="/privacy" />
 
 <MarketingShell>
   {#snippet children()}

@@ -1,15 +1,18 @@
 <script>
   import AuroraMockup from '$lib/components/AuroraMockup.svelte';
   import MarketingShell from '$lib/components/MarketingShell.svelte';
+  import SocialMeta from '$lib/components/SocialMeta.svelte';
+
+  const description =
+    "See which friends are online and coding — private ambient presence for small groups of coders on macOS.";
 </script>
 
 <svelte:head>
   <title>Vibes — See who's coding right now</title>
-  <meta
-    name="description"
-    content="See which friends are online and coding — private ambient presence for small groups of coders on macOS."
-  />
+  <meta name="description" content={description} />
 </svelte:head>
+
+<SocialMeta title="Vibes — See who's coding right now" {description} path="/" />
 
 <MarketingShell>
   {#snippet children(theme)}
