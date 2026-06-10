@@ -51,7 +51,7 @@ private struct SetupPanel: View {
         } label: {
           Label("Create my identity", systemImage: "checkmark")
         }
-        .buttonStyle(AccentButtonStyle())
+        .buttonStyle(.glassProminent)
         .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
       }
 
@@ -84,14 +84,14 @@ private struct SetupPanel: View {
             } label: {
               Label("Use token", systemImage: "key")
             }
-            .buttonStyle(PlainVibeButtonStyle())
+            .buttonStyle(.glass)
 
             Button {
               Task { await model.importConfigFile() }
             } label: {
               Label("Import JSON", systemImage: "square.and.arrow.down")
             }
-            .buttonStyle(PlainVibeButtonStyle())
+            .buttonStyle(.glass)
           }
         }
         .padding(.top, 12)
@@ -120,19 +120,21 @@ private struct MainPanel: View {
       HStack(alignment: .top) {
         Header(title: "vibes")
         Spacer()
-        HStack(spacing: 10) {
-          PresenceToggle(
-            mode: model.mode,
-            setMode: { model.setMode($0) }
-          )
-          Button {
-            Task { await model.scanPublishAndFetch() }
-          } label: {
-            Image(systemName: model.isBusy ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+        GlassEffectContainer(spacing: 10) {
+          HStack(spacing: 10) {
+            PresenceToggle(
+              mode: model.mode,
+              setMode: { model.setMode($0) }
+            )
+            Button {
+              Task { await model.scanPublishAndFetch() }
+            } label: {
+              Image(systemName: model.isBusy ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+            }
+            .buttonStyle(.glass)
+            .disabled(model.isBusy)
+            .accessibilityLabel("Scan Now")
           }
-          .buttonStyle(IconButtonStyle())
-          .disabled(model.isBusy)
-          .accessibilityLabel("Scan Now")
         }
       }
 
@@ -315,7 +317,7 @@ private struct ProfileIconSettingsPane: View {
         } label: {
           Label(model.avatarPreviewPNG == nil ? "Generate" : "Regenerate", systemImage: "sparkles")
         }
-        .buttonStyle(PlainVibeButtonStyle())
+        .buttonStyle(.bordered)
         .disabled(!canGenerate || isWorking)
 
         if model.avatarPreviewPNG != nil {
@@ -324,7 +326,7 @@ private struct ProfileIconSettingsPane: View {
           } label: {
             Label("Use this", systemImage: "checkmark")
           }
-          .buttonStyle(PlainVibeButtonStyle())
+          .buttonStyle(.bordered)
           .disabled(isWorking)
         }
 
@@ -333,7 +335,7 @@ private struct ProfileIconSettingsPane: View {
         } label: {
           Label("Remove", systemImage: "trash")
         }
-        .buttonStyle(PlainVibeButtonStyle())
+        .buttonStyle(.bordered)
         .disabled(isWorking || !hasCurrentAvatar)
 
         if isWorking {
@@ -360,7 +362,7 @@ private struct ProfileIconSettingsPane: View {
             } label: {
               Label("Open Image Playground", systemImage: "arrow.up.forward.app")
             }
-            .buttonStyle(PlainVibeButtonStyle())
+            .buttonStyle(.bordered)
           } else {
             Text(error)
               .font(.system(size: 12))
@@ -427,7 +429,7 @@ private struct ProfileIconSettingsPane: View {
         } label: {
           Label("Use gradient", systemImage: "circle.lefthalf.filled")
         }
-        .buttonStyle(PlainVibeButtonStyle())
+        .buttonStyle(.bordered)
         .disabled(isWorking)
 
         Spacer()
@@ -559,7 +561,7 @@ private struct AdvancedSettingsPane: View {
       } label: {
         Label(copied ? "Copied" : "Copy Summary", systemImage: "doc.on.doc")
       }
-      .buttonStyle(PlainVibeButtonStyle())
+      .buttonStyle(.bordered)
     }
   }
 }
@@ -644,7 +646,7 @@ private struct EditableSettingField: View {
         Button("Save") {
           save()
         }
-        .buttonStyle(PlainVibeButtonStyle())
+        .buttonStyle(.bordered)
       }
     }
   }
@@ -705,44 +707,26 @@ private struct HomeView: View {
   }
 }
 
-// TE-inspired tactile two-state presence control. Online = "lit" (saturated
-// accent), Offline = "at-rest" (dimmed neutral). A pill track with two segments
-// you press — reads as a labeled Online/Offline state, not a checkbox. Shares
-// the DESIGN.md token vocabulary with FriendCard; the menu-bar control (td-583670)
-// reuses this shape.
+// Two-state presence control. A standard segmented Picker bound to the
+// online/offline state — on the macOS 26 SDK this picks up the redesigned
+// Liquid Glass control treatment automatically, reading as the app's one
+// floating Online/Offline control. The menu-bar control (td-583670) reuses
+// this binding shape.
 private struct PresenceToggle: View {
   var mode: PresenceMode
   var setMode: (PresenceMode) -> Void
 
-  private let controlHeight: CGFloat = 34
-  private let segmentMinWidth: CGFloat = 64
-
   var body: some View {
-    HStack(spacing: 0) {
-      segment(.online, label: "Online")
-      segment(.offline, label: "Offline")
+    Picker(
+      "Presence",
+      selection: Binding(get: { mode }, set: { setMode($0) })
+    ) {
+      Text("Online").tag(PresenceMode.online)
+      Text("Offline").tag(PresenceMode.offline)
     }
-    .padding(3)
-    .background(Color(nsColor: .quaternarySystemFill))
-    .clipShape(Capsule())
-    .overlay(Capsule().stroke(Color(nsColor: .separatorColor), lineWidth: 1))
-  }
-
-  private func segment(_ target: PresenceMode, label: String) -> some View {
-    let isSelected = mode == target
-    return Button {
-      setMode(target)
-    } label: {
-      Text(label)
-        .font(.system(size: 13, weight: .medium))
-        .frame(minWidth: segmentMinWidth)
-        .frame(height: controlHeight - 6)
-        .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-        .background(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear))
-        .clipShape(Capsule())
-        .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
+    .pickerStyle(.segmented)
+    .labelsHidden()
+    .fixedSize()
   }
 }
 
@@ -761,7 +745,7 @@ private struct ReposSection: View {
         } label: {
           Label("Add", systemImage: "plus")
         }
-        .buttonStyle(PlainVibeButtonStyle())
+        .buttonStyle(.bordered)
       }
 
       if let repos = model.config?.repos, !repos.isEmpty {
@@ -793,7 +777,7 @@ private struct RepoRow: View {
         } label: {
           Image(systemName: "minus")
         }
-        .buttonStyle(IconButtonStyle())
+        .buttonStyle(.bordered)
         .accessibilityLabel("Remove Repository")
       }
       Text(repo.path)
@@ -826,7 +810,7 @@ private struct InviteFriendView: View {
         } label: {
           Image(systemName: "xmark")
         }
-        .buttonStyle(IconButtonStyle())
+        .buttonStyle(.glass)
         .accessibilityLabel("Close")
       }
 
@@ -835,7 +819,7 @@ private struct InviteFriendView: View {
       } label: {
         Label("Create Invite Link", systemImage: "link")
       }
-      .buttonStyle(AccentButtonStyle())
+      .buttonStyle(.glassProminent)
       .disabled(model.isBusy)
 
       if let url = model.latestInviteURL {
@@ -844,16 +828,20 @@ private struct InviteFriendView: View {
             .font(.system(size: 12))
             .lineLimit(2)
             .textSelection(.enabled)
-          Button {
-            model.copyLatestInvite()
-          } label: {
-            Label("Copy Link", systemImage: "doc.on.doc")
+          GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+              Button {
+                model.copyLatestInvite()
+              } label: {
+                Label("Copy Link", systemImage: "doc.on.doc")
+              }
+              .buttonStyle(.glassProminent)
+              ShareLink(item: url) {
+                Label("Share", systemImage: "square.and.arrow.up")
+              }
+              .buttonStyle(.glass)
+            }
           }
-          .buttonStyle(PlainVibeButtonStyle())
-          ShareLink(item: url) {
-            Label("Share", systemImage: "square.and.arrow.up")
-          }
-          .buttonStyle(PlainVibeButtonStyle())
         }
         .padding(.vertical, 8)
       }
@@ -875,7 +863,7 @@ private struct InviteFriendView: View {
           Button("Accept") {
             Task { await model.acceptInvite(code: model.inviteCodeInput) }
           }
-          .buttonStyle(PlainVibeButtonStyle())
+          .buttonStyle(.glassProminent)
           .disabled(model.inviteCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
         }
       }
@@ -902,7 +890,7 @@ private struct InviteFriendView: View {
                 Button("Revoke") {
                   Task { await model.revokeInvite(invite) }
                 }
-                .buttonStyle(PlainVibeButtonStyle())
+                .buttonStyle(.glass)
               }
               .padding(.vertical, 8)
           }
@@ -944,17 +932,19 @@ private struct InviteSheet: View {
         .font(.system(size: 13))
         .foregroundStyle(Color.secondary)
 
-      HStack(spacing: 10) {
-        Button("Accept") {
-          Task { await model.acceptPendingInvite() }
-        }
-        .buttonStyle(AccentButtonStyle())
-        .disabled(model.isBusy)
+      GlassEffectContainer(spacing: 10) {
+        HStack(spacing: 10) {
+          Button("Accept") {
+            Task { await model.acceptPendingInvite() }
+          }
+          .buttonStyle(.glassProminent)
+          .disabled(model.isBusy)
 
-        Button("Not now") {
-          model.pendingInvite = nil
+          Button("Not now") {
+            model.pendingInvite = nil
+          }
+          .buttonStyle(.glass)
         }
-        .buttonStyle(PlainVibeButtonStyle())
       }
     }
     .padding(24)
@@ -982,20 +972,22 @@ private struct Footer: View {
           .foregroundStyle(Color.secondary)
       }
       Spacer()
-      HStack(spacing: 8) {
-        Button("Invite") {
-          openInviteFriend()
-        }
-        .buttonStyle(FooterTextButtonStyle())
-        .accessibilityLabel("Invite a Friend")
+      GlassEffectContainer(spacing: 8) {
+        HStack(spacing: 8) {
+          Button("Invite") {
+            openInviteFriend()
+          }
+          .buttonStyle(.glass)
+          .accessibilityLabel("Invite a Friend")
 
-        Button {
-          openSettings()
-        } label: {
-          Image(systemName: "gearshape")
+          Button {
+            openSettings()
+          } label: {
+            Image(systemName: "gearshape")
+          }
+          .buttonStyle(.glass)
+          .accessibilityLabel("Open Settings")
         }
-        .buttonStyle(IconButtonStyle())
-        .accessibilityLabel("Open Settings")
       }
     }
     .font(.caption)
@@ -1059,54 +1051,11 @@ private struct EmptyState: View {
         Button(actionTitle) {
           action()
         }
-        .buttonStyle(PlainVibeButtonStyle())
+        .buttonStyle(.bordered)
       }
     }
     .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
     .padding(.horizontal, 30)
-  }
-}
-
-private struct AccentButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.system(size: 13, weight: .regular))
-      .padding(.horizontal, 13)
-      .padding(.vertical, 9)
-      .background(.tint.opacity(configuration.isPressed ? 0.8 : 1))
-      .foregroundStyle(.white)
-      .clipShape(RoundedRectangle(cornerRadius: 4))
-  }
-}
-
-private struct PlainVibeButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.system(size: 13, weight: .regular))
-      .padding(.horizontal, 11)
-      .padding(.vertical, 8)
-      .background(Color(nsColor: .quaternarySystemFill).opacity(configuration.isPressed ? 0.6 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 4))
-  }
-}
-
-private struct FooterTextButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.system(size: 13, weight: .regular))
-      .padding(.horizontal, 11)
-      .frame(height: 30)
-      .background(Color(nsColor: .quaternarySystemFill).opacity(configuration.isPressed ? 0.6 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 4))
-  }
-}
-
-private struct IconButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .frame(width: 30, height: 30)
-      .background(Color(nsColor: .quaternarySystemFill).opacity(configuration.isPressed ? 0.6 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 4))
   }
 }
 
