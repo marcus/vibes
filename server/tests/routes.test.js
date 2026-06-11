@@ -15,6 +15,7 @@ const [
   meRoute,
   invitesRoute,
   inviteAcceptRoute,
+  inviteLookupRoute,
   avatarRoute,
   avatarGradientRoute,
   shortInviteRoute,
@@ -30,6 +31,7 @@ const [
   import("../src/routes/api/me/+server.js"),
   import("../src/routes/api/invites/+server.js"),
   import("../src/routes/api/invites/[code]/accept/+server.js"),
+  import("../src/routes/api/invites/[code]/+server.js"),
   import("../src/routes/api/avatar/+server.js"),
   import("../src/routes/api/avatar/gradient/+server.js"),
   import("../src/routes/i/[code]/+server.js"),
@@ -394,7 +396,7 @@ describe("POST /api/avatar", () => {
 
   it("strips metadata chunks and trailing bytes before storing", async () => {
     const { token } = registerUser(db, { displayName: "Dana", deviceLabel: "Mac" });
-    const tEXt = pngChunk("tEXt", Buffer.from("Comment secret-metadata"));
+    const tEXt = pngChunk("tEXt", Buffer.from("Comment\x00secret-metadata"));
     const png = fakePng(512, 512, [tEXt]);
     const appended = Buffer.concat([png, Buffer.from("APPENDED-PAYLOAD")]);
     const response = await avatarRoute.POST(
@@ -584,6 +586,34 @@ describe("GET /invite/[code]", () => {
       code: "missing",
       inviter: null,
     });
+  });
+});
+
+describe("GET /api/invites/[code]", () => {
+  it("returns the inviter's display name for an open invite", async () => {
+    const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const invite = createInvite(db, creator.id);
+
+    const response = await inviteLookupRoute.GET({ params: { code: invite.code } });
+
+    expect(await responseJson(response)).toEqual({
+      status: 200,
+      body: { state: "open", inviter: "Marcus" },
+    });
+  });
+
+  it("reports unusable without inviter details for unknown or revoked codes", async () => {
+    const creator = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const invite = createInvite(db, creator.id);
+    revokeInvite(db, creator.id, invite.id);
+
+    for (const code of [invite.code, "missing"]) {
+      const response = await inviteLookupRoute.GET({ params: { code } });
+      expect(await responseJson(response)).toEqual({
+        status: 200,
+        body: { state: "unusable", inviter: null },
+      });
+    }
   });
 });
 
