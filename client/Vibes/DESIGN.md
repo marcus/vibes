@@ -88,11 +88,32 @@ and is the fallback only while the first feed hasn't loaded.
 ## Header / presence
 
 The header row shares the traffic-light band (`ignoresSafeArea(.top)` +
-58pt leading inset past the lights): the 17pt "vibes" wordmark, a green-dot
-live count ("N in orbit" / "N online"), then the floating controls — the
-orbit/list glass capsule and the one-dot **PresenceLight** (green lit =
-online, at-rest = offline; click toggles). The menu-bar extra keeps explicit
-Online/Offline items as the discoverable counterpart.
+58pt leading inset past the lights): the 17pt "vibes" wordmark, then the
+floating controls — the orbit/list glass capsule, the one-dot
+**PresenceLight** (green lit = online, at-rest = offline; click toggles),
+and refresh. The menu-bar extra keeps explicit Online/Offline items as the
+discoverable counterpart.
+
+**Floating controls are Preview-style**: every glass control in the header
+and footer shares one height (`FloatingControl.height`, 32pt) — circles for
+single-icon buttons (presence, refresh, gear), capsule pills for grouped or
+labeled ones (orbit/list toggle, Invite). Geometry is owned by the label
+(`.buttonStyle(.plain)` + `.glassEffect(.regular.interactive(), in: ...)`)
+so heights stay exact.
+
+The footer's left corner stays **quiet**: nothing when sync is healthy, a
+small red warning label when it isn't, transient success messages in between.
+First-run nudges (a bobbing `OnboardingNudge` arrow) float above the gear
+(no repos yet → the gear opens Settings on the Repositories tab) and then
+above Invite (repos but no friends).
+
+## Feed text size
+
+`FeedTextSize` (Settings → General → Appearance, `@AppStorage "feedTextSize"`)
+maps Standard/Large/Extra Large to `DynamicTypeSize` `.large/.xLarge/.xxLarge`
+and is applied to the feed content only (status field, orbit, list) — never
+the window chrome. The default is **Large**: one notch above system size for
+readability. Fixed-size exceptions (LOC bar counts) deliberately don't scale.
 
 ## Sanctioned exceptions
 
