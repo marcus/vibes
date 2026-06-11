@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>vibes · mockup B — orbit</title>
+<style>
+  /* ── tokens ───────────────────────────────────────────── */
+  :root{
+    --green:#3aa; --ink:rgba(255,255,255,.94); --muted:rgba(255,255,255,.55); --faint:rgba(255,255,255,.30);
+    --plus:#4ade80; --minus:#fb7185;
+  }
+  *{margin:0;box-sizing:border-box}
+  body{
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    color:var(--ink); min-height:100vh; padding:48px 24px;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    background:
+      radial-gradient(1100px 750px at 20% 10%, #16324a 0%, transparent 60%),
+      radial-gradient(900px 700px at 85% 88%, #2c1d52 0%, transparent 60%),
+      #07090f;
+  }
+  .caption{color:var(--faint); font-size:12px; letter-spacing:.04em}
+
+  .window{
+    width:500px; height:660px; border-radius:18px; overflow:hidden; position:relative;
+    background:
+      radial-gradient(600px 400px at 70% -10%, rgba(64,141,255,.14), transparent 60%),
+      radial-gradient(500px 420px at 10% 110%, rgba(167,93,255,.12), transparent 60%),
+      rgba(12,14,24,.78);
+    backdrop-filter:blur(36px) saturate(160%); -webkit-backdrop-filter:blur(36px) saturate(160%);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 30px 80px rgba(0,0,0,.55);
+    display:flex; flex-direction:column;
+  }
+  .titlebar{display:flex; align-items:center; gap:8px; padding:14px 16px; position:relative; z-index:5}
+  .lights{display:flex; gap:8px; margin-right:6px}
+  .lights i{width:12px;height:12px;border-radius:50%;display:block}
+  .lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+  .wordmark{font-weight:300; font-size:17px}
+  .spacer{flex:1}
+  .count{font-size:12px; color:var(--muted)}
+  .count b{color:#34d399}
+
+  /* ── the sky ──────────────────────────────────────────── */
+  .sky{flex:1; position:relative}
+  /* faint star field */
+  .sky::before{content:""; position:absolute; inset:0;
+    background-image:
+      radial-gradient(1.5px 1.5px at 12% 30%, rgba(255,255,255,.35), transparent),
+      radial-gradient(1px 1px at 80% 15%, rgba(255,255,255,.3), transparent),
+      radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,.22), transparent),
+      radial-gradient(1.5px 1.5px at 30% 85%, rgba(255,255,255,.25), transparent),
+      radial-gradient(1px 1px at 90% 55%, rgba(255,255,255,.3), transparent);
+  }
+
+  /* an orb = friend. --p sets the churn-ring sweep (deg), --size the diameter */
+  .orb{position:absolute; display:flex; flex-direction:column; align-items:center; gap:7px;
+       animation:float 7s ease-in-out infinite}
+  .orb:nth-child(2n){animation-duration:9s; animation-delay:-2s}
+  .orb:nth-child(3n){animation-duration:8s; animation-delay:-4s}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+
+  .globe{position:relative; width:var(--size); height:var(--size); border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; color:rgba(255,255,255,.95);
+    box-shadow:0 0 34px var(--glow), inset 0 -8px 18px rgba(0,0,0,.3);
+  }
+  /* churn ring: sweep = today vs your typical day (--p), green/red split at --g = adds vs deletes */
+  .globe::before{content:""; position:absolute; inset:-7px; border-radius:50%;
+    background:conic-gradient(#4ade80 0 var(--g), #fb7185 var(--g) var(--p), rgba(255,255,255,.10) var(--p));
+    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+            mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  }
+  /* lap badge: shown when churn exceeds typical day (ring has lapped) */
+  .lap{position:absolute; top:-12px; right:-16px; padding:2px 7px; border-radius:99px;
+    background:rgba(251,191,36,.16); border:1px solid rgba(251,191,36,.45); color:#fbbf24;
+    font:600 10px ui-monospace,"SF Mono",monospace; backdrop-filter:blur(8px)}
+  .tag{font-size:12.5px; font-weight:600; text-shadow:0 1px 6px rgba(0,0,0,.6)}
+  .tag small{display:block; text-align:center; font-weight:500; font-size:11px; color:var(--muted); margin-top:1px}
+  .loc{font-family:ui-monospace,"SF Mono",monospace; font-size:11px; text-align:center}
+  .loc .p{color:var(--plus)} .loc .m{color:var(--minus)}
+
+  /* repo moons */
+  .moon{position:absolute; padding:2px 8px; border-radius:99px; font-size:10px; color:var(--muted);
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.10);
+    backdrop-filter:blur(8px); white-space:nowrap;
+  }
+  .moon::before{content:""; display:inline-block; width:5px; height:5px; border-radius:50%;
+    background:var(--mc,#9aa); margin-right:5px; vertical-align:1px}
+
+  /* dock of drifters (offline) */
+  .drift{position:relative; z-index:5; display:flex; align-items:center; gap:14px;
+    padding:12px 18px 16px; border-top:1px solid rgba(255,255,255,.07);
+    background:rgba(0,0,0,.18)}
+  .drift .label{font-size:10.5px; letter-spacing:.14em; font-weight:600; color:var(--faint); margin-right:4px}
+  .drifter{display:flex; align-items:center; gap:7px; opacity:.55}
+  .drifter .mini{width:22px;height:22px;border-radius:50%;flex:none}
+  .drifter span{font-size:12px; color:var(--muted)}
+  .drifter em{font-style:normal; font-size:10.5px; color:var(--faint)}
+</style>
+</head>
+<body>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="wordmark">vibes</div>
+    <div class="spacer"></div>
+    <div class="count"><b>●</b> 4 in orbit</div>
+  </div>
+
+  <div class="sky">
+
+    <!-- you — center-ish, calm -->
+    <div class="orb" style="left:210px; top:295px; --size:74px">
+      <!-- 609 churn / 800 typical = 76% of a normal day; 79% adds -->
+      <div class="globe" style="background:linear-gradient(135deg,#4f8cff,#9b5cff); --glow:rgba(99,124,255,.45); --g:217deg; --p:274deg">M</div>
+      <div class="tag">you<small>shipping the new titlebar ✨</small></div>
+      <div class="loc"><span class="p">+482</span> <span class="m">−127</span> · 9c</div>
+      <div class="moon" style="left:78px; top:6px; --mc:#4f8cff">vibes</div>
+      <div class="moon" style="left:-64px; top:34px; --mc:#9b5cff">td-watch</div>
+    </div>
+
+    <!-- dana — biggest day, biggest orb -->
+    <div class="orb" style="left:60px; top:60px; --size:92px">
+      <!-- 1,892 churn / 1,100 typical = lapped at 1.7× -->
+      <div class="globe" style="background:linear-gradient(135deg,#ff7847,#ff4787); --glow:rgba(255,140,90,.6); --g:230deg; --p:360deg">D<span class="lap">1.7×</span></div>
+      <div class="tag">dana<small>deep in the parser mines</small></div>
+      <div class="loc"><span class="p">+1,204</span> <span class="m">−688</span> · 14c</div>
+      <div class="moon" style="left:96px; top:14px; --mc:#ff7847">perch</div>
+      <div class="moon" style="left:-44px; top:64px; --mc:#ffb347">perch-docs</div>
+    </div>
+
+    <!-- priya — heavy deletion day: ring runs warm -->
+    <div class="orb" style="left:330px; top:90px; --size:80px">
+      <!-- 2,248 churn / 2,600 typical = 86%; only 16% adds → ring runs red -->
+      <div class="globe" style="background:linear-gradient(135deg,#27d3a2,#1f9bff); --glow:rgba(39,211,162,.45); --g:50deg; --p:311deg">P</div>
+      <div class="tag">priya<small>refactor friday!!</small></div>
+      <div class="loc"><span class="p">+356</span> <span class="m">−1,892</span> · 7c</div>
+      <div class="moon" style="left:84px; top:30px; --mc:#27d3a2">atlas</div>
+    </div>
+
+    <!-- theo — just warming up, small orb -->
+    <div class="orb" style="left:70px; top:400px; --size:52px">
+      <!-- 27 churn / 400 typical = 7% → minimum visible sliver -->
+      <div class="globe" style="background:linear-gradient(135deg,#ffd24f,#ff8c3b); --glow:rgba(255,190,80,.4); --g:20deg; --p:24deg; font-size:13px">T</div>
+      <div class="tag">theo<small>coffee #2, warming up</small></div>
+      <div class="loc"><span class="p">+23</span> <span class="m">−4</span> · 1c</div>
+      <div class="moon" style="left:54px; top:2px; --mc:#ffd24f">dotfiles</div>
+    </div>
+
+  </div>
+
+  <!-- offline friends drift at the bottom -->
+  <div class="drift">
+    <span class="label">DRIFTING</span>
+    <div class="drifter">
+      <div class="mini" style="background:linear-gradient(135deg,#8a94a6,#5b6472)"></div>
+      <span>sam <em>2h · +210 −95 in kiln</em></span>
+    </div>
+    <div class="drifter">
+      <div class="mini" style="background:linear-gradient(135deg,#b08cff,#7a5cd0)"></div>
+      <span>kei <em>1d</em></span>
+    </div>
+    <div class="drifter">
+      <div class="mini" style="background:linear-gradient(135deg,#67c1d6,#3f8ea3)"></div>
+      <span>ravi <em>3d</em></span>
+    </div>
+  </div>
+</div>
+
+<div class="caption">B · orbit — orb size = today's activity · ring = today vs your typical day, split green/red by adds vs deletes · past 1× laps with a badge</div>
+
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>vibes · mockup A — glance</title>
+<style>
+  /* ── tokens ───────────────────────────────────────────── */
+  :root{
+    --green:#30d158; --red:#ff6961; --accent:#0a84ff;
+    --ink:rgba(255,255,255,.92); --muted:rgba(255,255,255,.55); --faint:rgba(255,255,255,.30);
+    --card:rgba(255,255,255,.06); --card-stroke:rgba(255,255,255,.09);
+    --chip:rgba(255,255,255,.08);
+  }
+  *{margin:0;box-sizing:border-box}
+  body{
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    color:var(--ink); min-height:100vh; padding:48px 24px;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    background:
+      radial-gradient(1100px 750px at 12% 8%, #2b3a67 0%, transparent 60%),
+      radial-gradient(950px 700px at 88% 90%, #45316b 0%, transparent 60%),
+      radial-gradient(800px 550px at 72% 18%, #1d4f5e 0%, transparent 55%),
+      #0c0f1d;
+  }
+  .caption{color:var(--faint); font-size:12px; letter-spacing:.04em}
+
+  /* ── window chrome ────────────────────────────────────── */
+  .window{
+    width:480px; border-radius:18px; overflow:hidden;
+    background:rgba(28,30,42,.62);
+    backdrop-filter:blur(36px) saturate(160%); -webkit-backdrop-filter:blur(36px) saturate(160%);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 30px 80px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.3);
+  }
+  .titlebar{display:flex; align-items:center; gap:8px; padding:14px 16px 8px}
+  .lights{display:flex; gap:8px; margin-right:6px}
+  .lights i{width:12px;height:12px;border-radius:50%;display:block}
+  .lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+  .wordmark{font-weight:300; font-size:17px; letter-spacing:.02em}
+  .spacer{flex:1}
+  .glass-pill{
+    display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:99px;
+    background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.14);
+    font-size:12px; font-weight:500; box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
+  }
+  .glass-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+
+  .content{padding:6px 14px 16px; display:flex; flex-direction:column; gap:10px}
+  .section{font-size:11px; font-weight:600; letter-spacing:.12em; color:var(--faint); margin:6px 4px 0}
+
+  /* ── cards ────────────────────────────────────────────── */
+  .card{
+    background:var(--card); border:1px solid var(--card-stroke); border-radius:14px;
+    padding:12px 14px; display:flex; flex-direction:column; gap:9px;
+  }
+  .card.you{background:rgba(10,132,255,.10); border-color:rgba(10,132,255,.22)}
+  .row{display:flex; align-items:center; gap:10px}
+  .avatar{
+    width:42px;height:42px;border-radius:50%;flex:none; position:relative;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:600;font-size:15px;color:rgba(255,255,255,.95);
+  }
+  .avatar::after{ /* breathing presence ring */
+    content:""; position:absolute; inset:-4px; border-radius:50%;
+    border:2px solid var(--green); opacity:.85;
+    animation:breathe 3s ease-in-out infinite;
+  }
+  .offline .avatar::after{border-color:rgba(255,255,255,.22); animation:none}
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.09);opacity:.35}}
+  .who{flex:1; min-width:0}
+  .name{font-weight:600; font-size:14px}
+  .status{color:var(--muted); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .ago{color:var(--faint); font-size:11px; font-variant-numeric:tabular-nums}
+
+  /* diff bar — the signature element: one glance = today's churn */
+  .diff{display:flex; align-items:center; gap:8px; font-variant-numeric:tabular-nums}
+  .diff .plus{color:var(--green); font-size:12px; font-weight:600; font-family:ui-monospace,"SF Mono",monospace}
+  .diff .minus{color:var(--red); font-size:12px; font-weight:600; font-family:ui-monospace,"SF Mono",monospace}
+  .diffbar{flex:1; height:6px; border-radius:3px; overflow:hidden; display:flex; background:rgba(255,255,255,.06)}
+  .diffbar .g{background:linear-gradient(90deg,#23b14d,#30d158); box-shadow:0 0 8px rgba(48,209,88,.5)}
+  .diffbar .r{background:linear-gradient(90deg,#ff6961,#e0443a)}
+
+  .meta{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .chip{
+    display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:99px;
+    background:var(--chip); font-size:11.5px; color:var(--muted);
+  }
+  .chip b{color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums}
+  .chip .rdot{width:6px;height:6px;border-radius:2px}
+
+  /* spotify line */
+  .listening{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px}
+  .eq{display:flex; align-items:flex-end; gap:2px; height:12px}
+  .eq i{width:3px; border-radius:1px; background:#1ed760; animation:eq .9s ease-in-out infinite}
+  .eq i:nth-child(1){height:60%; animation-delay:0s}
+  .eq i:nth-child(2){height:100%; animation-delay:.2s}
+  .eq i:nth-child(3){height:40%; animation-delay:.4s}
+  @keyframes eq{0%,100%{transform:scaleY(.5)}50%{transform:scaleY(1)}}
+
+  /* away rows */
+  .away-row{display:flex; align-items:center; gap:10px; padding:7px 6px; opacity:.72}
+  .away-row .avatar{width:28px;height:28px;font-size:11px}
+  .away-row .summary{flex:1; color:var(--muted); font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .away-row .summary .mono{font-family:ui-monospace,"SF Mono",monospace; font-size:11.5px}
+  .away-row .summary .p{color:var(--green)} .away-row .summary .m{color:var(--red)}
+
+  .divider{display:flex; align-items:center; gap:10px; margin:4px 2px 0; color:var(--faint); font-size:10.5px; font-weight:600; letter-spacing:.14em}
+  .divider::before,.divider::after{content:""; flex:1; height:1px; background:rgba(255,255,255,.08)}
+</style>
+</head>
+<body>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="wordmark">vibes</div>
+    <div class="spacer"></div>
+    <div class="glass-pill"><span class="dot"></span>online</div>
+    <div class="glass-pill">⟳</div>
+  </div>
+
+  <div class="content">
+
+    <!-- you -->
+    <div class="card you">
+      <div class="row">
+        <div class="avatar" style="background:linear-gradient(135deg,#4f8cff,#9b5cff)">M</div>
+        <div class="who">
+          <div class="name">you <span style="color:var(--faint);font-weight:400">· marcus</span></div>
+          <div class="status">shipping the new titlebar ✨</div>
+        </div>
+        <div class="ago">now</div>
+      </div>
+      <div class="diff">
+        <span class="plus">+482</span>
+        <div class="diffbar"><div class="g" style="width:79%"></div><div class="r" style="width:21%"></div></div>
+        <span class="minus">−127</span>
+      </div>
+      <div class="meta">
+        <span class="chip"><b>9</b> commits</span>
+        <span class="chip"><span class="rdot" style="background:#4f8cff"></span>vibes</span>
+        <span class="chip"><span class="rdot" style="background:#9b5cff"></span>td-watch</span>
+      </div>
+    </div>
+
+    <div class="section">ONLINE · 3</div>
+
+    <!-- dana -->
+    <div class="card">
+      <div class="row">
+        <div class="avatar" style="background:linear-gradient(135deg,#ff7847,#ff4787)">D</div>
+        <div class="who">
+          <div class="name">dana</div>
+          <div class="status">deep in the parser mines</div>
+        </div>
+        <div class="ago">2m</div>
+      </div>
+      <div class="diff">
+        <span class="plus">+1,204</span>
+        <div class="diffbar"><div class="g" style="width:64%"></div><div class="r" style="width:36%"></div></div>
+        <span class="minus">−688</span>
+      </div>
+      <div class="meta">
+        <span class="chip"><b>14</b> commits</span>
+        <span class="chip"><span class="rdot" style="background:#ff7847"></span>perch</span>
+        <span class="chip"><span class="rdot" style="background:#ffb347"></span>perch-docs</span>
+      </div>
+      <div class="listening">
+        <span class="eq"><i></i><i></i><i></i></span> Tycho — Awake
+      </div>
+    </div>
+
+    <!-- priya -->
+    <div class="card">
+      <div class="row">
+        <div class="avatar" style="background:linear-gradient(135deg,#27d3a2,#1f9bff)">P</div>
+        <div class="who">
+          <div class="name">priya</div>
+          <div class="status">refactor friday!! delete delete delete</div>
+        </div>
+        <div class="ago">8m</div>
+      </div>
+      <div class="diff">
+        <span class="plus">+356</span>
+        <div class="diffbar"><div class="g" style="width:16%"></div><div class="r" style="width:84%"></div></div>
+        <span class="minus">−1,892</span>
+      </div>
+      <div class="meta">
+        <span class="chip"><b>7</b> commits</span>
+        <span class="chip"><span class="rdot" style="background:#27d3a2"></span>atlas</span>
+      </div>
+    </div>
+
+    <!-- theo -->
+    <div class="card">
+      <div class="row">
+        <div class="avatar" style="background:linear-gradient(135deg,#ffd24f,#ff8c3b)">T</div>
+        <div class="who">
+          <div class="name">theo</div>
+          <div class="status">coffee #2, warming up</div>
+        </div>
+        <div class="ago">just now</div>
+      </div>
+      <div class="diff">
+        <span class="plus">+23</span>
+        <div class="diffbar"><div class="g" style="width:85%"></div><div class="r" style="width:15%"></div></div>
+        <span class="minus">−4</span>
+      </div>
+      <div class="meta">
+        <span class="chip"><b>1</b> commit</span>
+        <span class="chip"><span class="rdot" style="background:#ffd24f"></span>dotfiles</span>
+      </div>
+    </div>
+
+    <div class="divider">AWAY</div>
+
+    <div class="away-row offline">
+      <div class="avatar" style="background:linear-gradient(135deg,#8a94a6,#5b6472)">S</div>
+      <div class="who" style="flex:none"><div class="name" style="font-size:13px">sam</div></div>
+      <div class="summary"><span class="mono"><span class="p">+210</span> <span class="m">−95</span></span> in kiln earlier</div>
+      <div class="ago">2h</div>
+    </div>
+    <div class="away-row offline">
+      <div class="avatar" style="background:linear-gradient(135deg,#b08cff,#7a5cd0)">K</div>
+      <div class="who" style="flex:none"><div class="name" style="font-size:13px">kei</div></div>
+      <div class="summary">quiet today</div>
+      <div class="ago">1d</div>
+    </div>
+    <div class="away-row offline">
+      <div class="avatar" style="background:linear-gradient(135deg,#67c1d6,#3f8ea3)">R</div>
+      <div class="who" style="flex:none"><div class="name" style="font-size:13px">ravi</div></div>
+      <div class="summary">quiet this week</div>
+      <div class="ago">3d</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="caption">A · glance — refined cards with proportional diff bars</div>
+
+</body>
+</html>

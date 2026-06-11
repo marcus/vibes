@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>vibes · mockup E — orbit + list switcher</title>
+<style>
+  /* ── tokens ───────────────────────────────────────────── */
+  :root{
+    --ink:rgba(255,255,255,.94); --muted:rgba(255,255,255,.55); --faint:rgba(255,255,255,.30);
+    --plus:#4ade80; --minus:#fb7185;
+    --card:rgba(255,255,255,.06); --card-stroke:rgba(255,255,255,.09); --chip:rgba(255,255,255,.08);
+    --mono:ui-monospace,"SF Mono",monospace;
+  }
+  *{margin:0;box-sizing:border-box}
+  body{
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    color:var(--ink); min-height:100vh; padding:48px 24px;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    background:
+      radial-gradient(1100px 750px at 20% 10%, #16324a 0%, transparent 60%),
+      radial-gradient(900px 700px at 85% 88%, #2c1d52 0%, transparent 60%),
+      #07090f;
+  }
+  .caption{color:var(--faint); font-size:12px; letter-spacing:.04em}
+
+  .window{
+    width:500px; height:680px; border-radius:18px; overflow:hidden; position:relative;
+    background:
+      radial-gradient(600px 400px at 70% -10%, rgba(64,141,255,.14), transparent 60%),
+      radial-gradient(500px 420px at 10% 110%, rgba(167,93,255,.12), transparent 60%),
+      rgba(12,14,24,.78);
+    backdrop-filter:blur(36px) saturate(160%); -webkit-backdrop-filter:blur(36px) saturate(160%);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 30px 80px rgba(0,0,0,.55);
+    display:flex; flex-direction:column;
+  }
+  .titlebar{display:flex; align-items:center; gap:8px; padding:14px 16px; position:relative; z-index:5}
+  .lights{display:flex; gap:8px; margin-right:6px}
+  .lights i{width:12px;height:12px;border-radius:50%;display:block}
+  .lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+  .wordmark{font-weight:300; font-size:17px}
+  .spacer{flex:1}
+
+  /* glass segmented view switcher */
+  .seg{display:flex; padding:3px; border-radius:99px;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.13);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.10)}
+  .seg button{all:unset; cursor:pointer; padding:4px 13px; border-radius:99px;
+    font:500 11.5px -apple-system,BlinkMacSystemFont,sans-serif; color:var(--muted);
+    display:flex; gap:6px; align-items:center; transition:color .15s}
+  .seg button.active{background:rgba(255,255,255,.16); color:var(--ink);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 1px 5px rgba(0,0,0,.35)}
+  .count{font-size:12px; color:var(--muted); margin-left:4px}
+  .count b{color:#34d399}
+
+  .view{flex:1; min-height:0; display:flex; flex-direction:column; animation:fadein .25s ease}
+  .view.hidden{display:none}
+  @keyframes fadein{from{opacity:0; transform:scale(.985)}to{opacity:1; transform:none}}
+
+  /* ════ ORBIT VIEW ═════════════════════════════════════ */
+  .sky{flex:1; position:relative}
+  .sky::before{content:""; position:absolute; inset:0;
+    background-image:
+      radial-gradient(1.5px 1.5px at 12% 30%, rgba(255,255,255,.35), transparent),
+      radial-gradient(1px 1px at 80% 15%, rgba(255,255,255,.3), transparent),
+      radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,.22), transparent),
+      radial-gradient(1.5px 1.5px at 30% 85%, rgba(255,255,255,.25), transparent),
+      radial-gradient(1px 1px at 90% 55%, rgba(255,255,255,.3), transparent);
+  }
+  .orb{position:absolute; display:flex; flex-direction:column; align-items:center; gap:7px;
+       animation:float 7s ease-in-out infinite}
+  .orb:nth-child(2n){animation-duration:9s; animation-delay:-2s}
+  .orb:nth-child(3n){animation-duration:8s; animation-delay:-4s}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+  .globe{position:relative; width:var(--size); height:var(--size); border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; color:rgba(255,255,255,.95);
+    box-shadow:0 0 34px var(--glow), inset 0 -8px 18px rgba(0,0,0,.3)}
+  /* churn ring: sweep = today vs your typical day (--p), green/red split at --g = adds vs deletes */
+  .globe::before{content:""; position:absolute; inset:-7px; border-radius:50%;
+    background:conic-gradient(#4ade80 0 var(--g), #fb7185 var(--g) var(--p), rgba(255,255,255,.10) var(--p));
+    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+            mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px))}
+  .lap{position:absolute; top:-12px; right:-16px; padding:2px 7px; border-radius:99px;
+    background:rgba(251,191,36,.16); border:1px solid rgba(251,191,36,.45); color:#fbbf24;
+    font:600 10px var(--mono); backdrop-filter:blur(8px)}
+  .tag{font-size:12.5px; font-weight:600; text-shadow:0 1px 6px rgba(0,0,0,.6)}
+  .tag small{display:block; text-align:center; font-weight:500; font-size:11px; color:var(--muted); margin-top:1px}
+  .loc{font-family:var(--mono); font-size:11px; text-align:center}
+  .loc .p{color:var(--plus)} .loc .m{color:var(--minus)}
+  .moon{position:absolute; padding:2px 8px; border-radius:99px; font-size:10px; color:var(--muted);
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.10);
+    backdrop-filter:blur(8px); white-space:nowrap}
+  .moon::before{content:""; display:inline-block; width:5px; height:5px; border-radius:50%;
+    background:var(--mc,#9aa); margin-right:5px; vertical-align:1px}
+  .drift{position:relative; z-index:5; display:flex; align-items:center; gap:14px;
+    padding:12px 18px 16px; border-top:1px solid rgba(255,255,255,.07); background:rgba(0,0,0,.18)}
+  .drift .label{font-size:10.5px; letter-spacing:.14em; font-weight:600; color:var(--faint); margin-right:4px}
+  .drifter{display:flex; align-items:center; gap:7px; opacity:.55}
+  .drifter .mini{width:22px;height:22px;border-radius:50%;flex:none}
+  .drifter span{font-size:12px; color:var(--muted)}
+  .drifter em{font-style:normal; font-size:10.5px; color:var(--faint)}
+
+  /* ════ LIST VIEW (the staid fallback) ═════════════════ */
+  .list{flex:1; overflow-y:auto; padding:2px 14px 16px; display:flex; flex-direction:column; gap:9px}
+  .section{font-size:11px; font-weight:600; letter-spacing:.12em; color:var(--faint); margin:4px 4px 0}
+  .card{background:var(--card); border:1px solid var(--card-stroke); border-radius:14px;
+    padding:11px 13px; display:flex; flex-direction:column; gap:8px}
+  .card.you{background:rgba(10,132,255,.10); border-color:rgba(10,132,255,.22)}
+  .row{display:flex; align-items:center; gap:10px}
+  .avatar{width:38px;height:38px;border-radius:50%;flex:none; position:relative;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:600;font-size:14px;color:rgba(255,255,255,.95)}
+  .avatar::after{content:""; position:absolute; inset:-4px; border-radius:50%;
+    border:2px solid #34d399; opacity:.85; animation:breathe 3s ease-in-out infinite}
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.09);opacity:.35}}
+  .who{flex:1; min-width:0}
+  .name{font-weight:600; font-size:13.5px}
+  .status{color:var(--muted); font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .ago{color:var(--faint); font-size:11px; font-variant-numeric:tabular-nums}
+  .diff{display:flex; align-items:center; gap:8px}
+  .diff .plus{color:var(--plus); font:600 12px var(--mono)}
+  .diff .minus{color:var(--minus); font:600 12px var(--mono)}
+  .diffbar{flex:1; height:6px; border-radius:3px; overflow:hidden; display:flex; background:rgba(255,255,255,.06)}
+  .diffbar .g{background:linear-gradient(90deg,#23b14d,#4ade80)}
+  .diffbar .r{background:linear-gradient(90deg,#fb7185,#e0443a)}
+  .meta{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .chip{display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:99px;
+    background:var(--chip); font-size:11px; color:var(--muted)}
+  .chip b{color:var(--ink); font-weight:600}
+  .chip .rdot{width:6px;height:6px;border-radius:2px}
+  .away-row{display:flex; align-items:center; gap:10px; padding:6px 6px; opacity:.72}
+  .away-row .avatar{width:26px;height:26px;font-size:10px}
+  .away-row .avatar::after{border-color:rgba(255,255,255,.22); animation:none}
+  .away-row .summary{flex:1; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .divider{display:flex; align-items:center; gap:10px; margin:2px 2px 0; color:var(--faint);
+    font-size:10.5px; font-weight:600; letter-spacing:.14em}
+  .divider::before,.divider::after{content:""; flex:1; height:1px; background:rgba(255,255,255,.08)}
+</style>
+</head>
+<body>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="wordmark">vibes</div>
+    <div class="spacer"></div>
+    <div class="seg" role="tablist">
+      <button id="btnOrbit" class="active" onclick="setView('orbit')">✦ orbit</button>
+      <button id="btnList" onclick="setView('list')">☰ list</button>
+    </div>
+    <div class="count"><b>●</b> 4</div>
+  </div>
+
+  <!-- ════ ORBIT ════ -->
+  <div class="view" id="orbitView">
+    <div class="sky">
+      <div class="orb" style="left:210px; top:295px; --size:74px">
+        <div class="globe" style="background:linear-gradient(135deg,#4f8cff,#9b5cff); --glow:rgba(99,124,255,.45); --g:217deg; --p:274deg">M</div>
+        <div class="tag">you<small>shipping the new titlebar ✨</small></div>
+        <div class="loc"><span class="p">+482</span> <span class="m">−127</span> · 9c</div>
+        <div class="moon" style="left:78px; top:6px; --mc:#4f8cff">vibes</div>
+        <div class="moon" style="left:-64px; top:34px; --mc:#9b5cff">td-watch</div>
+      </div>
+      <div class="orb" style="left:60px; top:60px; --size:92px">
+        <div class="globe" style="background:linear-gradient(135deg,#ff7847,#ff4787); --glow:rgba(255,140,90,.6); --g:230deg; --p:360deg">D<span class="lap">1.7×</span></div>
+        <div class="tag">dana<small>deep in the parser mines</small></div>
+        <div class="loc"><span class="p">+1,204</span> <span class="m">−688</span> · 14c</div>
+        <div class="moon" style="left:96px; top:14px; --mc:#ff7847">perch</div>
+        <div class="moon" style="left:-44px; top:64px; --mc:#ffb347">perch-docs</div>
+      </div>
+      <div class="orb" style="left:330px; top:90px; --size:80px">
+        <div class="globe" style="background:linear-gradient(135deg,#27d3a2,#1f9bff); --glow:rgba(39,211,162,.45); --g:50deg; --p:311deg">P</div>
+        <div class="tag">priya<small>refactor friday!!</small></div>
+        <div class="loc"><span class="p">+356</span> <span class="m">−1,892</span> · 7c</div>
+        <div class="moon" style="left:84px; top:30px; --mc:#27d3a2">atlas</div>
+      </div>
+      <div class="orb" style="left:70px; top:400px; --size:52px">
+        <div class="globe" style="background:linear-gradient(135deg,#ffd24f,#ff8c3b); --glow:rgba(255,190,80,.4); --g:20deg; --p:24deg; font-size:13px">T</div>
+        <div class="tag">theo<small>coffee #2, warming up</small></div>
+        <div class="loc"><span class="p">+23</span> <span class="m">−4</span> · 1c</div>
+        <div class="moon" style="left:54px; top:2px; --mc:#ffd24f">dotfiles</div>
+      </div>
+    </div>
+    <div class="drift">
+      <span class="label">DRIFTING</span>
+      <div class="drifter"><div class="mini" style="background:linear-gradient(135deg,#8a94a6,#5b6472)"></div><span>sam <em>2h · +210 −95 in kiln</em></span></div>
+      <div class="drifter"><div class="mini" style="background:linear-gradient(135deg,#b08cff,#7a5cd0)"></div><span>kei <em>1d</em></span></div>
+      <div class="drifter"><div class="mini" style="background:linear-gradient(135deg,#67c1d6,#3f8ea3)"></div><span>ravi <em>3d</em></span></div>
+    </div>
+  </div>
+
+  <!-- ════ LIST ════ -->
+  <div class="view hidden" id="listView">
+    <div class="list">
+      <div class="card you">
+        <div class="row">
+          <div class="avatar" style="background:linear-gradient(135deg,#4f8cff,#9b5cff)">M</div>
+          <div class="who"><div class="name">you <span style="color:var(--faint);font-weight:400">· marcus</span></div>
+            <div class="status">shipping the new titlebar ✨</div></div>
+          <div class="ago">now</div>
+        </div>
+        <div class="diff"><span class="plus">+482</span>
+          <div class="diffbar"><div class="g" style="width:79%"></div><div class="r" style="width:21%"></div></div>
+          <span class="minus">−127</span></div>
+        <div class="meta"><span class="chip"><b>9</b> commits</span>
+          <span class="chip"><span class="rdot" style="background:#4f8cff"></span>vibes</span>
+          <span class="chip"><span class="rdot" style="background:#9b5cff"></span>td-watch</span></div>
+      </div>
+
+      <div class="section">ONLINE · 3</div>
+
+      <div class="card">
+        <div class="row">
+          <div class="avatar" style="background:linear-gradient(135deg,#ff7847,#ff4787)">D</div>
+          <div class="who"><div class="name">dana</div><div class="status">deep in the parser mines</div></div>
+          <div class="ago">2m</div>
+        </div>
+        <div class="diff"><span class="plus">+1,204</span>
+          <div class="diffbar"><div class="g" style="width:64%"></div><div class="r" style="width:36%"></div></div>
+          <span class="minus">−688</span></div>
+        <div class="meta"><span class="chip"><b>14</b> commits</span>
+          <span class="chip"><span class="rdot" style="background:#ff7847"></span>perch</span>
+          <span class="chip"><span class="rdot" style="background:#ffb347"></span>perch-docs</span></div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div class="avatar" style="background:linear-gradient(135deg,#27d3a2,#1f9bff)">P</div>
+          <div class="who"><div class="name">priya</div><div class="status">refactor friday!! delete delete delete</div></div>
+          <div class="ago">8m</div>
+        </div>
+        <div class="diff"><span class="plus">+356</span>
+          <div class="diffbar"><div class="g" style="width:16%"></div><div class="r" style="width:84%"></div></div>
+          <span class="minus">−1,892</span></div>
+        <div class="meta"><span class="chip"><b>7</b> commits</span>
+          <span class="chip"><span class="rdot" style="background:#27d3a2"></span>atlas</span></div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div class="avatar" style="background:linear-gradient(135deg,#ffd24f,#ff8c3b)">T</div>
+          <div class="who"><div class="name">theo</div><div class="status">coffee #2, warming up</div></div>
+          <div class="ago">just now</div>
+        </div>
+        <div class="diff"><span class="plus">+23</span>
+          <div class="diffbar"><div class="g" style="width:85%"></div><div class="r" style="width:15%"></div></div>
+          <span class="minus">−4</span></div>
+        <div class="meta"><span class="chip"><b>1</b> commit</span>
+          <span class="chip"><span class="rdot" style="background:#ffd24f"></span>dotfiles</span></div>
+      </div>
+
+      <div class="divider">AWAY</div>
+
+      <div class="away-row">
+        <div class="avatar" style="background:linear-gradient(135deg,#8a94a6,#5b6472)">S</div>
+        <div class="name" style="font-size:12.5px">sam</div>
+        <div class="summary"><span style="font-family:var(--mono);font-size:11px"><span style="color:var(--plus)">+210</span> <span style="color:var(--minus)">−95</span></span> in kiln earlier</div>
+        <div class="ago">2h</div>
+      </div>
+      <div class="away-row">
+        <div class="avatar" style="background:linear-gradient(135deg,#b08cff,#7a5cd0)">K</div>
+        <div class="name" style="font-size:12.5px">kei</div>
+        <div class="summary">quiet today</div>
+        <div class="ago">1d</div>
+      </div>
+      <div class="away-row">
+        <div class="avatar" style="background:linear-gradient(135deg,#67c1d6,#3f8ea3)">R</div>
+        <div class="name" style="font-size:12.5px">ravi</div>
+        <div class="summary">quiet this week</div>
+        <div class="ago">3d</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="caption">E · switcher — orbit by default, list as the staid fallback. ?view=list to start in list mode.</div>
+
+<script>
+  function setView(v){
+    document.getElementById('orbitView').classList.toggle('hidden', v !== 'orbit');
+    document.getElementById('listView').classList.toggle('hidden', v !== 'list');
+    document.getElementById('btnOrbit').classList.toggle('active', v === 'orbit');
+    document.getElementById('btnList').classList.toggle('active', v === 'list');
+  }
+  if (new URLSearchParams(location.search).get('view') === 'list') setView('list');
+</script>
+
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>vibes · design mockups</title>
+<style>
+  *{margin:0;box-sizing:border-box}
+  body{font:14px/1.5 -apple-system,BlinkMacSystemFont,sans-serif; color:rgba(255,255,255,.9);
+    background:#0a0c14; min-height:100vh; padding:36px}
+  h1{font-weight:300; font-size:26px} h1 b{font-weight:700}
+  p.sub{color:rgba(255,255,255,.5); margin:4px 0 28px}
+  .grid{display:grid; grid-template-columns:repeat(2, minmax(420px, 1fr)); gap:28px; max-width:1400px}
+  .tile{display:block; text-decoration:none; color:inherit; border-radius:16px; overflow:hidden;
+    border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.03); transition:border-color .2s}
+  .tile:hover{border-color:rgba(255,255,255,.3)}
+  .frame{height:430px; overflow:hidden; pointer-events:none}
+  .frame iframe{width:200%; height:200%; border:0; transform:scale(.5); transform-origin:0 0}
+  .label{padding:12px 16px; border-top:1px solid rgba(255,255,255,.08)}
+  .label b{font-size:14px}
+  .label span{display:block; font-size:12px; color:rgba(255,255,255,.5); margin-top:2px}
+</style>
+</head>
+<body>
+  <h1><b>vibes</b> — four directions</h1>
+  <p class="sub">same friends, same day, four personalities. click a tile to open it full size.</p>
+  <div class="grid">
+    <a class="tile" href="a-glance.html">
+      <div class="frame"><iframe src="a-glance.html" scrolling="no"></iframe></div>
+      <div class="label"><b>A · glance</b><span>refined version of today's cards — proportional diff bars, repo chips, breathing presence rings. lowest-risk evolution.</span></div>
+    </a>
+    <a class="tile" href="b-orbit.html">
+      <div class="frame"><iframe src="b-orbit.html" scrolling="no"></iframe></div>
+      <div class="label"><b>B · orbit</b><span>ambient sky — orb size = activity, ring sweep = churn, repos as moons, offline friends "drifting". most fun, least dense.</span></div>
+    </a>
+    <a class="tile" href="c-tape.html">
+      <div class="frame"><iframe src="c-tape.html" scrolling="no"></iframe></div>
+      <div class="label"><b>C · tape</b><span>the day as a live ledger — hourly punch cards, aligned diff columns, event ticker, crew total. most scannable.</span></div>
+    </a>
+    <a class="tile" href="e-switcher.html">
+      <div class="frame"><iframe src="e-switcher.html" scrolling="no"></iframe></div>
+      <div class="label"><b>E · switcher</b><span>the plan: orbit by default with a glass segmented control to flip to the list fallback. churn ring = today vs your typical day.</span></div>
+    </a>
+    <a class="tile" href="d-scoreboard.html">
+      <div class="frame"><iframe src="d-scoreboard.html" scrolling="no"></iframe></div>
+      <div class="label"><b>D · scoreboard</b><span>friendly daily leaderboard — race bars, streak badges, stacked crew bar. most social energy.</span></div>
+    </a>
+  </div>
+</body>
+</html>
