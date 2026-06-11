@@ -452,6 +452,7 @@ final class AppModel: ObservableObject {
       pendingInvite = PendingInvite(code: code)
       inviteCodeInput = code
       successMessage = nil
+      fetchPendingInviteInviter(code: code)
     case "link":
       // A pairing code only makes sense on a Mac that isn't set up yet — it
       // prefills the "Link this Mac" field on the setup screen, and an
@@ -469,6 +470,20 @@ final class AppModel: ObservableObject {
       return
     }
     NSApp.activate(ignoringOtherApps: true)
+  }
+
+  // Best-effort name lookup so the invite sheet can say who sent it. Failures
+  // (offline, expired code, old relay) just leave the generic copy in place.
+  private func fetchPendingInviteInviter(code: String) {
+    guard let config else { return }
+    Task {
+      guard let lookup = try? await client(for: config).inviteLookup(code: code),
+            let name = lookup.inviter,
+            !name.isEmpty,
+            pendingInvite?.code == code
+      else { return }
+      pendingInvite?.inviterName = name
+    }
   }
 
   func acceptPendingInvite() async {

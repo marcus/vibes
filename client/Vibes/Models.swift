@@ -460,8 +460,18 @@ struct AcceptInviteResult: Codable, Equatable {
 
 struct PendingInvite: Equatable, Identifiable {
   var code: String
+  // Looked up after the deep link arrives (GET /api/invites/<code>) so the
+  // sheet can say who sent it; nil until the lookup lands or if it fails.
+  var inviterName: String?
 
   var id: String { code }
+}
+
+// GET /api/invites/<code> — the code itself is the capability, mirroring the
+// /invite/<code> web landing page.
+struct InviteLookup: Codable, Equatable {
+  var state: String
+  var inviter: String?
 }
 
 struct MergedStatus: Codable, Equatable, Identifiable {

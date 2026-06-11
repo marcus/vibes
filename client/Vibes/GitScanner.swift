@@ -242,6 +242,18 @@ struct RelayClient {
     try await send(path: "/api/invites", method: "POST", body: EmptyBody())
   }
 
+  // Who created an invite code — powers the sheet's "<name> invited you".
+  // Unauthenticated by design: holding the code is the capability.
+  func inviteLookup(code: String) async throws -> InviteLookup {
+    let encoded = code.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? code
+    return try await send(
+      path: "/api/invites/\(encoded)",
+      method: "GET",
+      body: Optional<String>.none,
+      requiresAuth: false
+    )
+  }
+
   // Mint a pairing code for adding another Mac to this account.
   func createDeviceLinkCode() async throws -> DeviceLinkCode {
     try await send(path: "/api/devices/link-codes", method: "POST", body: EmptyBody())

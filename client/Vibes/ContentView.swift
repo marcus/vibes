@@ -88,7 +88,7 @@ private struct SetupPanel: View {
       Text("Let's set you up.")
         .font(.title3.weight(.light))
 
-      Field("display name", text: $displayName, prompt: "Marcus")
+      Field("display name", text: $displayName, prompt: "your name")
 
       HStack(spacing: 10) {
         Button {
@@ -145,7 +145,7 @@ private struct SetupPanel: View {
               .foregroundStyle(Color.secondary)
             Field("token", text: $token, prompt: "existing relay token")
             HStack(spacing: 12) {
-              Field("handle", text: $handle, prompt: "marcus")
+              Field("handle", text: $handle, prompt: "yourname")
               Field("device", text: $deviceLabel, prompt: "MacBook")
             }
           }
@@ -265,7 +265,7 @@ private struct MainPanel: View {
       // inset the wordmark past them with a small gap.
       .padding(.leading, 72)
 
-      HomeView()
+      HomeView(openInviteFriend: { showInviteFriend = true })
 
       Footer(
         openInviteFriend: { showInviteFriend = true },
@@ -356,13 +356,13 @@ private struct GeneralSettingsPane: View {
       Section("Identity") {
         EditableSettingField(
           label: "Display Name",
-          prompt: "Marcus",
+          prompt: "your name",
           text: $displayName,
           save: { model.updateDisplayName(displayName) }
         )
         EditableSettingField(
           label: "Handle",
-          prompt: "marcus",
+          prompt: "yourname",
           text: $handle,
           save: { model.updateHandle(handle) }
         )
@@ -866,6 +866,7 @@ enum FeedTextSize: String, CaseIterable, Identifiable {
 // quiet rows under an "away" divider. EmptyState when there are no friends.
 private struct HomeView: View {
   @EnvironmentObject private var model: AppModel
+  var openInviteFriend: () -> Void
   @AppStorage("feedViewMode") private var feedViewModeRaw = FeedViewMode.orbit.rawValue
   @AppStorage("feedTextSize") private var feedTextSizeRaw = FeedTextSize.large.rawValue
 
@@ -922,7 +923,9 @@ private struct HomeView: View {
           let friends = model.feed?.friends ?? []
           if friends.isEmpty {
             EmptyState(
-              text: "No friends yet. Create one invite link and send it directly."
+              text: "No friends yet. Create one invite link and send it directly.",
+              actionTitle: "Invite a Friend",
+              action: openInviteFriend
             )
           } else {
             let online = friends.filter { $0.mode == .online }
@@ -1219,7 +1222,7 @@ private struct InviteSheet: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("You've been invited")
           .font(.title.weight(.light))
-        Text("Someone invited you to Vibes.")
+        Text(invite.inviterName.map { "\($0) invited you to Vibes." } ?? "Someone invited you to Vibes.")
           .font(.callout)
           .foregroundStyle(Color.secondary)
         Text(invite.code)

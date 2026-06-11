@@ -22,6 +22,14 @@ Equivalent:
 xcodebuild -project client/Vibes.xcodeproj -scheme Vibes -configuration Debug -destination 'platform=macOS' build
 ```
 
+(`xcodebuild` needs full Xcode: prefix with
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` if the active
+developer dir is the Command Line Tools.)
+
+To run and verify UI changes against a disposable, fully configured instance
+(local relay, fake home, scripted screenshots/clicks), see
+[docs/ui-testing.md](ui-testing.md).
+
 ## Core Features Implemented
 
 1. **First-Launch Setup Panel**: Create a new identity with just a display name, link to an existing account with a pairing code from another Mac ("Link this Mac", including `vibes://link/<code>?relay=…` deep links), continue one-click from an account found in iCloud Keychain ("Welcome back"), or use the Advanced paths (manual relay URL + token, JSON config import).
