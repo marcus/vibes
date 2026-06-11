@@ -129,14 +129,15 @@ private struct MainPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
-      // Slim titlebar-style header (design/mockups): small wordmark + live
-      // count on the left, the floating controls on the right — one quiet row
-      // instead of the old display-size header.
+      // Slim titlebar-style header (design/mockups): the row shares the
+      // traffic-light band — wordmark + live count just right of the window
+      // controls, floating controls on the right — instead of sitting in its
+      // own block below them.
       HStack(alignment: .center, spacing: 10) {
         Text("vibes")
-          // Exact size kept: the wordmark is a deliberate display mark, now at
-          // titlebar scale per the orbit mockups.
-          .font(.system(size: 19, weight: .light))
+          // Exact size kept: the wordmark is a deliberate display mark, at the
+          // mockups' titlebar scale.
+          .font(.system(size: 17, weight: .light))
         if let count = onlineCount {
           HStack(spacing: 5) {
             Circle()
@@ -169,6 +170,10 @@ private struct MainPanel: View {
           }
         }
       }
+      // Clear the floating traffic lights horizontally instead of vertically:
+      // the lights end ~72pt from the window edge, and the row's top padding
+      // centers it on their band (mockup titlebar spacing).
+      .padding(.leading, 58)
 
       HomeView()
 
@@ -177,11 +182,9 @@ private struct MainPanel: View {
         openSettings: { openSettings() }
       )
     }
-    .padding(22)
-    // Clear the floating traffic lights (hidden-titlebar main window): drop the
-    // header row below the ~28pt window-control band so the "vibes" wordmark and
-    // the presence picker / refresh button don't collide with the controls.
-    .safeAreaPadding(.top, 28)
+    .padding(.horizontal, 22)
+    .padding(.bottom, 22)
+    .padding(.top, 12)
     .sheet(item: $model.pendingInvite) { invite in
       InviteSheet(invite: invite)
         .environmentObject(model)
@@ -722,23 +725,47 @@ private struct HomeView: View {
   }
 }
 
-// Orbit ↔ list switcher, sitting with the other floating header controls. The
-// raw-string binding round-trips through @AppStorage in MainPanel/HomeView.
+// Orbit ↔ list switcher, sitting with the other floating header controls: one
+// glass capsule with two labeled segments ("✦ orbit" / "☰ list" per the
+// mockups), the active one raised on a brighter pill. The raw-string binding
+// round-trips through @AppStorage in MainPanel/HomeView.
 private struct FeedViewToggle: View {
   @Binding var selectionRaw: String
 
   var body: some View {
-    Picker("Feed View", selection: $selectionRaw) {
-      Image(systemName: "sparkles")
-        .tag(FeedViewMode.orbit.rawValue)
-        .accessibilityLabel("Orbit view")
-      Image(systemName: "list.bullet")
-        .tag(FeedViewMode.list.rawValue)
-        .accessibilityLabel("List view")
+    HStack(spacing: 2) {
+      segment("orbit", icon: "sparkles", mode: .orbit)
+      segment("list", icon: "list.bullet", mode: .list)
     }
-    .pickerStyle(.segmented)
-    .labelsHidden()
-    .fixedSize()
+    .padding(3)
+    .glassEffect(.regular, in: .capsule)
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("Feed View")
+  }
+
+  private func segment(_ title: String, icon: String, mode: FeedViewMode) -> some View {
+    let isActive = selectionRaw == mode.rawValue
+    return Button {
+      selectionRaw = mode.rawValue
+    } label: {
+      HStack(spacing: 5) {
+        Image(systemName: icon)
+          .font(.system(size: 9, weight: .semibold))
+        Text(title)
+          .font(.caption.weight(.medium))
+      }
+      .padding(.horizontal, 11)
+      .padding(.vertical, 4)
+      .foregroundStyle(isActive ? Color.primary : Color.secondary)
+      .background(
+        isActive ? AnyShapeStyle(Color(nsColor: .quaternarySystemFill)) : AnyShapeStyle(.clear),
+        in: Capsule()
+      )
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("\(title) view")
+    .accessibilityAddTraits(isActive ? [.isSelected] : [])
   }
 }
 
