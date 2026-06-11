@@ -337,6 +337,8 @@ private struct GeneralSettingsPane: View {
   @State private var handle = ""
   @State private var deviceLabel = ""
   @State private var relayURL = ""
+  @State private var copiedLinkCode = 0
+  @State private var copiedLinkURL = 0
 
   var body: some View {
     Form {
@@ -431,16 +433,20 @@ private struct GeneralSettingsPane: View {
           HStack(spacing: 8) {
             Button {
               model.copyDeviceLinkCode()
+              copiedLinkCode += 1
             } label: {
-              Label("Copy Code", systemImage: "doc.on.doc")
+              ConfirmingLabel("Copy Code", systemImage: "doc.on.doc", trigger: copiedLinkCode)
             }
             .buttonStyle(.bordered)
+            .actionFeedback(trigger: copiedLinkCode)
             Button {
               model.copyDeviceLinkURL()
+              copiedLinkURL += 1
             } label: {
-              Label("Copy Link", systemImage: "link")
+              ConfirmingLabel("Copy Link", systemImage: "link", trigger: copiedLinkURL)
             }
             .buttonStyle(.bordered)
+            .actionFeedback(trigger: copiedLinkURL)
             Button("New Code") {
               Task { await model.createDeviceLinkCode() }
             }
@@ -1096,6 +1102,8 @@ private struct RepoRow: View {
 private struct InviteFriendView: View {
   @EnvironmentObject private var model: AppModel
   @Environment(\.dismiss) private var dismiss
+  @State private var createdInvite = 0
+  @State private var copiedLink = 0
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -1118,11 +1126,13 @@ private struct InviteFriendView: View {
       }
 
       Button {
+        createdInvite += 1
         Task { await model.createInvite() }
       } label: {
         Label("Create Invite Link", systemImage: "link")
       }
       .buttonStyle(.glassProminent)
+      .actionFeedback(trigger: createdInvite)
       .disabled(model.isBusy)
 
       if let url = model.latestInviteURL {
@@ -1135,10 +1145,12 @@ private struct InviteFriendView: View {
             HStack(spacing: 8) {
               Button {
                 model.copyLatestInvite()
+                copiedLink += 1
               } label: {
-                Label("Copy Link", systemImage: "doc.on.doc")
+                ConfirmingLabel("Copy Link", systemImage: "doc.on.doc", trigger: copiedLink)
               }
               .buttonStyle(.glassProminent)
+              .actionFeedback(trigger: copiedLink)
               ShareLink(item: url) {
                 Label("Share", systemImage: "square.and.arrow.up")
               }
