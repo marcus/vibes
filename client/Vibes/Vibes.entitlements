@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Release-only entitlements (CODE_SIGN_ENTITLEMENTS is set on the Release
+  configuration). Required for the iCloud Keychain account hand-off
+  (SyncedAccountStore): synchronizable keychain items need an app identity and
+  keychain access group, which Developer ID builds get from these entitlements
+  plus the embedded provisioning profile (client/signing/, installed and
+  applied by scripts/release-mac.sh).
+
+  Debug builds deliberately have NO entitlements: ad-hoc signatures with these
+  restricted entitlements would be killed by AMFI. SyncedAccountStore degrades
+  silently in dev (and logs the OSStatus in DEBUG builds).
+
+  Verified 2026-06-11 with a probe app: without profile+entitlements the
+  keychain returns errSecMissingEntitlement (-34018); with them, success.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.application-identifier</key>
+	<string>H5G3VW27DZ.com.opentangle.vibes</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>H5G3VW27DZ</string>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>H5G3VW27DZ.com.opentangle.vibes</string>
+	</array>
+</dict>
+</plist>

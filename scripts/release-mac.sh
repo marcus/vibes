@@ -84,6 +84,24 @@ UPDATE_ZIP="${APPCAST_STAGING}/${APP_NAME}-${VIBES_RELEASE_VERSION}.zip"
 
 [[ -f "${EXPORT_OPTIONS}" ]] || die "missing ${EXPORT_OPTIONS}"
 
+# --- Provisioning profile (keychain-access-groups for iCloud Keychain sync) --
+# The Release config signs with client/Vibes/Vibes.entitlements; those
+# restricted entitlements are only honored when this Developer ID profile is
+# embedded in the app (without it, AMFI kills the process at launch). Install
+# the repo's copy where xcodebuild looks, keyed by its UUID.
+PROFILE_SRC="client/signing/Vibes_Developer_ID.provisionprofile"
+[[ -f "${PROFILE_SRC}" ]] || die "missing ${PROFILE_SRC}"
+PROFILE_UUID="$(security cms -D -i "${PROFILE_SRC}" 2>/dev/null | plutil -extract UUID raw -)"
+PROFILE_NAME="$(security cms -D -i "${PROFILE_SRC}" 2>/dev/null | plutil -extract Name raw -)"
+[[ -n "${PROFILE_UUID}" && -n "${PROFILE_NAME}" ]] || die "could not read UUID/Name from ${PROFILE_SRC}"
+for profile_dir in \
+  "${HOME}/Library/Developer/Xcode/UserData/Provisioning Profiles" \
+  "${HOME}/Library/MobileDevice/Provisioning Profiles"; do
+  mkdir -p "${profile_dir}"
+  cp "${PROFILE_SRC}" "${profile_dir}/${PROFILE_UUID}.provisionprofile"
+done
+note "Installed provisioning profile ${PROFILE_NAME} (${PROFILE_UUID})"
+
 note "Releasing ${APP_NAME} ${VIBES_RELEASE_VERSION} (build ${VIBES_BUILD_NUMBER}) as ${VIBES_BUNDLE_ID}"
 
 # --- Clean and build an archive ---------------------------------------------
@@ -103,7 +121,8 @@ xcodebuild archive \
   PRODUCT_BUNDLE_IDENTIFIER="${VIBES_BUNDLE_ID}" \
   DEVELOPMENT_TEAM="${VIBES_DEVELOPMENT_TEAM}" \
   CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY="${VIBES_CODESIGN_IDENTITY}"
+  CODE_SIGN_IDENTITY="${VIBES_CODESIGN_IDENTITY}" \
+  PROVISIONING_PROFILE_SPECIFIER="${PROFILE_NAME}"
 
 # --- Export a Developer ID app ----------------------------------------------
 

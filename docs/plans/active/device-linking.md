@@ -79,19 +79,21 @@ sync.
 - A revoked Mac sees a clear footer message ("This Mac's access was removed…")
   and stops advertising to iCloud, but there's no dedicated signed-out state
   that clears local config.
-- **Ship gate, phase 1 verified 2026-06-11 (probe binary, exact
-  SyncedAccountStore queries):** synchronizable keychain items do NOT work
-  under the current release signing. Measured: Developer ID + hardened
-  runtime, no entitlements → `errSecMissingEntitlement (-34018)`; adding
-  `keychain-access-groups` without a provisioning profile → process killed
-  by AMFI (exit 137, restricted entitlement); `com.apple.application-identifier`
-  alone → runs but still `-34018`. The fix requires an embedded **Developer
-  ID provisioning profile** for `com.opentangle.vibes` (profiles authorize
-  `keychain-access-groups`) plus an entitlements file, wired into the
-  Release signing path only (debug builds stay entitlement-free and degrade
-  silently, with OSStatus logging). Until then the welcome-back card simply
-  never appears (reads fail the same way) and pairing codes carry the
-  experience — nothing user-visible breaks.
+- **Ship gate RESOLVED 2026-06-11.** Probe measurements: Developer ID +
+  hardened runtime with no entitlements → `errSecMissingEntitlement (-34018)`;
+  `keychain-access-groups` without a profile → killed by AMFI (exit 137);
+  with an embedded Developer ID provisioning profile + entitlements →
+  **errSecSuccess** on add/read/delete of synchronizable items. Wired in:
+  `client/Vibes/Vibes.entitlements` (Release config only — debug builds stay
+  entitlement-free and degrade silently with OSStatus logging), the
+  "Vibes Developer ID" profile at `client/signing/` (expires 2027-02-01,
+  contains the team's signing cert serial 16F3FDF7AC516137; regenerate in
+  the portal if the cert rotates), `release-mac.sh` installs the profile and
+  passes `PROVISIONING_PROFILE_SPECIFIER`, and `ExportOptions.plist` embeds
+  it at export. Verified end-to-end: Release archive + Developer ID export
+  produces a valid signature with the entitlements and embedded profile.
+  Remaining: phase-2 two-Mac sync test (welcome-back card appearing on a
+  second Mac via iCloud Keychain) with the next release-signed build.
 - Any valid token can mint more tokens (`POST /api/tokens`); revoking a token
   doesn't cascade to tokens it minted. Mitigated by full visibility in the
   device list. A "remove all other devices" affordance is a sensible

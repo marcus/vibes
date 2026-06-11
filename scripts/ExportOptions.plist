@@ -15,6 +15,14 @@
   <string>manual</string>
   <key>signingCertificate</key>
   <string>Developer ID Application</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <!-- Embeds the Developer ID profile that authorizes the Release
+         entitlements (keychain-access-groups for iCloud Keychain sync).
+         Profile lives in client/signing/; release-mac.sh installs it. -->
+    <key>com.opentangle.vibes</key>
+    <string>Vibes Developer ID</string>
+  </dict>
   <key>teamID</key>
   <string>H5G3VW27DZ</string>
 </dict>
