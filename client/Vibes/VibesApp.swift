@@ -81,10 +81,10 @@ struct VibesApp: App {
       }
       CheckForUpdatesView(updater: updaterController.updater)
       Divider()
-      // Compact variant of the in-app PresenceToggle (ContentView.swift).
-      // A native menu can't honor the Capsule/lit-accent styling, so we mirror
-      // the same Online/Offline two-segment vocabulary as discrete menu items:
-      // the active mode is "lit" (filled dot + checkmark), the other is at-rest.
+      // Menu counterpart of the in-app PresenceLight (ContentView.swift). The
+      // one-dot toggle reads poorly as a menu item, so the menu keeps explicit
+      // Online/Offline entries: the active mode is "lit" (filled dot), the
+      // other is at-rest.
       Button {
         model.setMode(.online)
       } label: {

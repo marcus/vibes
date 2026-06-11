@@ -39,6 +39,15 @@ struct OrbitView: View {
           }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+          if friends.isEmpty {
+            Text("Just you up here so far. Invite a friend to fill the sky.")
+              .font(.callout)
+              .foregroundStyle(Color.secondary)
+              .multilineTextAlignment(.center)
+              .padding(.bottom, 24)
+          }
+        }
       }
       if !drifters.isEmpty {
         DriftDock(drifters: drifters)

@@ -49,7 +49,7 @@ final class AppModel: ObservableObject {
   @Published var gradientEnd: Color = Color(hex: "#1F6F8B") ?? .teal
 
   private let configStore = ConfigStore()
-  private let keychain = KeychainStore()
+  private let keychain = TokenStore()
   private let scanner = GitScanner()
   private var loopTask: Task<Void, Never>?
   private var successMessageDismissTask: Task<Void, Never>?

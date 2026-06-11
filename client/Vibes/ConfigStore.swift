@@ -141,6 +141,65 @@ enum DateFormatters {
   }()
 }
 
+// Where the relay token lives. Release builds use the Keychain exclusively.
+// Debug builds prefer a plaintext copy next to config.json ("token.dev",
+// chmod 600): every rebuilt dev binary carries a fresh code signature, so a
+// Keychain read would otherwise prompt for the login password on each
+// iteration. The dev file is seeded from the Keychain once (one last prompt),
+// then read thereafter; registration in a Debug build writes the file only.
+// Delete token.dev to fall back to the Keychain.
+struct TokenStore {
+  private let keychain = KeychainStore()
+
+  func readToken() throws -> String? {
+    #if DEBUG
+      if let token = readDevToken() { return token }
+      let token = try keychain.readToken()
+      if let token { writeDevToken(token) }
+      return token
+    #else
+      return try keychain.readToken()
+    #endif
+  }
+
+  func saveToken(_ token: String) throws {
+    #if DEBUG
+      writeDevToken(token)
+    #else
+      try keychain.saveToken(token)
+    #endif
+  }
+
+  #if DEBUG
+    private var devTokenURL: URL {
+      let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+      return base
+        .appendingPathComponent("Vibes", isDirectory: true)
+        .appendingPathComponent("token.dev")
+    }
+
+    private func readDevToken() -> String? {
+      guard let data = try? Data(contentsOf: devTokenURL) else { return nil }
+      let token = String(decoding: data, as: UTF8.self)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      return token.isEmpty ? nil : token
+    }
+
+    private func writeDevToken(_ token: String) {
+      let url = devTokenURL
+      try? FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+      )
+      try? Data(token.utf8).write(to: url, options: [.atomic])
+      try? FileManager.default.setAttributes(
+        [.posixPermissions: 0o600],
+        ofItemAtPath: url.path
+      )
+    }
+  #endif
+}
+
 struct KeychainStore {
   private let service = "com.marcusvorwaller.vibes.relay-token"
   private let account = "default"

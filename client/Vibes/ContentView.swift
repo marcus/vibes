@@ -155,9 +155,9 @@ private struct MainPanel: View {
         GlassEffectContainer(spacing: 10) {
           HStack(spacing: 10) {
             FeedViewToggle(selectionRaw: $feedViewModeRaw)
-            PresenceToggle(
+            PresenceLight(
               mode: model.mode,
-              setMode: { model.setMode($0) }
+              toggle: { model.setMode(model.mode == .online ? .offline : .online) }
             )
             Button {
               Task { await model.scanPublishAndFetch() }
@@ -184,7 +184,11 @@ private struct MainPanel: View {
     }
     .padding(.horizontal, 22)
     .padding(.bottom, 22)
-    .padding(.top, 12)
+    .padding(.top, 18)
+    // Share the traffic-light band (mockup titlebar): lay out from the true
+    // window top instead of below the hidden titlebar's safe-area inset; the
+    // 18pt top padding centers the header row on the lights.
+    .ignoresSafeArea(.container, edges: .top)
     .sheet(item: $model.pendingInvite) { invite in
       InviteSheet(invite: invite)
         .environmentObject(model)
@@ -652,12 +656,11 @@ private struct HomeView: View {
     FeedViewMode(rawValue: feedViewModeRaw) ?? .orbit
   }
 
-  // Orbit needs a feed and at least one friend to be a sky worth drawing;
-  // otherwise (no feed yet, or the empty-state nudge) the list layout handles
-  // it better.
+  // Orbit just needs a feed — with no friends yet it shows your own orb plus
+  // an invite nudge, so the header toggle always visibly switches views. The
+  // list layout covers the not-yet-synced case.
   private var showsOrbit: Bool {
-    guard feedViewMode == .orbit, let feed = model.feed else { return false }
-    return !feed.friends.isEmpty
+    feedViewMode == .orbit && model.feed != nil
   }
 
   var body: some View {
@@ -769,26 +772,33 @@ private struct FeedViewToggle: View {
   }
 }
 
-// Two-state presence control. A standard segmented Picker bound to the
-// online/offline state — on the macOS 26 SDK this picks up the redesigned
-// Liquid Glass control treatment automatically, reading as the app's one
-// floating Online/Offline control. The menu-bar control (td-583670) reuses
-// this binding shape.
-private struct PresenceToggle: View {
+// One-dot presence control (the mockups' status light): a small glass button
+// whose dot is lit green when online, at rest when offline; clicking toggles.
+// The menu-bar extra keeps explicit Online/Offline items for discoverability.
+private struct PresenceLight: View {
   var mode: PresenceMode
-  var setMode: (PresenceMode) -> Void
+  var toggle: () -> Void
 
   var body: some View {
-    Picker(
-      "Presence",
-      selection: Binding(get: { mode }, set: { setMode($0) })
-    ) {
-      Text("Online").tag(PresenceMode.online)
-      Text("Offline").tag(PresenceMode.offline)
+    Button(action: toggle) {
+      Circle()
+        .fill(
+          mode == .online
+            ? Color(nsColor: .systemGreen)
+            : Color(nsColor: .tertiaryLabelColor)
+        )
+        .frame(width: 9, height: 9)
+        .shadow(
+          color: mode == .online ? Color(nsColor: .systemGreen).opacity(0.7) : .clear,
+          radius: 4
+        )
+        .padding(.horizontal, 5)
+        .padding(.vertical, 6)
     }
-    .pickerStyle(.segmented)
-    .labelsHidden()
-    .fixedSize()
+    .buttonStyle(.glass)
+    .help(mode == .online ? "Online — click to go offline" : "Offline — click to go online")
+    .accessibilityLabel(mode == .online ? "Online" : "Offline")
+    .accessibilityHint("Toggles your presence")
   }
 }
 

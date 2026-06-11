@@ -79,9 +79,20 @@ has meaning:
   across machines. Dots only; text stays `.secondary` on `.quaternarySystemFill`.
 - **Motion** — orb floating and ring animation are skipped under Reduce Motion.
   Layout uses fixed constellation slots (≤6 orbs) and a staggered grid beyond.
+- **Empty sky** — with no friends, orbit still renders your own orb plus an
+  invite nudge, so the header toggle always visibly switches views.
 
 The list view (FriendCard column) remains available via the header switcher
-and is the fallback whenever there is no feed or no friends yet.
+and is the fallback only while the first feed hasn't loaded.
+
+## Header / presence
+
+The header row shares the traffic-light band (`ignoresSafeArea(.top)` +
+58pt leading inset past the lights): the 17pt "vibes" wordmark, a green-dot
+live count ("N in orbit" / "N online"), then the floating controls — the
+orbit/list glass capsule and the one-dot **PresenceLight** (green lit =
+online, at-rest = offline; click toggles). The menu-bar extra keeps explicit
+Online/Offline items as the discoverable counterpart.
 
 ## Sanctioned exceptions
 
