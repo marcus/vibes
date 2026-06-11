@@ -128,6 +128,26 @@ const MIGRATIONS = [
       ALTER TABLE users ADD COLUMN avatar_gradient_end TEXT;    -- '#RRGGBB'
     `,
   },
+  {
+    version: 6,
+    name: "daily_activity",
+    sql: `
+      -- Per-day git churn history, one row per (user, device, day). The statuses
+      -- table only keeps the latest snapshot per device; this table accrues the
+      -- daily totals it overwrites, so the feed can publish a "typical day"
+      -- baseline (median churn) for the orbit view's ring.
+      CREATE TABLE daily_activity (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        device_id TEXT NOT NULL,
+        client_day TEXT NOT NULL,
+        insertions INTEGER NOT NULL DEFAULT 0,
+        deletions INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, device_id, client_day)
+      );
+      CREATE INDEX idx_daily_activity_user_day ON daily_activity(user_id, client_day);
+    `,
+  },
 ];
 
 /**

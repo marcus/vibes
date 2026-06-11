@@ -25,6 +25,11 @@ export const HOUSE_STYLE = {
 };
 const MODES = new Set(["online", "offline"]);
 const MODE_RANK = { offline: 0, online: 1 };
+// typical_churn baseline: median daily churn over this many trailing active
+// days (today excluded). Below the minimum the feed publishes null and the
+// client falls back to its own cold-start scale.
+const TYPICAL_CHURN_WINDOW_DAYS = 14;
+const TYPICAL_CHURN_MIN_DAYS = 3;
 // A friend reports `online` only if they are sharing and have published within
 // this window; older online rows fall back to a last-seen "online … ago".
 const ONLINE_WINDOW_MS = 10 * 60 * 1000;
@@ -637,10 +642,60 @@ export function upsertStatus(db, user, input) {
       updatedAt,
       receivedAt,
     );
+    recordDailyActivity(db, user.id, deviceId, payload, receivedAt);
     maybePersistMissingTimezone(db, user.id);
   });
 
   return { ok: true, server_received_at: receivedAt };
+}
+
+/**
+ * Accrue the day's git churn into daily_activity. The scanner reports
+ * cumulative day totals, so the upsert replaces (not adds). Days without a
+ * git_stats card leave no row — the typical-churn median only considers days
+ * the user actually shared activity for.
+ */
+function recordDailyActivity(db, userId, deviceId, payload, receivedAt) {
+  const card = getCard(payload, "git_stats");
+  if (!card) return;
+  const insertions = Math.max(0, Number(card.data?.insertions) || 0);
+  const deletions = Math.max(0, Number(card.data?.deletions) || 0);
+  db.prepare(
+    `INSERT INTO daily_activity (user_id, device_id, client_day, insertions, deletions, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, device_id, client_day) DO UPDATE SET
+       insertions = excluded.insertions,
+       deletions = excluded.deletions,
+       updated_at = excluded.updated_at`,
+  ).run(userId, deviceId, payload.day, insertions, deletions, receivedAt);
+}
+
+/**
+ * Median daily churn (insertions + deletions, summed across devices) over the
+ * most recent TYPICAL_CHURN_WINDOW_DAYS active days, excluding `excludeDay`
+ * (the in-progress day, which would bias the baseline downward intraday).
+ * Returns null until TYPICAL_CHURN_MIN_DAYS of history exist.
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} userId
+ * @param {string | null} excludeDay
+ * @returns {number | null}
+ */
+export function typicalChurn(db, userId, excludeDay) {
+  const rows = db
+    .prepare(
+      `SELECT SUM(insertions + deletions) AS churn
+       FROM daily_activity
+       WHERE user_id = ? AND client_day <> ?
+       GROUP BY client_day
+       HAVING churn > 0
+       ORDER BY client_day DESC
+       LIMIT ?`,
+    )
+    .all(userId, excludeDay ?? "", TYPICAL_CHURN_WINDOW_DAYS);
+  if (rows.length < TYPICAL_CHURN_MIN_DAYS) return null;
+  const sorted = rows.map((row) => row.churn).sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
 function getCard(payload, type) {
@@ -806,9 +861,11 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
           )
           .get(viewer.id) ?? viewer
       : viewer;
-  const merged = [viewerRow, ...users.slice(1)].map((user) =>
-    mergeUserStatuses(user, statusQuery.all(user.id), nowMs),
-  );
+  const merged = [viewerRow, ...users.slice(1)].map((user) => {
+    const status = mergeUserStatuses(user, statusQuery.all(user.id), nowMs);
+    status.typical_churn = typicalChurn(db, user.id, status.day);
+    return status;
+  });
   return { you: merged[0], friends: merged.slice(1) };
 }
 

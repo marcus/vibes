@@ -29,6 +29,7 @@ import {
   revokeToken,
   setUserAvatar,
   setUserGradient,
+  typicalChurn,
   upsertStatus,
   validateHexColor,
   validatePng,
@@ -130,6 +131,19 @@ describe("migrations", () => {
     expect(() => migrate(db)).not.toThrow();
     const after = db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n;
     expect(after).toBe(before);
+  });
+
+  it("applies migration v6 (daily_activity table)", () => {
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all()
+      .map((row) => row.name);
+    expect(tables).toContain("daily_activity");
+
+    const columns = db.prepare("PRAGMA table_info(daily_activity)").all().map((row) => row.name);
+    for (const c of ["user_id", "device_id", "client_day", "insertions", "deletions", "updated_at"]) {
+      expect(columns).toContain(c);
+    }
   });
 });
 
@@ -946,5 +960,82 @@ describe("http helpers", () => {
 
     checkRateLimit(event, "test-spoof", 1);
     expect(() => checkRateLimit(event, "test-spoof", 1)).toThrow(RelayError);
+  });
+});
+
+describe("daily activity and typical churn", () => {
+  function postDay(user, day, { insertions, deletions, deviceId = "device-1" }) {
+    upsertStatus(db, user, {
+      device_id: deviceId,
+      mode: "online",
+      day,
+      updated_at: `${day}T18:00:00.000Z`,
+      cards: [
+        {
+          type: "git_stats",
+          enabled: true,
+          summary: null,
+          data: { commits: 1, insertions, deletions },
+        },
+      ],
+    });
+  }
+
+  it("accrues one row per user/device/day, replacing cumulative totals", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-05", { insertions: 100, deletions: 50 });
+    postDay(user, "2026-06-05", { insertions: 200, deletions: 80 });
+    postDay(user, "2026-06-06", { insertions: 10, deletions: 0 });
+
+    const rows = db
+      .prepare("SELECT client_day, insertions, deletions FROM daily_activity ORDER BY client_day")
+      .all();
+    expect(rows).toEqual([
+      { client_day: "2026-06-05", insertions: 200, deletions: 80 },
+      { client_day: "2026-06-06", insertions: 10, deletions: 0 },
+    ]);
+  });
+
+  it("computes the median over past active days, excluding the given day", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-02", { insertions: 80, deletions: 20 }); // churn 100
+    postDay(user, "2026-06-03", { insertions: 200, deletions: 100 }); // churn 300
+    postDay(user, "2026-06-04", { insertions: 400, deletions: 100 }); // churn 500
+    postDay(user, "2026-06-06", { insertions: 9000, deletions: 0 }); // today: excluded
+
+    expect(typicalChurn(db, user.id, "2026-06-06")).toBe(300);
+  });
+
+  it("sums devices within a day before taking the median", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-02", { insertions: 100, deletions: 0 });
+    postDay(user, "2026-06-03", { insertions: 100, deletions: 0 });
+    postDay(user, "2026-06-04", { insertions: 100, deletions: 0, deviceId: "laptop" });
+    postDay(user, "2026-06-04", { insertions: 50, deletions: 25, deviceId: "desktop" });
+
+    // Day churns: 100, 100, 175 → median 100; the multi-device day is one sample.
+    expect(typicalChurn(db, user.id, "2026-06-06")).toBe(100);
+  });
+
+  it("returns null until three past active days exist", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-04", { insertions: 100, deletions: 0 });
+    postDay(user, "2026-06-05", { insertions: 100, deletions: 0 });
+    expect(typicalChurn(db, user.id, "2026-06-06")).toBeNull();
+  });
+
+  it("exposes typical_churn in the feed for you and friends", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-02", { insertions: 100, deletions: 0 });
+    postDay(user, "2026-06-03", { insertions: 300, deletions: 0 });
+    postDay(user, "2026-06-04", { insertions: 500, deletions: 0 });
+    upsertStatus(db, user, fixture("status-online"));
+
+    const feed = getFeed(db, user, Date.parse("2026-06-06T18:10:00.000Z"));
+    // History days 100/300/500; the feed day (2026-06-06) is excluded.
+    expect(feed.you.typical_churn).toBe(300);
+
+    const friendless = createUser(db, { handle: "new", displayName: "New" });
+    expect(getFeed(db, friendless, Date.parse("2026-06-06T18:10:00.000Z")).you.typical_churn).toBeNull();
   });
 });
