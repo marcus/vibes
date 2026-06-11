@@ -6,7 +6,10 @@
     title,
     description,
     path = '/',
-    image = '/images/vibes-aspirational-screenshot.png'
+    image = '/images/vibes-share-card.png',
+    imageWidth = 1200,
+    imageHeight = 630,
+    imageAlt = 'The Vibes logo — a neon V on a dark background.'
   } = $props();
 
   const SITE = 'https://vibes.opentangle.com';
@@ -22,9 +25,9 @@
   <meta property="og:description" content={description} />
   <meta property="og:url" content={url} />
   <meta property="og:image" content={imageUrl} />
-  <meta property="og:image:width" content="1536" />
-  <meta property="og:image:height" content="1024" />
-  <meta property="og:image:alt" content="The Vibes Mac app showing a friend feed of who's coding right now." />
+  <meta property="og:image:width" content={imageWidth} />
+  <meta property="og:image:height" content={imageHeight} />
+  <meta property="og:image:alt" content={imageAlt} />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content={title} />
   <meta name="twitter:description" content={description} />
