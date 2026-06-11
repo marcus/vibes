@@ -16,6 +16,34 @@ struct ContentView: View {
     // freely. The feed caps card width internally so cards don't stretch
     // edge-to-edge on wide windows.
     .frame(minWidth: 460, maxWidth: .infinity, minHeight: 520, maxHeight: .infinity)
+    .background(TrafficLightAligner())
+  }
+}
+
+// Drops the traffic lights so they center on the header row. The hidden
+// titlebar parks the buttons in a fixed 28pt band that AppKit won't let us
+// move directly; installing an empty unified toolbar makes that band tall
+// enough that the system centers the buttons lower, level with the wordmark
+// row (which lays out from the true window top via ignoresSafeArea).
+private struct TrafficLightAligner: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    DispatchQueue.main.async { configure(view.window) }
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    DispatchQueue.main.async { configure(nsView.window) }
+  }
+
+  private func configure(_ window: NSWindow?) {
+    guard let window, window.toolbar == nil else { return }
+    let toolbar = NSToolbar(identifier: "vibes-titlebar-spacer")
+    toolbar.showsBaselineSeparator = false
+    window.toolbar = toolbar
+    window.toolbarStyle = .unified
+    window.titlebarAppearsTransparent = true
+    window.titlebarSeparatorStyle = .none
   }
 }
 
@@ -170,10 +198,10 @@ private struct MainPanel: View {
           }
         }
       }
-      // Clear the floating traffic lights horizontally instead of vertically:
-      // the lights end ~72pt from the window edge, and the row's top padding
-      // centers it on their band (mockup titlebar spacing).
-      .padding(.leading, 58)
+      // Clear the traffic lights horizontally: in the unified-toolbar band
+      // (TrafficLightAligner) the buttons end ~86pt from the window edge, so
+      // inset the wordmark past them with a small gap.
+      .padding(.leading, 72)
 
       HomeView()
 
@@ -184,10 +212,10 @@ private struct MainPanel: View {
     }
     .padding(.horizontal, 22)
     .padding(.bottom, 22)
-    .padding(.top, 18)
+    .padding(.top, 14)
     // Share the traffic-light band (mockup titlebar): lay out from the true
     // window top instead of below the hidden titlebar's safe-area inset; the
-    // 18pt top padding centers the header row on the lights.
+    // 14pt top padding centers the header row on the unified-toolbar lights.
     .ignoresSafeArea(.container, edges: .top)
     .sheet(item: $model.pendingInvite) { invite in
       InviteSheet(invite: invite)
