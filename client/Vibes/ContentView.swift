@@ -129,8 +129,27 @@ private struct MainPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
-      HStack(alignment: .top) {
-        Header(title: "vibes")
+      // Slim titlebar-style header (design/mockups): small wordmark + live
+      // count on the left, the floating controls on the right — one quiet row
+      // instead of the old display-size header.
+      HStack(alignment: .center, spacing: 10) {
+        Text("vibes")
+          // Exact size kept: the wordmark is a deliberate display mark, now at
+          // titlebar scale per the orbit mockups.
+          .font(.system(size: 19, weight: .light))
+        if let count = onlineCount {
+          HStack(spacing: 5) {
+            Circle()
+              .fill(Color(nsColor: .systemGreen))
+              .frame(width: 6, height: 6)
+            Text(feedViewModeRaw == FeedViewMode.list.rawValue ? "\(count) online" : "\(count) in orbit")
+              .font(.caption)
+              .foregroundStyle(Color.secondary)
+              .monospacedDigit()
+          }
+          .padding(.top, 2)
+          .accessibilityElement(children: .combine)
+        }
         Spacer()
         GlassEffectContainer(spacing: 10) {
           HStack(spacing: 10) {
@@ -171,6 +190,14 @@ private struct MainPanel: View {
       InviteFriendView()
         .environmentObject(model)
     }
+  }
+
+  // You + friends currently online; nil before the first feed so the count
+  // doesn't flash "0" during launch.
+  private var onlineCount: Int? {
+    guard let feed = model.feed else { return nil }
+    let you = feed.you.mode == .online ? 1 : 0
+    return you + feed.friends.filter { $0.mode == .online }.count
   }
 }
 

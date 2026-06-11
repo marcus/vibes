@@ -352,7 +352,8 @@ private struct OrbView: View {
 
 // MARK: - Drift dock
 
-// Offline friends, compressed into one quiet strip under the sky.
+// Offline friends, compressed into one quiet band under the sky (mockup:
+// "DRIFTING · sam 2h · +210 −95 in kiln · kei 1d").
 private struct DriftDock: View {
   var drifters: [MergedStatus]
 
@@ -360,34 +361,67 @@ private struct DriftDock: View {
     VStack(spacing: 0) {
       Divider()
       ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 16) {
+        HStack(spacing: 18) {
           Text("DRIFTING")
             .font(.caption2.weight(.bold))
             .tracking(1.2)
             .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           ForEach(drifters) { status in
-            HStack(spacing: 6) {
-              AvatarFill(user: status.user, diameter: 20)
-                .saturation(0.3)
-                .opacity(0.8)
-              Text(status.user.displayName)
-                .font(.caption)
-                .foregroundStyle(Color.secondary)
-              Text(lastSeen(status))
-                .font(.caption2)
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-            }
+            DrifterItem(status: status)
           }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 11)
       }
     }
+    .background(Color(nsColor: .quaternarySystemFill).opacity(0.55))
+    .clipShape(RoundedRectangle(cornerRadius: 10))
+  }
+}
+
+private struct DrifterItem: View {
+  var status: MergedStatus
+
+  var body: some View {
+    HStack(spacing: 7) {
+      AvatarFill(user: status.user, diameter: 20)
+        .saturation(0.3)
+        .opacity(0.8)
+      Text(status.user.displayName)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(Color.secondary)
+      detail
+        .font(.caption2)
+        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+        .monospacedDigit()
+        .lineLimit(1)
+    }
+    .accessibilityElement(children: .combine)
   }
 
-  private func lastSeen(_ status: MergedStatus) -> String {
+  // "2h · +210 −95 in kiln" — recency first, then the day's residue when the
+  // friend left one behind. Quiet days are just the recency.
+  private var detail: Text {
+    var text = Text(compactRecency)
+    if status.churn > 0 {
+      text = text + Text(" · ")
+        + Text("+\(status.insertions)").foregroundColor(Color(nsColor: .systemGreen))
+        + Text(" \u{2212}\(status.deletions)").foregroundColor(Color(nsColor: .systemRed))
+      if let repo = status.repoAliases.first {
+        text = text + Text(" in \(repo)")
+      }
+    }
+    return text
+  }
+
+  // Tight relative stamp for the dock ("2h", "1d") — the full relative
+  // phrasing the list rows use reads too long at this density.
+  private var compactRecency: String {
     guard let date = status.updatedAt else { return "" }
-    return date.formatted(.relative(presentation: .named))
+    let seconds = max(0, Date().timeIntervalSince(date))
+    if seconds < 3600 { return "\(max(1, Int(seconds / 60)))m" }
+    if seconds < 86_400 { return "\(Int(seconds / 3600))h" }
+    return "\(Int(seconds / 86_400))d"
   }
 }
 
