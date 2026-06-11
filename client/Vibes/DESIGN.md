@@ -110,10 +110,13 @@ above Invite (repos but no friends).
 ## Feed text size
 
 `FeedTextSize` (Settings → General → Appearance, `@AppStorage "feedTextSize"`)
-maps Standard/Large/Extra Large to `DynamicTypeSize` `.large/.xLarge/.xxLarge`
-and is applied to the feed content only (status field, orbit, list) — never
-the window chrome. The default is **Large**: one notch above system size for
-readability. Fixed-size exceptions (LOC bar counts) deliberately don't scale.
+maps Standard/Large/Extra Large to a `feedTextScale` multiplier (1.0 / 1.15 /
+1.3, environment key in `OrbitView.swift`). macOS SwiftUI ignores
+`.dynamicTypeSize` (verified 2026-06-11), so the feed's text uses explicit
+base sizes that mirror the text styles they replaced (headline 13,
+subheadline 11, caption/caption2 10) multiplied by the scale. Applied to feed
+content only (orbit labels, repo chips, list cards, LOC bar counts) — never
+the window chrome. The default is **Large**: one notch up for readability.
 
 ## Sanctioned exceptions
 

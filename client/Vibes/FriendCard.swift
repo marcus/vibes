@@ -22,6 +22,7 @@ enum FriendCardSize {
 struct FriendCard: View {
   var status: MergedStatus
   var isYou: Bool = false
+  @Environment(\.feedTextScale) private var textScale
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -49,17 +50,17 @@ struct FriendCard: View {
       AvatarView(status: status, size: .comfortable, isOnline: isOnline, breathes: isOnline)
       VStack(alignment: .leading, spacing: 2) {
         Text(isYou ? "you" : status.user.displayName)
-          .font(.headline)
+          .font(.system(size: 13 * textScale, weight: .semibold))
           .foregroundStyle(Color.primary)
           .lineLimit(1)
         Text(statusLine)
-          .font(.subheadline)
+          .font(.system(size: 11 * textScale))
           .foregroundStyle(Color.secondary)
           .lineLimit(1)
       }
       Spacer(minLength: 4)
       Text(lastSeen)
-        .font(.caption)
+        .font(.system(size: 10 * textScale))
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(.top, 2)
@@ -70,7 +71,7 @@ struct FriendCard: View {
   private var legend: some View {
     HStack(alignment: .firstTextBaseline) {
       Text("\(Text("\(status.commitCount)").fontWeight(.bold).foregroundColor(Color.primary))\(status.commitCount == 1 ? " commit today" : " commits today")")
-      .font(.caption)
+      .font(.system(size: 10 * textScale))
       .foregroundStyle(Color.secondary)
       .monospacedDigit()
 
@@ -78,7 +79,7 @@ struct FriendCard: View {
 
       if !status.repoAliases.isEmpty {
         Text(status.repoAliases.joined(separator: ", "))
-          .font(.caption.weight(.semibold))
+          .font(.system(size: 10 * textScale, weight: .semibold))
           .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           .lineLimit(1)
           .truncationMode(.tail)
@@ -145,6 +146,7 @@ struct FriendCard: View {
 private struct LocBar: View {
   var added: Int
   var removed: Int
+  @Environment(\.feedTextScale) private var textScale
 
   private let height: CGFloat = 22
   private let minHalf: CGFloat = 64
@@ -164,10 +166,10 @@ private struct LocBar: View {
           .frame(width: geo.size.width - addWidth, height: height, alignment: .trailing)
           .background(Color(nsColor: .systemRed).opacity(0.12))
       }
-      // Exact size kept: the numbers must fit inside the fixed-height (22pt)
-      // capsule with the per-half minimum width; monospaced digits keep the
-      // +/− counts aligned.
-      .font(.system(size: 11, weight: .bold))
+      // Base size 11 must fit inside the fixed-height (22pt) capsule with the
+      // per-half minimum width; even at the largest feed scale (1.3 → ~14pt)
+      // it stays inside. Monospaced digits keep the +/− counts aligned.
+      .font(.system(size: 11 * textScale, weight: .bold))
       .monospacedDigit()
       .clipShape(Capsule())
     }
@@ -190,6 +192,7 @@ private struct LocBar: View {
 // "away" divider and shouldn't compete with the online cards.
 struct AwayFriendRow: View {
   var status: MergedStatus
+  @Environment(\.feedTextScale) private var textScale
 
   var body: some View {
     HStack(spacing: 10) {
@@ -197,17 +200,17 @@ struct AwayFriendRow: View {
         .saturation(0.3)
         .opacity(0.8)
       Text(status.user.displayName)
-        .font(.subheadline.weight(.semibold))
+        .font(.system(size: 11 * textScale, weight: .semibold))
         .foregroundStyle(Color.secondary)
         .lineLimit(1)
       Text(recentSummary)
-        .font(.caption)
+        .font(.system(size: 10 * textScale))
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: 8)
       Text(lastSeen)
-        .font(.caption)
+        .font(.system(size: 10 * textScale))
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
     }
     .padding(.vertical, 7)

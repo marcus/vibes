@@ -18,6 +18,21 @@ enum FeedViewMode: String, CaseIterable {
   case list
 }
 
+// Feed text scaling: macOS SwiftUI ignores `.dynamicTypeSize`, so the feed's
+// text applies this multiplier to explicit base sizes that mirror the macOS
+// text styles they replace (headline 13, subheadline 11, caption/caption2 10).
+// Set from the user's FeedTextSize setting in HomeView; chrome never scales.
+struct FeedTextScaleKey: EnvironmentKey {
+  static let defaultValue: CGFloat = 1.0
+}
+
+extension EnvironmentValues {
+  var feedTextScale: CGFloat {
+    get { self[FeedTextScaleKey.self] }
+    set { self[FeedTextScaleKey.self] = newValue }
+  }
+}
+
 struct OrbitView: View {
   var you: MergedStatus
   var friends: [MergedStatus]
@@ -206,6 +221,7 @@ private struct OrbView: View {
 
   @State private var floating = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.feedTextScale) private var textScale
 
   private static let minDiameter: CGFloat = 44
   private static let maxDiameter: CGFloat = 84
@@ -275,11 +291,11 @@ private struct OrbView: View {
   private var labels: some View {
     VStack(spacing: 1) {
       Text(isYou ? "you" : status.user.displayName)
-        .font(.subheadline.weight(.semibold))
+        .font(.system(size: 11 * textScale, weight: .semibold))
         .lineLimit(1)
       if let note = status.manualStatus, !note.isEmpty {
         Text(note)
-          .font(.caption)
+          .font(.system(size: 10 * textScale))
           .foregroundStyle(Color.secondary)
           .lineLimit(1)
           .truncationMode(.tail)
@@ -299,10 +315,10 @@ private struct OrbView: View {
         Text("· \(status.commitCount)c")
           .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
       }
-      .font(.caption2.weight(.semibold).monospaced())
+      .font(.system(size: 10 * textScale, weight: .semibold).monospaced())
     } else {
       Text("quiet so far")
-        .font(.caption2)
+        .font(.system(size: 10 * textScale))
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
     }
   }
@@ -316,7 +332,7 @@ private struct OrbView: View {
         .fill(Color(hue: stableHue(alias), saturation: 0.55, brightness: 0.9))
         .frame(width: 5, height: 5)
       Text(alias)
-        .font(.caption2)
+        .font(.system(size: 10 * textScale))
         .foregroundStyle(Color.secondary)
         .lineLimit(1)
     }
@@ -390,6 +406,7 @@ private struct DriftDock: View {
 
 private struct DrifterItem: View {
   var status: MergedStatus
+  @Environment(\.feedTextScale) private var textScale
 
   var body: some View {
     HStack(spacing: 7) {
@@ -397,10 +414,10 @@ private struct DrifterItem: View {
         .saturation(0.3)
         .opacity(0.8)
       Text(status.user.displayName)
-        .font(.caption.weight(.semibold))
+        .font(.system(size: 10 * textScale, weight: .semibold))
         .foregroundStyle(Color.secondary)
       detail
-        .font(.caption2)
+        .font(.system(size: 10 * textScale))
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
         .monospacedDigit()
         .lineLimit(1)

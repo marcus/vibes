@@ -832,10 +832,11 @@ private struct EditableSettingField: View {
   }
 }
 
-// Feed text size (Settings → General → Appearance): scales the Dynamic-Type
-// styles inside the feed — orbit labels, repo chips, list cards — without
-// touching the window chrome. Defaults one notch above the system size, a
-// deliberate readability bump.
+// Feed text size (Settings → General → Appearance): scales the text inside
+// the feed — orbit labels, repo chips, list cards — without touching the
+// window chrome. macOS SwiftUI ignores `.dynamicTypeSize`, so the feed views
+// multiply their base sizes by `feedTextScale` (see OrbitView.swift) instead.
+// Defaults one notch up, a deliberate readability bump.
 enum FeedTextSize: String, CaseIterable, Identifiable {
   case standard
   case large
@@ -851,11 +852,11 @@ enum FeedTextSize: String, CaseIterable, Identifiable {
     }
   }
 
-  var dynamicTypeSize: DynamicTypeSize {
+  var scale: CGFloat {
     switch self {
-    case .standard: .large  // the system default
-    case .large: .xLarge
-    case .extraLarge: .xxLarge
+    case .standard: 1.0
+    case .large: 1.15
+    case .extraLarge: 1.3
     }
   }
 }
@@ -909,7 +910,7 @@ private struct HomeView: View {
         feedList
       }
     }
-    .dynamicTypeSize(feedTextSize.dynamicTypeSize)
+    .environment(\.feedTextScale, feedTextSize.scale)
   }
 
   private var feedList: some View {
@@ -1286,7 +1287,7 @@ private struct Footer: View {
           .accessibilityLabel("Invite a Friend")
           .overlay(alignment: .top) {
             if needsFriends {
-              OnboardingNudge(text: "invite a friend")
+              OnboardingNudge(text: "invite a friend", anchor: .center)
             }
           }
 
@@ -1306,9 +1307,9 @@ private struct Footer: View {
           .buttonStyle(.plain)
           .glassEffect(.regular.interactive(), in: .circle)
           .accessibilityLabel("Open Settings")
-          .overlay(alignment: .top) {
+          .overlay(alignment: .topTrailing) {
             if needsRepos {
-              OnboardingNudge(text: "add your repos")
+              OnboardingNudge(text: "add your repos", anchor: .trailing)
             }
           }
         }
@@ -1329,14 +1330,22 @@ private struct Footer: View {
 
 // A quiet onboarding pointer: caption text over a gently bobbing arrow,
 // floated above the control it points at. Purely decorative — never blocks
-// clicks on the control underneath.
+// clicks on the control underneath. `.trailing` keeps the text inside the
+// window when the target hugs the right edge (the settings gear); the arrow
+// stays centered over the 32pt control either way.
 private struct OnboardingNudge: View {
+  enum Anchor {
+    case center
+    case trailing
+  }
+
   var text: String
+  var anchor: Anchor
   @State private var bob = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    VStack(spacing: 5) {
+    VStack(alignment: anchor == .trailing ? .trailing : .center, spacing: 5) {
       Text(text)
         .font(.caption)
         .foregroundStyle(Color.secondary)
@@ -1344,15 +1353,17 @@ private struct OnboardingNudge: View {
       Image(systemName: "arrow.down")
         .font(.system(size: 14, weight: .semibold))
         .foregroundStyle(Color.secondary)
+        .padding(.trailing, anchor == .trailing ? (FloatingControl.height - 14) / 2 : 0)
     }
-    .offset(y: bob ? -3 : 3)
+    // Lift the whole nudge clear of the control it overlays (overlay aligns
+    // tops, so without this it would sit on the button), then bob gently.
+    .offset(y: -50 + (bob ? -3 : 3))
     .onAppear {
       guard !reduceMotion else { return }
       withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
         bob = true
       }
     }
-    .alignmentGuide(.top) { $0[.bottom] + 14 }
     .allowsHitTesting(false)
     .accessibilityHidden(true)
   }
