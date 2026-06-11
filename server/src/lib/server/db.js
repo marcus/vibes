@@ -148,6 +148,25 @@ const MIGRATIONS = [
       CREATE INDEX idx_daily_activity_user_day ON daily_activity(user_id, client_day);
     `,
   },
+  {
+    version: 7,
+    name: "device_link_codes",
+    sql: `
+      -- Short-lived pairing codes for adding another Mac to an existing
+      -- account. Generated on a signed-in device, typed into the new one;
+      -- claiming mints a fresh per-device auth token. Single use, ~10 minute
+      -- expiry, and only the hash is stored (same posture as invites).
+      CREATE TABLE device_link_codes (
+        id TEXT PRIMARY KEY,
+        code_hash TEXT NOT NULL UNIQUE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        claimed_at TEXT,
+        claimed_device_label TEXT
+      );
+    `,
+  },
 ];
 
 /**

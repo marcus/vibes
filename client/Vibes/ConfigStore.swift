@@ -200,6 +200,87 @@ struct TokenStore {
   #endif
 }
 
+// Account hand-off between the user's Macs via iCloud Keychain: one
+// synchronizable item holding the relay URL, identity, and a bearer token that
+// every signed-in Mac keeps fresh on launch. A brand-new Mac on the same Apple
+// ID reads it to offer one-click "continue as @handle" — it uses the synced
+// token once to mint its own per-device token (POST /api/tokens) and never
+// stores the synced token as its working credential.
+//
+// Everything here is best-effort by contract: iCloud Keychain may be off, and
+// unsigned dev builds may not be able to access synchronizable items at all.
+// Callers treat nil/false as "no synced account" and fall back to manual setup.
+struct SyncedAccount: Codable, Equatable {
+  var relayURL: URL
+  var handle: String
+  var displayName: String
+  var token: String
+
+  enum CodingKeys: String, CodingKey {
+    case relayURL = "relay_url"
+    case handle
+    case displayName = "display_name"
+    case token
+  }
+}
+
+struct SyncedAccountStore {
+  private let service = "com.marcusvorwaller.vibes.account"
+  private let account = "default"
+
+  func read() -> SyncedAccount? {
+    var query = baseQuery()
+    query[kSecMatchLimit as String] = kSecMatchLimitOne
+    query[kSecReturnData as String] = true
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess, let data = item as? Data else {
+      logFailure("read", status)
+      return nil
+    }
+    return try? JSONCoding.decoder.decode(SyncedAccount.self, from: data)
+  }
+
+  func save(_ syncedAccount: SyncedAccount) {
+    guard let data = try? JSONCoding.encoder.encode(syncedAccount) else { return }
+    var query = baseQuery()
+    if SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess {
+      let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+      logFailure("update", status)
+    } else {
+      query[kSecValueData as String] = data
+      let status = SecItemAdd(query as CFDictionary, nil)
+      logFailure("add", status)
+    }
+  }
+
+  func delete() {
+    logFailure("delete", SecItemDelete(baseQuery() as CFDictionary))
+  }
+
+  // Best-effort is the contract, but a dev should still be able to see the
+  // OSStatus when the synchronizable keychain says no (e.g. -34018
+  // errSecMissingEntitlement on builds without keychain entitlements).
+  private func logFailure(_ operation: String, _ status: OSStatus) {
+    #if DEBUG
+      guard status != errSecSuccess && status != errSecItemNotFound else { return }
+      let message = SecCopyErrorMessageString(status, nil) as String? ?? "error \(status)"
+      print("SyncedAccountStore \(operation) failed: \(message) (\(status))")
+    #endif
+  }
+
+  private func baseQuery() -> [String: Any] {
+    [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      // The whole point of this item: ride iCloud Keychain to the user's
+      // other Macs. Matching must specify it too or reads miss the item.
+      kSecAttrSynchronizable as String: true
+    ]
+  }
+}
+
 struct KeychainStore {
   private let service = "com.marcusvorwaller.vibes.relay-token"
   private let account = "default"

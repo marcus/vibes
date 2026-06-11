@@ -60,6 +60,31 @@ private struct SetupPanel: View {
     VStack(alignment: .leading, spacing: 24) {
       Header(title: "vibes", subtitle: "private presence for coding friends")
 
+      // Zero-effort path: iCloud Keychain carried the account over from
+      // another Mac. One click mints this Mac its own token and signs in.
+      if let synced = model.syncedAccount {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Welcome back, \(synced.displayName).")
+            .font(.title3.weight(.light))
+          Text("Found your account in iCloud Keychain.")
+            .font(.subheadline)
+            .foregroundStyle(Color.secondary)
+          Button {
+            Task { await model.continueAsSyncedAccount(deviceLabel: deviceLabel) }
+          } label: {
+            Label("Use this Mac as @\(synced.handle)", systemImage: "person.crop.circle.badge.checkmark")
+          }
+          .buttonStyle(.glassProminent)
+          .disabled(model.isBusy)
+        }
+
+        Divider()
+
+        Text("Or set up something else:")
+          .font(.caption)
+          .foregroundStyle(Color.secondary)
+      }
+
       VStack(alignment: .leading, spacing: 8) {
         Text("Let's set you up.")
           .font(.title3.weight(.light))
@@ -84,6 +109,35 @@ private struct SetupPanel: View {
         }
         .buttonStyle(.glassProminent)
         .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
+      }
+
+      Divider()
+
+      // Second Mac, same account: pairing-code flow. The code comes from the
+      // already-signed-in Mac (Settings → General → Link Another Mac).
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Already using Vibes on another Mac?")
+          .font(.subheadline)
+        Text("In Vibes on that Mac, open Settings → General → Link Another Mac, then enter the code here.")
+          .font(.caption)
+          .foregroundStyle(Color.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 10) {
+          TextField("KQ4M-7XW2", text: $model.linkCodeInput)
+            .textFieldStyle(.plain)
+            .padding(10)
+            .background(Color(nsColor: .quaternarySystemFill))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .frame(maxWidth: 160)
+            .onSubmit { linkThisMac() }
+          Button {
+            linkThisMac()
+          } label: {
+            Label("Link this Mac", systemImage: "laptopcomputer")
+          }
+          .buttonStyle(.glass)
+          .disabled(model.linkCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
+        }
       }
 
       DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
@@ -144,6 +198,27 @@ private struct SetupPanel: View {
     // header below the ~28pt window-control band so the "vibes" wordmark doesn't
     // collide with the red/yellow/green controls.
     .safeAreaPadding(.top, 28)
+    // iCloud Keychain may deliver the synced account minutes after first
+    // launch — re-check whenever the unconfigured app comes to the front.
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      model.recheckSyncedAccount()
+    }
+    // A vibes://link deep link can carry the source relay (self-hosted setups).
+    .onReceive(model.$linkRelayHint) { hint in
+      if let hint {
+        relayURL = hint
+      }
+    }
+  }
+
+  private func linkThisMac() {
+    Task {
+      await model.linkThisMac(
+        code: model.linkCodeInput,
+        deviceLabel: deviceLabel,
+        relayURLText: relayURL
+      )
+    }
   }
 }
 
@@ -314,6 +389,79 @@ private struct GeneralSettingsPane: View {
         )
       }
 
+      Section("Devices") {
+        if model.devices.isEmpty {
+          Text("Your Macs appear here once they connect.")
+            .foregroundStyle(.secondary)
+        } else {
+          ForEach(model.devices) { device in
+            HStack {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(device.label ?? "Mac")
+                Text(deviceSubtitle(device))
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+              Spacer()
+              if device.current {
+                Text("This Mac")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                  .padding(.horizontal, 8)
+                  .padding(.vertical, 4)
+                  .background(Color(nsColor: .quaternarySystemFill))
+                  .clipShape(Capsule())
+              } else {
+                Button("Remove") {
+                  Task { await model.revokeDevice(device) }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+              }
+            }
+          }
+        }
+      }
+
+      Section("Link Another Mac") {
+        if let link = activeLinkCode {
+          LabeledContent("Code") {
+            Text(link.code)
+              .font(.system(.title3, design: .monospaced).weight(.medium))
+              .textSelection(.enabled)
+          }
+          Text("On your new Mac, open Vibes and choose “Link this Mac”, then enter this code. It expires \(link.expiresAt.formatted(.relative(presentation: .named))) and works once. Copy Link gives a vibes:// URL you can message to yourself instead.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+          HStack(spacing: 8) {
+            Button {
+              model.copyDeviceLinkCode()
+            } label: {
+              Label("Copy Code", systemImage: "doc.on.doc")
+            }
+            .buttonStyle(.bordered)
+            Button {
+              model.copyDeviceLinkURL()
+            } label: {
+              Label("Copy Link", systemImage: "link")
+            }
+            .buttonStyle(.bordered)
+            Button("New Code") {
+              Task { await model.createDeviceLinkCode() }
+            }
+            .buttonStyle(.bordered)
+          }
+        } else {
+          LabeledContent("Use this account on another Mac") {
+            Button("Generate Code") {
+              Task { await model.createDeviceLinkCode() }
+            }
+            .buttonStyle(.bordered)
+          }
+        }
+      }
+
       Section("Local Identifiers") {
         LabeledContent("Device ID") {
           Text(displayDeviceID)
@@ -328,6 +476,9 @@ private struct GeneralSettingsPane: View {
     }
     .formStyle(.grouped)
     .onAppear(perform: populate)
+    .task {
+      await model.refreshDevices()
+    }
   }
 
   private func populate() {
@@ -335,6 +486,20 @@ private struct GeneralSettingsPane: View {
     handle = model.config?.identity.handle ?? ""
     deviceLabel = model.config?.device.label ?? ""
     relayURL = model.config?.server.relayURL.absoluteString ?? ""
+  }
+
+  private func deviceSubtitle(_ device: DeviceSummary) -> String {
+    guard let lastUsed = device.lastUsedAt else {
+      return "added \(device.createdAt.formatted(.relative(presentation: .named)))"
+    }
+    return "active \(lastUsed.formatted(.relative(presentation: .named)))"
+  }
+
+  // An expired code is useless — fall back to the Generate button instead of
+  // showing "expires 5 minutes ago".
+  private var activeLinkCode: DeviceLinkCode? {
+    guard let link = model.deviceLinkCode, link.expiresAt > Date() else { return nil }
+    return link
   }
 
   private var displayDeviceID: String {

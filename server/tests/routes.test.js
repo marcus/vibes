@@ -19,6 +19,10 @@ const [
   avatarGradientRoute,
   shortInviteRoute,
   invitePageServer,
+  linkCodesRoute,
+  linkCodeClaimRoute,
+  devicesRoute,
+  tokensRoute,
   relay,
 ] = await Promise.all([
   import("../src/lib/server/db.js"),
@@ -30,6 +34,10 @@ const [
   import("../src/routes/api/avatar/gradient/+server.js"),
   import("../src/routes/i/[code]/+server.js"),
   import("../src/routes/invite/[code]/+page.server.js"),
+  import("../src/routes/api/devices/link-codes/+server.js"),
+  import("../src/routes/api/devices/link-codes/claim/+server.js"),
+  import("../src/routes/api/devices/+server.js"),
+  import("../src/routes/api/tokens/+server.js"),
   import("../src/lib/server/relay.js"),
 ]);
 
@@ -191,6 +199,136 @@ describe("GET /api/me", () => {
         },
       },
     });
+  });
+});
+
+describe("device link codes", () => {
+  it("mints a code for the authenticated user and claims it from a new device", async () => {
+    const { user, token } = registerUser(db, {
+      displayName: "Dana Scully",
+      deviceLabel: "Dana MacBook",
+      timezone: "America/Los_Angeles",
+    });
+
+    const createResponse = await linkCodesRoute.POST(
+      routeEvent("/api/devices/link-codes", { token: token.token, ip: "203.0.113.30" }),
+    );
+    const created = await responseJson(createResponse);
+    expect(created.status).toBe(201);
+    expect(created.body.code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(created.body.expires_at).toBeTruthy();
+
+    const claimResponse = await linkCodeClaimRoute.POST(
+      routeEvent("/api/devices/link-codes/claim", {
+        body: { code: created.body.code, device_label: "Mac mini" },
+        ip: "203.0.113.31",
+      }),
+    );
+    const claimed = await responseJson(claimResponse);
+    expect(claimed.status).toBe(201);
+    expect(claimed.body.user).toMatchObject({
+      id: user.id,
+      handle: "dana-scully",
+      timezone: "America/Los_Angeles",
+    });
+    expect(claimed.body.token).toBeTruthy();
+    expect(claimed.body.token).not.toBe(token.token);
+    expect(authenticateToken(db, claimed.body.token).user.id).toBe(user.id);
+  });
+
+  it("requires authentication to mint a code", async () => {
+    const response = await linkCodesRoute.POST(
+      routeEvent("/api/devices/link-codes", { ip: "203.0.113.32" }),
+    );
+    expect(await responseJson(response)).toMatchObject({
+      status: 401,
+      body: { error: { code: "unauthorized" } },
+    });
+  });
+
+  it("rejects a bad code with the stable error envelope", async () => {
+    const response = await linkCodeClaimRoute.POST(
+      routeEvent("/api/devices/link-codes/claim", {
+        body: { code: "AAAA-AAAA" },
+        ip: "203.0.113.33",
+      }),
+    );
+    expect(await responseJson(response)).toMatchObject({
+      status: 410,
+      body: { error: { code: "link_code_unusable" } },
+    });
+  });
+
+  it("rate limits claim attempts — the brute-force guard on the unauthenticated endpoint", async () => {
+    const ip = "203.0.113.99";
+    for (let i = 0; i < 10; i += 1) {
+      const response = await linkCodeClaimRoute.POST(
+        routeEvent("/api/devices/link-codes/claim", { body: { code: "AAAA-AAAA" }, ip }),
+      );
+      expect(response.status).toBe(410);
+    }
+    const limited = await linkCodeClaimRoute.POST(
+      routeEvent("/api/devices/link-codes/claim", { body: { code: "AAAA-AAAA" }, ip }),
+    );
+    expect(await responseJson(limited)).toMatchObject({
+      status: 429,
+      body: { error: { code: "rate_limited" } },
+    });
+  });
+});
+
+describe("devices and token minting", () => {
+  function getEvent(path, token, ip = "203.0.113.40") {
+    const request = new Request(`https://vibes.test${path}`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    return { request, url: new URL(request.url), getClientAddress: () => ip };
+  }
+
+  it("lists the account's devices and flags the caller's token as current", async () => {
+    const { user, token } = registerUser(db, {
+      displayName: "Dana Scully",
+      deviceLabel: "Dana MacBook",
+    });
+    const minted = await responseJson(
+      await tokensRoute.POST(
+        routeEvent("/api/tokens", {
+          token: token.token,
+          body: { label: "Mac mini" },
+          ip: "203.0.113.41",
+        }),
+      ),
+    );
+    expect(minted.status).toBe(201);
+    expect(minted.body.user.id).toBe(user.id);
+    expect(authenticateToken(db, minted.body.token).user.id).toBe(user.id);
+
+    const fromMacBook = await responseJson(
+      await devicesRoute.GET(getEvent("/api/devices", token.token)),
+    );
+    expect(fromMacBook.status).toBe(200);
+    expect(fromMacBook.body.devices.map((d) => [d.label, d.current])).toEqual([
+      ["Dana MacBook", true],
+      ["Mac mini", false],
+    ]);
+
+    const fromMini = await responseJson(
+      await devicesRoute.GET(getEvent("/api/devices", minted.body.token)),
+    );
+    expect(fromMini.body.devices.map((d) => [d.label, d.current])).toEqual([
+      ["Dana MacBook", false],
+      ["Mac mini", true],
+    ]);
+  });
+
+  it("requires auth on both endpoints", async () => {
+    const list = await devicesRoute.GET(getEvent("/api/devices", "nope", "203.0.113.42"));
+    expect((await responseJson(list)).status).toBe(401);
+    const mint = await tokensRoute.POST(
+      routeEvent("/api/tokens", { body: { label: "x" }, ip: "203.0.113.43" }),
+    );
+    expect((await responseJson(mint)).status).toBe(401);
   });
 });
 

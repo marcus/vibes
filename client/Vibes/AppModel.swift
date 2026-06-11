@@ -16,6 +16,18 @@ final class AppModel: ObservableObject {
   @Published var latestInviteURL: URL?
   @Published var pendingInvite: PendingInvite?
   @Published var inviteCodeInput: String = ""
+  // Device-linking state: the code minted on this (signed-in) Mac for adding
+  // another one, and the code typed into setup on a new Mac.
+  @Published var deviceLinkCode: DeviceLinkCode?
+  @Published var linkCodeInput: String = ""
+  // The account's active devices (Settings → General → Devices).
+  @Published var devices: [DeviceSummary] = []
+  // An account found in iCloud Keychain on a not-yet-configured Mac — drives
+  // the setup screen's one-click "continue as @handle" card.
+  @Published var syncedAccount: SyncedAccount?
+  // Relay URL carried by a vibes://link/<code>?relay=… deep link, so codes
+  // from self-hosted relays work without touching the Advanced field.
+  @Published var linkRelayHint: String?
   @Published var isBusy = false
   @Published var lastError: String?
   @Published var successMessage: String? {
@@ -50,10 +62,15 @@ final class AppModel: ObservableObject {
 
   private let configStore = ConfigStore()
   private let keychain = TokenStore()
+  private let syncedAccountStore = SyncedAccountStore()
   private let scanner = GitScanner()
   private var loopTask: Task<Void, Never>?
   private var successMessageDismissTask: Task<Void, Never>?
   private var lastDeviceStatusPayload: StatusPayload?
+  // The synced-account item is (re)written only after this device's token has
+  // proven itself against the relay, so a revoked Mac can't keep advertising
+  // a dead credential to the user's other Macs via iCloud Keychain.
+  private var syncedAccountAdvertised = false
 
   var isConfigured: Bool {
     config != nil && !token.isEmpty
@@ -84,10 +101,24 @@ final class AppModel: ObservableObject {
       if isConfigured {
         startLoop()
         Task { await refreshAll() }
+      } else {
+        recheckSyncedAccount()
       }
     } catch {
       lastError = error.localizedDescription
     }
+  }
+
+  // Look for an account carried over via iCloud Keychain. Called at launch
+  // and whenever the unconfigured app comes to the foreground — on a brand-new
+  // Mac the item often syncs minutes after first launch.
+  func recheckSyncedAccount() {
+    guard !isConfigured else { return }
+    guard let found = syncedAccountStore.read(),
+          isAllowedRelayURL(found.relayURL),
+          !found.token.isEmpty
+    else { return }
+    syncedAccount = found
   }
 
   func register(displayName: String, deviceLabel: String, relayURLText: String) async {
@@ -125,6 +156,180 @@ final class AppModel: ObservableObject {
       lastError = error.localizedDescription
     }
     isBusy = false
+  }
+
+  // "Link this Mac": exchange a pairing code from the other Mac for a fresh
+  // per-device token, then install the hydrated account exactly like register.
+  func linkThisMac(code rawCode: String, deviceLabel: String, relayURLText: String) async {
+    let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !code.isEmpty else {
+      lastError = "Enter the code from your other Mac."
+      return
+    }
+    guard let relayURL = normalizeRelayURL(relayURLText.nilIfBlank ?? "https://vibes.opentangle.com") else {
+      lastError = "Use HTTPS for hosted relays. HTTP is only allowed for localhost."
+      return
+    }
+    let label = deviceLabel.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+      ?? Host.current().localizedName
+      ?? "Mac"
+
+    isBusy = true
+    lastError = nil
+    successMessage = nil
+    do {
+      let identity = try await RelayClient(baseURL: relayURL, token: "").claimDeviceLinkCode(
+        code: code,
+        deviceLabel: label
+      )
+      let next = VibesConfig.firstLaunch(
+        relayURL: relayURL,
+        handle: identity.user.handle,
+        displayName: identity.user.displayName,
+        deviceLabel: label,
+        timezone: identity.user.timezone ?? TimeZone.current.identifier
+      )
+      await install(config: next, token: identity.token)
+      linkCodeInput = ""
+      showSuccess("This Mac is now linked to @\(identity.user.handle).")
+    } catch {
+      lastError = error.localizedDescription
+    }
+    isBusy = false
+  }
+
+  // One-click setup from an account found in iCloud Keychain: use the synced
+  // token once to mint this Mac its own per-device token, then install like
+  // register. The synced credential is never stored as this Mac's token.
+  func continueAsSyncedAccount(deviceLabel: String) async {
+    guard let synced = syncedAccount else { return }
+    let label = deviceLabel.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+      ?? Host.current().localizedName
+      ?? "Mac"
+
+    isBusy = true
+    lastError = nil
+    successMessage = nil
+    do {
+      let identity = try await RelayClient(baseURL: synced.relayURL, token: synced.token)
+        .mintDeviceToken(label: label)
+      let next = VibesConfig.firstLaunch(
+        relayURL: synced.relayURL,
+        handle: identity.user.handle,
+        displayName: identity.user.displayName,
+        deviceLabel: label,
+        timezone: identity.user.timezone ?? TimeZone.current.identifier
+      )
+      await install(config: next, token: identity.token)
+      syncedAccount = nil
+      showSuccess("This Mac is now linked to @\(identity.user.handle).")
+    } catch {
+      // The synced credential is stale (its device was revoked, or the
+      // account changed). Drop the dead item and fall back to the code flow.
+      if (error as? RelayClientError)?.statusCode == 401 {
+        syncedAccountStore.delete()
+        syncedAccount = nil
+        lastError = "The account saved in iCloud Keychain no longer works. Link with a code from your other Mac instead."
+      } else {
+        lastError = error.localizedDescription
+      }
+    }
+    isBusy = false
+  }
+
+  // Keep the iCloud-synced account item fresh so a future new Mac can offer
+  // one-click setup. Best-effort: failures (iCloud Keychain off, dev-build
+  // keychain limits) silently leave the manual paths as the way in.
+  private func refreshSyncedAccountItem() {
+    guard let config, !token.isEmpty, !config.identity.handle.isEmpty else { return }
+    syncedAccountStore.save(
+      SyncedAccount(
+        relayURL: config.server.relayURL,
+        handle: config.identity.handle,
+        displayName: config.identity.displayName,
+        token: token
+      )
+    )
+  }
+
+  // Advertise once per launch, and only after a sync proves the token works.
+  private func advertiseSyncedAccountIfNeeded() {
+    guard !syncedAccountAdvertised else { return }
+    syncedAccountAdvertised = true
+    refreshSyncedAccountItem()
+  }
+
+  private func handleSyncFailure(_ error: Error) {
+    guard (error as? RelayClientError)?.statusCode == 401 else {
+      lastError = error.localizedDescription
+      return
+    }
+    // This Mac's token was revoked (likely removed from another Mac's device
+    // list). Stop advertising it, and pull it from iCloud Keychain if it's
+    // the credential stored there — leaving it would break welcome-back on
+    // the user's next Mac.
+    syncedAccountAdvertised = true
+    if let synced = syncedAccountStore.read(), synced.token == token {
+      syncedAccountStore.delete()
+    }
+    lastError = "This Mac's access was removed. Link it again from another Mac (Settings → General)."
+  }
+
+  // Quiet on failure: this runs when Settings opens, and a transient network
+  // error there shouldn't paint the main window's footer red.
+  func refreshDevices() async {
+    guard let config, isConfigured else { return }
+    if let response = try? await client(for: config).listDevices() {
+      devices = response.devices
+    }
+  }
+
+  // Revoke another Mac's token. The server allows revoking your own token,
+  // but the UI never offers it for the current device ("This Mac").
+  func revokeDevice(_ device: DeviceSummary) async {
+    guard let config, isConfigured, !device.current else { return }
+    do {
+      try await client(for: config).revokeToken(id: device.tokenId)
+      await refreshDevices()
+      showSuccess("Removed \(device.label ?? "device").")
+    } catch {
+      lastError = error.localizedDescription
+    }
+  }
+
+  // Mint a pairing code on this (signed-in) Mac for Settings → General →
+  // Link Another Mac.
+  func createDeviceLinkCode() async {
+    guard let config, isConfigured else { return }
+    lastError = nil
+    do {
+      deviceLinkCode = try await client(for: config).createDeviceLinkCode()
+    } catch {
+      lastError = error.localizedDescription
+    }
+  }
+
+  func copyDeviceLinkCode() {
+    guard let deviceLinkCode else { return }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(deviceLinkCode.code, forType: .string)
+  }
+
+  // A vibes://link/<code>?relay=… URL to message/AirDrop to yourself: opening
+  // it on the new Mac prefills both the code and the relay (so self-hosted
+  // relays work without touching Advanced).
+  func copyDeviceLinkURL() {
+    guard let deviceLinkCode, let config else { return }
+    var components = URLComponents()
+    components.scheme = "vibes"
+    components.host = "link"
+    components.path = "/\(deviceLinkCode.code)"
+    components.queryItems = [
+      URLQueryItem(name: "relay", value: config.server.relayURL.absoluteString)
+    ]
+    guard let url = components.url else { return }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(url.absoluteString, forType: .string)
   }
 
   func completeManualSetup(relayURLText: String, token: String, handle: String, displayName: String, deviceLabel: String) async {
@@ -206,6 +411,9 @@ final class AppModel: ObservableObject {
       token = cleanToken
       mode = next.presence.mode
       manualStatus = next.presence.manualStatus
+      // This token just came from the relay, so it's proven — advertise now.
+      syncedAccountAdvertised = true
+      refreshSyncedAccountItem()
       startLoop()
       await refreshAll()
       if pendingInvite != nil {
@@ -218,7 +426,7 @@ final class AppModel: ObservableObject {
 
   func handleIncomingURL(_ url: URL) {
     guard url.scheme?.lowercased() == "vibes",
-          url.host(percentEncoded: false)?.lowercased() == "invite",
+          let host = url.host(percentEncoded: false)?.lowercased(),
           let code = url.pathComponents.first(where: { component in
             component != "/" && !component.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           })?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -227,9 +435,27 @@ final class AppModel: ObservableObject {
       return
     }
 
-    pendingInvite = PendingInvite(code: code)
-    inviteCodeInput = code
-    successMessage = nil
+    switch host {
+    case "invite":
+      pendingInvite = PendingInvite(code: code)
+      inviteCodeInput = code
+      successMessage = nil
+    case "link":
+      // A pairing code only makes sense on a Mac that isn't set up yet — it
+      // prefills the "Link this Mac" field on the setup screen, and an
+      // optional ?relay=… carries the source relay for self-hosted setups.
+      guard !isConfigured else { return }
+      linkCodeInput = code
+      if let relayText = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+        .queryItems?.first(where: { $0.name == "relay" })?.value,
+         let relayURL = URL(string: relayText),
+         isAllowedRelayURL(relayURL) {
+        linkRelayHint = relayText
+      }
+      successMessage = nil
+    default:
+      return
+    }
     NSApp.activate(ignoringOtherApps: true)
   }
 
@@ -293,8 +519,9 @@ final class AppModel: ObservableObject {
       feed = preservingYouSnapshot(try await client(for: config).feed(), fallbackPayload: payload)
       lastSyncedAt = Date()
       persistPresence()
+      advertiseSyncedAccountIfNeeded()
     } catch {
-      lastError = error.localizedDescription
+      handleSyncFailure(error)
     }
     isBusy = false
   }

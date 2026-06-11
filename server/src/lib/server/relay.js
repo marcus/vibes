@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { writeTx } from "./db.js";
 import { getAvatarStore } from "./avatarStore.js";
 
@@ -334,6 +334,102 @@ export function authenticateToken(db, rawToken) {
       timezone: row.timezone,
     },
   };
+}
+
+// Device link codes are typed by hand on the new Mac, so they use a short
+// human-friendly alphabet (no I/L/O/0/1 lookalikes). 8 chars ≈ 39 bits, which
+// with single use, a 10-minute TTL, and the claim rate limit is plenty.
+const LINK_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const LINK_CODE_LENGTH = 8;
+
+function newLinkCode() {
+  let code = "";
+  for (let i = 0; i < LINK_CODE_LENGTH; i += 1) {
+    code += LINK_CODE_ALPHABET[randomInt(LINK_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+/** Accepts user-typed codes case-insensitively, with or without the dash. */
+function normalizeLinkCode(raw) {
+  return String(raw ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/** "KQ4M7XW2" → "KQ4M-7XW2", purely for display. */
+function formatLinkCode(code) {
+  return `${code.slice(0, 4)}-${code.slice(4)}`;
+}
+
+/**
+ * Mint a device link code for adding another Mac to this account. The raw
+ * code is returned exactly once; only its hash is stored.
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} userId
+ * @param {{ ttlMinutes?: number }} [options]
+ */
+export function createDeviceLinkCode(db, userId, { ttlMinutes = 10 } = {}) {
+  // Opportunistic cleanup: expired unclaimed codes are dead weight (claimed
+  // rows are kept as an audit trail of which devices joined when).
+  db.prepare(
+    "DELETE FROM device_link_codes WHERE claimed_at IS NULL AND expires_at < ?",
+  ).run(now());
+  const expiresAt = new Date(Date.now() + ttlMinutes * 60_000).toISOString();
+  // The short alphabet makes a hash collision merely unlikely, not
+  // negligible, so retry the INSERT a few times on the UNIQUE constraint.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = newLinkCode();
+    const id = randomUUID();
+    try {
+      db.prepare(
+        `INSERT INTO device_link_codes (id, code_hash, user_id, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run(id, sha256(code), userId, now(), expiresAt);
+      return { id, code: formatLinkCode(code), expires_at: expiresAt };
+    } catch (err) {
+      if (String(err).includes("UNIQUE")) continue;
+      throw err;
+    }
+  }
+  throw new RelayError("internal", "Could not allocate a link code.", 500);
+}
+
+/**
+ * Claim a device link code from a new Mac: mark it used and mint a fresh
+ * per-device token. Returns the same shape as registerUser so the client can
+ * reuse its registration path. Single use under concurrency for the same
+ * reason as acceptInvite (IMMEDIATE transaction).
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} rawCode
+ * @param {{ deviceLabel?: string | null }} [input]
+ */
+export function claimDeviceLinkCode(db, rawCode, { deviceLabel = null } = {}) {
+  const unusable = new RelayError(
+    "link_code_unusable",
+    "This code is invalid, expired, or already used. Generate a fresh one on your other Mac.",
+    410,
+  );
+  const code = normalizeLinkCode(rawCode);
+  if (code.length !== LINK_CODE_LENGTH) throw unusable;
+
+  return writeTx(db, () => {
+    const row = db
+      .prepare("SELECT * FROM device_link_codes WHERE code_hash = ?")
+      .get(sha256(code));
+    if (!row || row.claimed_at || row.expires_at < now()) throw unusable;
+
+    const user = db
+      .prepare("SELECT * FROM users WHERE id = ? AND disabled_at IS NULL")
+      .get(row.user_id);
+    if (!user) throw unusable;
+
+    const cleanLabel =
+      deviceLabel == null ? null : String(deviceLabel).trim().slice(0, 64) || null;
+    db.prepare(
+      "UPDATE device_link_codes SET claimed_at = ?, claimed_device_label = ? WHERE id = ?",
+    ).run(now(), cleanLabel, row.id);
+    const token = createToken(db, user.id, cleanLabel);
+    return { user: registeredUser(user), token };
+  });
 }
 
 /**
@@ -886,6 +982,48 @@ export function removeFriend(db, userId, friendHandle) {
     ).run(userId, friend.id, friend.id, userId);
     return { ok: true };
   });
+}
+
+/**
+ * Active (non-revoked) tokens for a user — the device list. Tokens are minted
+ * one per device and labeled with the device name; last_used_at is touched on
+ * every authenticated call, so it doubles as a device's last-seen.
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} userId
+ */
+export function listTokens(db, userId) {
+  return db
+    .prepare(
+      `SELECT id, label, created_at, last_used_at
+       FROM auth_tokens
+       WHERE user_id = ? AND revoked_at IS NULL
+       ORDER BY created_at ASC, rowid ASC`,
+    )
+    .all(userId)
+    .map((token) => ({
+      token_id: token.id,
+      label: token.label,
+      created_at: token.created_at,
+      last_used_at: token.last_used_at,
+    }));
+}
+
+/**
+ * Mint a fresh labeled token for the authenticated account — how an already
+ * trusted credential provisions a new device (e.g. the iCloud-Keychain
+ * welcome-back path) without sharing itself. Same response shape as
+ * registerUser/claimDeviceLinkCode so clients reuse one decode path.
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} userId
+ * @param {string | null} [label]
+ */
+export function mintDeviceToken(db, userId, label = null) {
+  const user = db
+    .prepare("SELECT * FROM users WHERE id = ? AND disabled_at IS NULL")
+    .get(userId);
+  if (!user) throw new RelayError("unauthorized", "Authentication is required.", 401);
+  const token = createToken(db, userId, label);
+  return { user: registeredUser(user), token };
 }
 
 /**

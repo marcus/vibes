@@ -391,6 +391,68 @@ struct RegisteredIdentity: Codable, Equatable {
   var token: String
 }
 
+// A short-lived pairing code minted on a signed-in Mac so a new Mac can join
+// the same account ("Link this Mac"). The raw code is shown once; the server
+// keeps only its hash.
+struct DeviceLinkCode: Codable, Equatable {
+  var id: String
+  var code: String
+  var expiresAt: Date
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case code
+    case expiresAt = "expires_at"
+  }
+}
+
+struct ClaimLinkCodeRequest: Codable, Equatable {
+  var code: String
+  var deviceLabel: String
+
+  enum CodingKeys: String, CodingKey {
+    case code
+    case deviceLabel = "device_label"
+  }
+}
+
+// One row in Settings → General → Devices. A "device" is an active auth
+// token: tokens are minted one per Mac and labeled with the device name, and
+// last_used_at is touched on every authenticated call (device last-seen).
+struct DeviceSummary: Codable, Equatable, Identifiable {
+  var id: String { tokenId }
+  var tokenId: String
+  var label: String?
+  var createdAt: Date
+  var lastUsedAt: Date?
+  // True when this row is the token making the request — "This Mac".
+  var current: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case tokenId = "token_id"
+    case label
+    case createdAt = "created_at"
+    case lastUsedAt = "last_used_at"
+    case current
+  }
+}
+
+struct DeviceListResponse: Codable, Equatable {
+  var devices: [DeviceSummary]
+}
+
+struct MintTokenRequest: Codable, Equatable {
+  var label: String
+}
+
+struct RevokeTokenRequest: Codable, Equatable {
+  var tokenId: String
+
+  enum CodingKeys: String, CodingKey {
+    case tokenId = "token_id"
+  }
+}
+
 struct AcceptInviteResult: Codable, Equatable {
   var inviter: UserSummary
   var friend: UserSummary

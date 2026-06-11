@@ -13,7 +13,9 @@ import {
   authenticateToken,
   avatarGradientFor,
   avatarUrlFor,
+  claimDeviceLinkCode,
   clearUserAvatar,
+  createDeviceLinkCode,
   createInvite,
   createToken,
   createUser,
@@ -22,6 +24,8 @@ import {
   getInviteByCode,
   inviteState,
   listInvites,
+  listTokens,
+  mintDeviceToken,
   newShortId,
   registerUser,
   removeFriend,
@@ -368,6 +372,149 @@ describe("invites", () => {
       "invite_unusable",
       410,
     );
+  });
+});
+
+describe("device link codes", () => {
+  it("creates a code and claims it for a fresh per-device token", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus", timezone: "America/Los_Angeles" });
+    const link = createDeviceLinkCode(db, user.id);
+
+    expect(link.code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(Date.parse(link.expires_at)).toBeGreaterThan(Date.now());
+
+    const claimed = claimDeviceLinkCode(db, link.code, { deviceLabel: "Mac mini" });
+    expect(claimed.user).toMatchObject({
+      handle: "marcus",
+      display_name: "Marcus",
+      timezone: "America/Los_Angeles",
+    });
+
+    const auth = authenticateToken(db, claimed.token.token);
+    expect(auth.user.id).toBe(user.id);
+    const stored = db
+      .prepare("SELECT label FROM auth_tokens WHERE id = ?")
+      .get(claimed.token.id);
+    expect(stored.label).toBe("Mac mini");
+  });
+
+  it("accepts user-typed codes case-insensitively and without the dash", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const link = createDeviceLinkCode(db, user.id);
+    const sloppy = link.code.toLowerCase().replace("-", " ");
+    expect(claimDeviceLinkCode(db, sloppy).user.handle).toBe("marcus");
+  });
+
+  it("never stores the raw code", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const link = createDeviceLinkCode(db, user.id);
+    const row = db.prepare("SELECT code_hash FROM device_link_codes WHERE id = ?").get(link.id);
+    expect(row.code_hash).not.toContain(link.code.replace("-", ""));
+  });
+
+  it("is single use", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const link = createDeviceLinkCode(db, user.id);
+    claimDeviceLinkCode(db, link.code);
+    expectRelayError(() => claimDeviceLinkCode(db, link.code), "link_code_unusable", 410);
+  });
+
+  it("rejects an expired code", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const link = createDeviceLinkCode(db, user.id, { ttlMinutes: -1 });
+    expectRelayError(() => claimDeviceLinkCode(db, link.code), "link_code_unusable", 410);
+  });
+
+  it("purges expired unclaimed codes on the next create, keeping claimed ones", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const expired = createDeviceLinkCode(db, user.id, { ttlMinutes: -1 });
+    const claimed = createDeviceLinkCode(db, user.id);
+    claimDeviceLinkCode(db, claimed.code);
+
+    createDeviceLinkCode(db, user.id);
+
+    const ids = db.prepare("SELECT id FROM device_link_codes").all().map((r) => r.id);
+    expect(ids).not.toContain(expired.id);
+    expect(ids).toContain(claimed.id);
+    expect(ids).toHaveLength(2);
+  });
+
+  it("rejects unknown and malformed codes", () => {
+    expectRelayError(() => claimDeviceLinkCode(db, "AAAA-AAAA"), "link_code_unusable", 410);
+    expectRelayError(() => claimDeviceLinkCode(db, "nope"), "link_code_unusable", 410);
+    expectRelayError(() => claimDeviceLinkCode(db, null), "link_code_unusable", 410);
+  });
+
+  it("rejects a code for a disabled user", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const link = createDeviceLinkCode(db, user.id);
+    db.prepare("UPDATE users SET disabled_at = ? WHERE id = ?").run(
+      new Date().toISOString(),
+      user.id,
+    );
+    expectRelayError(() => claimDeviceLinkCode(db, link.code), "link_code_unusable", 410);
+  });
+});
+
+describe("device tokens", () => {
+  it("lists active tokens as devices and hides revoked ones", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const macbook = createToken(db, user.id, "MacBook");
+    const mini = createToken(db, user.id, "Mac mini");
+
+    expect(listTokens(db, user.id).map((d) => d.label)).toEqual(["MacBook", "Mac mini"]);
+
+    revokeToken(db, user.id, mini.id);
+    const remaining = listTokens(db, user.id);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]).toMatchObject({ token_id: macbook.id, label: "MacBook" });
+  });
+
+  it("does not leak token hashes in the device list", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    createToken(db, user.id, "MacBook");
+    for (const device of listTokens(db, user.id)) {
+      expect(Object.keys(device).sort()).toEqual([
+        "created_at",
+        "label",
+        "last_used_at",
+        "token_id",
+      ]);
+    }
+  });
+
+  it("mints a fresh labeled token for an existing account", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus", timezone: "UTC" });
+    const minted = mintDeviceToken(db, user.id, "Mac mini");
+
+    expect(minted.user).toMatchObject({ handle: "marcus", timezone: "UTC" });
+    expect(authenticateToken(db, minted.token.token).user.id).toBe(user.id);
+    expect(
+      db.prepare("SELECT label FROM auth_tokens WHERE id = ?").get(minted.token.id).label,
+    ).toBe("Mac mini");
+  });
+
+  it("refuses to mint for a disabled user", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    db.prepare("UPDATE users SET disabled_at = ? WHERE id = ?").run(
+      new Date().toISOString(),
+      user.id,
+    );
+    expectRelayError(() => mintDeviceToken(db, user.id, "Mac mini"), "unauthorized", 401);
+  });
+
+  it("scopes the device list and revocation to the caller's account", () => {
+    const marcus = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const ken = createUser(db, { handle: "ken", displayName: "Ken" });
+    createToken(db, marcus.id, "Marcus MacBook");
+    const kensToken = createToken(db, ken.id, "Ken MacBook");
+
+    expect(listTokens(db, marcus.id).map((d) => d.label)).toEqual(["Marcus MacBook"]);
+
+    // Marcus revoking Ken's token id is a silent no-op.
+    revokeToken(db, marcus.id, kensToken.id);
+    expect(authenticateToken(db, kensToken.token).user.id).toBe(ken.id);
+    expect(listTokens(db, ken.id)).toHaveLength(1);
   });
 });
 

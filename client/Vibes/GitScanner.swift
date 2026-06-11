@@ -242,6 +242,43 @@ struct RelayClient {
     try await send(path: "/api/invites", method: "POST", body: EmptyBody())
   }
 
+  // Mint a pairing code for adding another Mac to this account.
+  func createDeviceLinkCode() async throws -> DeviceLinkCode {
+    try await send(path: "/api/devices/link-codes", method: "POST", body: EmptyBody())
+  }
+
+  // Exchange a pairing code (typed on the new Mac) for a fresh per-device
+  // token plus account info — the same response shape as register, so the
+  // setup flow is shared.
+  func claimDeviceLinkCode(code: String, deviceLabel: String) async throws -> RegisteredIdentity {
+    try await send(
+      path: "/api/devices/link-codes/claim",
+      method: "POST",
+      body: ClaimLinkCodeRequest(code: code, deviceLabel: deviceLabel),
+      requiresAuth: false
+    )
+  }
+
+  // The account's active devices (labeled tokens), with the caller flagged.
+  func listDevices() async throws -> DeviceListResponse {
+    try await send(path: "/api/devices", method: "GET", body: Optional<String>.none)
+  }
+
+  // Mint a fresh labeled token using this client's (already trusted) token —
+  // the iCloud-Keychain welcome-back path, so the synced credential never
+  // becomes the new Mac's working token.
+  func mintDeviceToken(label: String) async throws -> RegisteredIdentity {
+    try await send(path: "/api/tokens", method: "POST", body: MintTokenRequest(label: label))
+  }
+
+  func revokeToken(id: String) async throws {
+    let _: OKResponse = try await send(
+      path: "/api/tokens/revoke",
+      method: "POST",
+      body: RevokeTokenRequest(tokenId: id)
+    )
+  }
+
   func acceptInvite(code: String) async throws -> AcceptInviteResult {
     try await send(
       path: "/api/invites/\(code)/accept",
