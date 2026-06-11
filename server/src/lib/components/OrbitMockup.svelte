@@ -18,28 +18,22 @@
   // green = the adds share of the swept arc.
   const ORBS = [
     {
-      name: 'dana', g: ['#ff7847', '#ff4787'], size: 84, x: 31, y: 22,
+      name: 'dana', g: ['#ff7847', '#ff4787'], size: 84, x: 30, y: 26,
       sweep: 360, green: 230, lap: '1.7×',
       status: 'deep in the parser mines', plus: '+1,204', minus: '−688',
       commits: 14, repos: ['perch', 'perch-docs'], when: '2m', float: 7
     },
     {
-      name: 'priya', g: ['#27d3a2', '#1f9bff'], size: 74, x: 70, y: 26,
+      name: 'priya', g: ['#27d3a2', '#1f9bff'], size: 74, x: 71, y: 32,
       sweep: 311, green: 50, lap: null,
       status: 'refactor friday!!', plus: '+356', minus: '−1,892',
       commits: 7, repos: ['atlas'], when: '8m', float: 9
     },
     {
-      name: 'you', initial: 'M', me: true, g: ['#4f8cff', '#9b5cff'], size: 64, x: 52, y: 60,
+      name: 'you', initial: 'M', me: true, g: ['#4f8cff', '#9b5cff'], size: 64, x: 48, y: 64,
       sweep: 274, green: 217, lap: null,
       status: 'shipping the orbit view ✨', plus: '+482', minus: '−127',
       commits: 9, repos: ['vibes', 'td-watch'], when: 'now', float: 8
-    },
-    {
-      name: 'theo', g: ['#ffd24f', '#ff8c3b'], size: 48, x: 20, y: 72,
-      sweep: 24, green: 20, lap: null,
-      status: 'coffee #2, warming up', plus: '+23', minus: '−4',
-      commits: 1, repos: ['dotfiles'], when: 'now', float: 6
     }
   ];
 
@@ -69,7 +63,6 @@
       <span class="dot g"></span>
     </div>
     <span class="wordmark">vibes</span>
-    <span class="count"><i></i>4 in orbit</span>
     <span class="grow"></span>
     <div class="seg" role="tablist" aria-label="Feed view">
       <button type="button" class:active={view === 'orbit'} onclick={() => (view = 'orbit')}>
@@ -244,11 +237,6 @@
   .dot.y { background: #febc2e; }
   .dot.g { background: #28c840; }
   .wordmark { font-size: 16px; font-weight: 300; letter-spacing: 0.01em; }
-  .count {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
-  }
-  .count i { width: 6px; height: 6px; border-radius: 50%; background: #30d158; }
   .grow { flex: 1; }
 
   .seg {

@@ -57,7 +57,7 @@
         </svg>
       </div>
 
-      <div class="eyebrow"><span class="pip"></span> Right now · 4 friends in orbit</div>
+      <div class="eyebrow"><span class="pip"></span> Right now · 3 friends in orbit</div>
       <h1>See who's <span class="spectrum-text">coding</span><br />right now.</h1>
       <p class="hero-sub">Vibes shows which friends are online and how much they've coded today.</p>
       <p class="hero-lede">A Mac app for small groups. It turns your local Git activity into a simple, private friend feed.</p>
