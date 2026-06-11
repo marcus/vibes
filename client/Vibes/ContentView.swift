@@ -1323,8 +1323,10 @@ private struct Footer: View {
     (model.config?.repos ?? []).isEmpty
   }
 
+  // Wait for the first feed so the nudge doesn't flash during launch.
   private var needsFriends: Bool {
-    !needsRepos && (model.feed?.friends ?? []).isEmpty
+    guard !needsRepos, let feed = model.feed else { return false }
+    return feed.friends.isEmpty
   }
 }
 
