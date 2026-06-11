@@ -79,12 +79,19 @@ sync.
 - A revoked Mac sees a clear footer message ("This Mac's access was removed…")
   and stops advertising to iCloud, but there's no dedicated signed-out state
   that clears local config.
-- **Ship gate:** iCloud Keychain sync of synchronizable items must be
-  verified on two real Macs with a release-signed (Developer ID) build — the
-  client project has no entitlements file, and synchronizable items may
-  require keychain-access-groups (`errSecMissingEntitlement`). The store logs
-  failing OSStatus values in DEBUG builds; production degrades silently to
-  the pairing-code path by design.
+- **Ship gate, phase 1 verified 2026-06-11 (probe binary, exact
+  SyncedAccountStore queries):** synchronizable keychain items do NOT work
+  under the current release signing. Measured: Developer ID + hardened
+  runtime, no entitlements → `errSecMissingEntitlement (-34018)`; adding
+  `keychain-access-groups` without a provisioning profile → process killed
+  by AMFI (exit 137, restricted entitlement); `com.apple.application-identifier`
+  alone → runs but still `-34018`. The fix requires an embedded **Developer
+  ID provisioning profile** for `com.opentangle.vibes` (profiles authorize
+  `keychain-access-groups`) plus an entitlements file, wired into the
+  Release signing path only (debug builds stay entitlement-free and degrade
+  silently, with OSStatus logging). Until then the welcome-back card simply
+  never appears (reads fail the same way) and pairing codes carry the
+  experience — nothing user-visible breaks.
 - Any valid token can mint more tokens (`POST /api/tokens`); revoking a token
   doesn't cascade to tokens it minted. Mitigated by full visibility in the
   device list. A "remove all other devices" affordance is a sensible
