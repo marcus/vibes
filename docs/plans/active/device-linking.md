@@ -92,8 +92,11 @@ sync.
   passes `PROVISIONING_PROFILE_SPECIFIER`, and `ExportOptions.plist` embeds
   it at export. Verified end-to-end: Release archive + Developer ID export
   produces a valid signature with the entitlements and embedded profile.
-  Remaining: phase-2 two-Mac sync test (welcome-back card appearing on a
-  second Mac via iCloud Keychain) with the next release-signed build.
+  **Phase 2 verified 2026-06-11 on two real Macs (aerie → MarcusBook Pro):**
+  fresh registration on Mac 1 wrote the synced item; iCloud Keychain
+  delivered it to Mac 2 in ~2 minutes; the welcome-back card appeared and
+  one click minted Mac 2 its own labeled token. Both devices online and
+  merging in the feed. The whole flow is production-verified.
 - Any valid token can mint more tokens (`POST /api/tokens`); revoking a token
   doesn't cascade to tokens it minted. Mitigated by full visibility in the
   device list. A "remove all other devices" affordance is a sensible
