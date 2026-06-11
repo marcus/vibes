@@ -6,7 +6,7 @@
     title,
     description,
     path = '/',
-    image = '/images/vibes-share-card.png',
+    image = '/images/vibes-share-card.jpg',
     imageWidth = 1200,
     imageHeight = 630,
     imageAlt = 'The Vibes logo — a neon V on a dark background.'

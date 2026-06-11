@@ -340,8 +340,11 @@ private struct GeneralSettingsPane: View {
   @State private var copiedLinkCode = 0
   @State private var copiedLinkURL = 0
   @AppStorage(AppAppearance.storageKey) private var appearanceRaw = AppAppearance.system.rawValue
-  @State private var launchAtLogin = LaunchAtLogin.isEnabled
+  // populate() seeds this from SMAppService; a literal here avoids an XPC
+  // status query on every struct init.
+  @State private var launchAtLogin = false
   @State private var launchAtLoginError: String?
+  @State private var launchAtLoginNeedsApproval = false
 
   var body: some View {
     Form {
@@ -351,7 +354,7 @@ private struct GeneralSettingsPane: View {
       }
 
       Section("Appearance") {
-        Picker("Appearance", selection: $appearanceRaw) {
+        Picker("Theme", selection: $appearanceRaw) {
           ForEach(AppAppearance.allCases) { appearance in
             Text(appearance.label).tag(appearance.rawValue)
           }
@@ -375,12 +378,26 @@ private struct GeneralSettingsPane: View {
             do {
               try LaunchAtLogin.set(enabled: enabled)
               launchAtLoginError = nil
+              launchAtLoginNeedsApproval = enabled && LaunchAtLogin.requiresApproval
             } catch {
               launchAtLogin = LaunchAtLogin.isEnabled
               launchAtLoginError = error.localizedDescription
+              launchAtLoginNeedsApproval = LaunchAtLogin.requiresApproval
             }
           }
-        if let launchAtLoginError {
+        if launchAtLoginNeedsApproval {
+          HStack {
+            Text("macOS is blocking this login item. Enable Vibes in System Settings.")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            Spacer()
+            Button("Open Login Items") {
+              LaunchAtLogin.openSystemSettings()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+          }
+        } else if let launchAtLoginError {
           Text(launchAtLoginError)
             .font(.caption)
             .foregroundStyle(.red)
@@ -520,6 +537,7 @@ private struct GeneralSettingsPane: View {
     relayURL = model.config?.server.relayURL.absoluteString ?? ""
     // The user may have changed the login item in System Settings.
     launchAtLogin = LaunchAtLogin.isEnabled
+    launchAtLoginNeedsApproval = LaunchAtLogin.requiresApproval
   }
 
   private func deviceSubtitle(_ device: DeviceSummary) -> String {
@@ -1160,8 +1178,9 @@ private struct InviteFriendView: View {
       }
 
       Button {
-        createdInvite += 1
-        Task { await model.createInvite() }
+        Task {
+          if await model.createInvite() { createdInvite += 1 }
+        }
       } label: {
         Label("Create Invite Link", systemImage: "link")
       }

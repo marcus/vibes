@@ -842,14 +842,17 @@ final class AppModel: ObservableObject {
     isUploadingAvatar = false
   }
 
-  func createInvite() async {
-    guard let config, isConfigured else { return }
+  @discardableResult
+  func createInvite() async -> Bool {
+    guard let config, isConfigured else { return false }
     do {
       let invite = try await client(for: config).createInvite()
       latestInviteURL = invite.inviteURL
       await refreshInvites()
+      return true
     } catch {
       lastError = error.localizedDescription
+      return false
     }
   }
 

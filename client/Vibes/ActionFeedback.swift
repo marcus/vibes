@@ -90,6 +90,7 @@ struct ConfirmingLabel: View {
       }
       .onDisappear {
         resetTask?.cancel()
+        confirmed = false
       }
   }
 }

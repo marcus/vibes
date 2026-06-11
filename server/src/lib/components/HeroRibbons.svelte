@@ -1,6 +1,8 @@
 <!-- Neon ribbons + fine density strands backdrop (Option C2), shared by the
      homepage and invite hero sections. Position inside a `position:relative`
-     hero with a readability scrim baked in. -->
+     hero with a readability scrim baked in.
+     At most one instance per page: the SVG gradient ids (ribA/ribB/ribC) are
+     fixed, so two instances would collide. -->
 <div class="hero-ribbons" aria-hidden="true">
   <svg viewBox="0 0 1040 420" preserveAspectRatio="xMidYMid slice">
     <defs>

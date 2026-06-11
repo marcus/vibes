@@ -44,11 +44,22 @@ enum LaunchAtLogin {
     SMAppService.mainApp.status == .enabled
   }
 
+  /// True when the user previously disabled the login item in System
+  /// Settings: register() succeeds but the item stays inert until they
+  /// re-enable it there.
+  static var requiresApproval: Bool {
+    SMAppService.mainApp.status == .requiresApproval
+  }
+
   static func set(enabled: Bool) throws {
     if enabled {
       try SMAppService.mainApp.register()
     } else {
       try SMAppService.mainApp.unregister()
     }
+  }
+
+  static func openSystemSettings() {
+    SMAppService.openSystemSettingsLoginItems()
   }
 }

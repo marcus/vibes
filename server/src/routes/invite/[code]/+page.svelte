@@ -11,10 +11,16 @@
   const appURL = $derived(`vibes://invite/${encodeURIComponent(data.code ?? "")}`);
 
   const metaTitle = $derived(
-    data.inviter ? `${data.inviter} invited you to Vibes` : "You're invited to Vibes"
+    data.state !== "open"
+      ? "Vibes invite"
+      : data.inviter
+        ? `${data.inviter} invited you to Vibes`
+        : "You're invited to Vibes"
   );
   const description =
     "Vibes shows which friends are online and coding — private ambient presence for small groups of coders on macOS.";
+
+  $effect(() => () => clearTimeout(copyTimer));
 
   async function copyCode() {
     if (!data.code) return;
@@ -31,12 +37,12 @@
 </script>
 
 <svelte:head>
-  <title>{metaTitle} — Vibes</title>
+  <title>{metaTitle}</title>
   <meta name="description" content={description} />
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<SocialMeta title={metaTitle} {description} path={`/invite/${data.code ?? ""}`} />
+<SocialMeta title={metaTitle} {description} path={`/invite/${encodeURIComponent(data.code ?? "")}`} />
 
 <MarketingShell>
   {#snippet children(theme)}
