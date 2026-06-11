@@ -26,7 +26,7 @@ struct FriendCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       header
-      LocBar(added: insertions, removed: deletions)
+      LocBar(added: status.insertions, removed: status.deletions)
       legend
       if spotifyLine != nil || weatherLine != nil {
         extras
@@ -69,15 +69,15 @@ struct FriendCard: View {
 
   private var legend: some View {
     HStack(alignment: .firstTextBaseline) {
-      Text("\(Text("\(commitCount)").fontWeight(.bold).foregroundColor(Color.primary))\(commitCount == 1 ? " commit today" : " commits today")")
+      Text("\(Text("\(status.commitCount)").fontWeight(.bold).foregroundColor(Color.primary))\(status.commitCount == 1 ? " commit today" : " commits today")")
       .font(.caption)
       .foregroundStyle(Color.secondary)
       .monospacedDigit()
 
       Spacer(minLength: 8)
 
-      if !repoAliases.isEmpty {
-        Text(repoAliases.joined(separator: ", "))
+      if !status.repoAliases.isEmpty {
+        Text(status.repoAliases.joined(separator: ", "))
           .font(.caption.weight(.semibold))
           .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           .lineLimit(1)
@@ -118,34 +118,6 @@ struct FriendCard: View {
     if isOnline { return "online" }
     guard let updatedAt = status.updatedAt else { return "offline" }
     return "offline, synced \(updatedAt.formatted(.relative(presentation: .numeric)))"
-  }
-
-  private var gitStatsCard: StatusCard? {
-    status.cards.first { $0.type == "git_stats" }
-  }
-
-  private var commitCount: Int {
-    gitStatsCard?.data["commits"]?.intValue ?? 0
-  }
-
-  private var insertions: Int {
-    gitStatsCard?.data["insertions"]?.intValue ?? 0
-  }
-
-  private var deletions: Int {
-    gitStatsCard?.data["deletions"]?.intValue ?? 0
-  }
-
-  private var repoAliases: [String] {
-    let card = status.cards.first { $0.type == "repo_aliases" }
-    if case let .array(items)? = card?.data["aliases"] {
-      return items.compactMap { if case let .string(s) = $0 { return s } else { return nil } }
-    }
-    // Fall back to the comma-joined summary if structured data is absent.
-    if let summary = card?.summary, !summary.isEmpty {
-      return summary.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-    }
-    return []
   }
 
   private func cardSummary(_ type: String) -> String? {
@@ -245,14 +217,11 @@ struct AwayFriendRow: View {
   }
 
   private var recentSummary: String {
-    let git = status.cards.first { $0.type == "git_stats" }
-    let commits = git?.data["commits"]?.intValue ?? 0
+    let commits = status.commitCount
     guard commits > 0 else { return "quiet today" }
     var parts = ["\(commits) commit\(commits == 1 ? "" : "s")"]
-    if case let .array(items)? = status.cards.first(where: { $0.type == "repo_aliases" })?.data["aliases"] {
-      let aliases = items.compactMap { if case let .string(s) = $0 { return s } else { return nil } }
-      if !aliases.isEmpty { parts.append(aliases.joined(separator: ", ")) }
-    }
+    let aliases = status.repoAliases
+    if !aliases.isEmpty { parts.append(aliases.joined(separator: ", ")) }
     return parts.joined(separator: " · ")
   }
 

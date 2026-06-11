@@ -123,6 +123,9 @@ private struct MainPanel: View {
   @EnvironmentObject private var model: AppModel
   @Environment(\.openSettings) private var openSettings
   @Binding var showInviteFriend: Bool
+  // Orbit is the default sky; the list is the staid fallback, one toggle away.
+  // Shared with HomeView through UserDefaults (same key).
+  @AppStorage("feedViewMode") private var feedViewModeRaw = FeedViewMode.orbit.rawValue
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -131,6 +134,7 @@ private struct MainPanel: View {
         Spacer()
         GlassEffectContainer(spacing: 10) {
           HStack(spacing: 10) {
+            FeedViewToggle(selectionRaw: $feedViewModeRaw)
             PresenceToggle(
               mode: model.mode,
               setMode: { model.setMode($0) }
@@ -612,6 +616,19 @@ private struct EditableSettingField: View {
 // quiet rows under an "away" divider. EmptyState when there are no friends.
 private struct HomeView: View {
   @EnvironmentObject private var model: AppModel
+  @AppStorage("feedViewMode") private var feedViewModeRaw = FeedViewMode.orbit.rawValue
+
+  private var feedViewMode: FeedViewMode {
+    FeedViewMode(rawValue: feedViewModeRaw) ?? .orbit
+  }
+
+  // Orbit needs a feed and at least one friend to be a sky worth drawing;
+  // otherwise (no feed yet, or the empty-state nudge) the list layout handles
+  // it better.
+  private var showsOrbit: Bool {
+    guard feedViewMode == .orbit, let feed = model.feed else { return false }
+    return !feed.friends.isEmpty
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -632,6 +649,16 @@ private struct HomeView: View {
         }
       }
 
+      if showsOrbit, let feed = model.feed {
+        OrbitView(you: feed.you, friends: feed.friends)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        feedList
+      }
+    }
+  }
+
+  private var feedList: some View {
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
           if let you = model.feed?.you {
@@ -665,7 +692,26 @@ private struct HomeView: View {
       // Content scrolls under a soft system edge effect rather than hitting a
       // hard divider against the header/status field above and footer below.
       .scrollEdgeEffectStyle(.soft, for: .all)
+  }
+}
+
+// Orbit ↔ list switcher, sitting with the other floating header controls. The
+// raw-string binding round-trips through @AppStorage in MainPanel/HomeView.
+private struct FeedViewToggle: View {
+  @Binding var selectionRaw: String
+
+  var body: some View {
+    Picker("Feed View", selection: $selectionRaw) {
+      Image(systemName: "sparkles")
+        .tag(FeedViewMode.orbit.rawValue)
+        .accessibilityLabel("Orbit view")
+      Image(systemName: "list.bullet")
+        .tag(FeedViewMode.list.rawValue)
+        .accessibilityLabel("List view")
     }
+    .pickerStyle(.segmented)
+    .labelsHidden()
+    .fixedSize()
   }
 }
 

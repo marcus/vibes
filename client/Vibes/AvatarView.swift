@@ -39,9 +39,11 @@ struct AvatarView: View {
     let outer = AvatarView.outerDiameter(for: size)
 
     ZStack {
-      avatarFill
-        .frame(width: metrics.diameter, height: metrics.diameter)
-        .clipShape(Circle())
+      AvatarFill(
+        user: status.user,
+        diameter: metrics.diameter,
+        initialsFontSize: metrics.initialsFontSize
+      )
 
       Circle()
         .strokeBorder(ringColor, lineWidth: metrics.ringWidth)
@@ -60,14 +62,35 @@ struct AvatarView: View {
     .accessibilityLabel(isOnline ? "\(status.user.displayName), online" : "\(status.user.displayName), offline")
   }
 
+  private var ringColor: Color {
+    isOnline ? Color(nsColor: .systemGreen) : .secondary
+  }
+
+  private var metrics: AvatarMetrics { AvatarMetrics(size: size) }
+}
+
+// The circular avatar fill alone — image / gradient / initials — clipped to a
+// circle at an arbitrary diameter, with no presence ring. AvatarView wraps it
+// with the breathing ring; OrbitView wraps it with the churn ring.
+struct AvatarFill: View {
+  var user: UserSummary
+  var diameter: CGFloat
+  // Defaults to scaling with the diameter; AvatarView passes its tuned metric.
+  var initialsFontSize: CGFloat?
+
+  var body: some View {
+    fill
+      .frame(width: diameter, height: diameter)
+      .clipShape(Circle())
+  }
+
   // Choose the representation by the user's explicit `avatarKind`:
   //   "image"    → AI-generated PNG (AsyncImage, initials on empty/failure)
   //   "gradient" → a two-color LinearGradient (topLeading → bottomTrailing)
   //   else       → initials on a neutral system fill
-  // The presence ring is applied once in `body` and is identical in every case.
   @ViewBuilder
-  private var avatarFill: some View {
-    switch status.user.avatarKind {
+  private var fill: some View {
+    switch user.avatarKind {
     case "image" where avatarURL != nil:
       AsyncImage(url: avatarURL!) { phase in
         switch phase {
@@ -87,9 +110,9 @@ struct AvatarView: View {
           endPoint: .bottomTrailing
         )
         Text(handleInitial)
-          // Exact size: scales with the avatar diameter (per AvatarMetrics), not
-          // Dynamic Type — the glyph must fit the fixed circle.
-          .font(.system(size: metrics.initialsFontSize, weight: .medium, design: .rounded))
+          // Exact size: scales with the avatar diameter, not Dynamic Type —
+          // the glyph must fit the fixed circle.
+          .font(.system(size: fontSize, weight: .medium, design: .rounded))
           .foregroundStyle(.white.opacity(0.9))
           // Decorative shadow kept: lifts the initial off the user's custom
           // avatar gradient for legibility (the Color(hex:) gradient is the
@@ -103,24 +126,26 @@ struct AvatarView: View {
 
   // The first letter of the handle, shown over the gradient fill.
   private var handleInitial: String {
-    (status.user.handle.first.map(String.init) ?? "?").uppercased()
+    (user.handle.first.map(String.init) ?? "?").uppercased()
   }
 
   private var initials: some View {
     ZStack {
       Color(nsColor: .quaternarySystemFill)
       Text(initialsText)
-        // Exact size: scales with the avatar diameter (per AvatarMetrics), not
-        // Dynamic Type — the glyph must fit the fixed circle.
-        .font(.system(size: metrics.initialsFontSize, weight: .medium, design: .rounded))
+        // Exact size: scales with the avatar diameter, not Dynamic Type — the
+        // glyph must fit the fixed circle.
+        .font(.system(size: fontSize, weight: .medium, design: .rounded))
         .foregroundStyle(.secondary)
     }
   }
 
   // MARK: - Derived
 
+  private var fontSize: CGFloat { initialsFontSize ?? diameter * 0.4 }
+
   private var avatarURL: URL? {
-    guard let raw = status.user.avatarUrl, !raw.isEmpty else { return nil }
+    guard let raw = user.avatarUrl, !raw.isEmpty else { return nil }
     return URL(string: raw)
   }
 
@@ -128,7 +153,7 @@ struct AvatarView: View {
   // switch then falls back to initials).
   private var gradientColors: [Color]? {
     guard
-      let gradient = status.user.avatarGradient,
+      let gradient = user.avatarGradient,
       let start = Color(hex: gradient.start),
       let end = Color(hex: gradient.end)
     else { return nil }
@@ -137,18 +162,12 @@ struct AvatarView: View {
 
   // First letters of up to the first two words of the display name, uppercased.
   private var initialsText: String {
-    let words = status.user.displayName
+    let words = user.displayName
       .split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "_" })
       .prefix(2)
     let letters = words.compactMap { $0.first }.map(String.init).joined()
     return letters.isEmpty ? "?" : letters.uppercased()
   }
-
-  private var ringColor: Color {
-    isOnline ? Color(nsColor: .systemGreen) : .secondary
-  }
-
-  private var metrics: AvatarMetrics { AvatarMetrics(size: size) }
 }
 
 // Size-driven avatar dimensions, mirroring the FriendCard size enum scale.

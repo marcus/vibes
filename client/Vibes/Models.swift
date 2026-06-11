@@ -410,6 +410,10 @@ struct MergedStatus: Codable, Equatable, Identifiable {
   var day: String?
   var updatedAt: Date?
   var cards: [StatusCard]
+  // Median daily churn (insertions + deletions) over this user's recent active
+  // days, computed by the relay. nil until they have enough history — the
+  // orbit ring then falls back to a fixed cold-start scale (see ChurnMeter).
+  var typicalChurn: Int?
 
   enum CodingKeys: String, CodingKey {
     case user
@@ -418,6 +422,34 @@ struct MergedStatus: Codable, Equatable, Identifiable {
     case day
     case updatedAt = "updated_at"
     case cards
+    case typicalChurn = "typical_churn"
+  }
+}
+
+// Shared accessors for the structured card data every presence view reads
+// (FriendCard, AwayFriendRow, OrbitView). One parsing path, one fallback story.
+extension MergedStatus {
+  var gitStatsCard: StatusCard? {
+    cards.first { $0.type == "git_stats" }
+  }
+
+  var commitCount: Int { gitStatsCard?.data["commits"]?.intValue ?? 0 }
+  var insertions: Int { gitStatsCard?.data["insertions"]?.intValue ?? 0 }
+  var deletions: Int { gitStatsCard?.data["deletions"]?.intValue ?? 0 }
+
+  // Total lines touched today — the orbit ring's progress quantity.
+  var churn: Int { insertions + deletions }
+
+  var repoAliases: [String] {
+    let card = cards.first { $0.type == "repo_aliases" }
+    if case let .array(items)? = card?.data["aliases"] {
+      return items.compactMap { if case let .string(s) = $0 { return s } else { return nil } }
+    }
+    // Fall back to the comma-joined summary if structured data is absent.
+    if let summary = card?.summary, !summary.isEmpty {
+      return summary.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+    return []
   }
 }
 

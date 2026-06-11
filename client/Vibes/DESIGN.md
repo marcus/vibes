@@ -62,6 +62,27 @@ under the header/footer instead of meeting a hard divider. The **Settings**
 window stays fixed-size (`.windowResizability(.contentSize)`), standard for a
 settings scene.
 
+## Orbit view
+
+The default main view (`OrbitView.swift`, design source: `design/mockups/`) is
+deliberately playful, but stays inside the system palette wherever the color
+has meaning:
+
+- **Churn ring** — sweep is today vs the person's `typical_churn` (server
+  median); the arc splits `.systemGreen` / `.systemRed` by adds-vs-deletes,
+  matching the LOC color semantics above. Past 1× a `.yellow` lap badge
+  appears.
+- **Orb glow** — the avatar's own gradient color used as light (the existing
+  user-chosen-color exception), falling back to the accent.
+- **Repo moon dots** — a small decorative exception: each repo alias gets a
+  stable hue derived from its name (djb2 hash) so repos keep their identity
+  across machines. Dots only; text stays `.secondary` on `.quaternarySystemFill`.
+- **Motion** — orb floating and ring animation are skipped under Reduce Motion.
+  Layout uses fixed constellation slots (≤6 orbs) and a staggered grid beyond.
+
+The list view (FriendCard column) remains available via the header switcher
+and is the fallback whenever there is no feed or no friends yet.
+
 ## Sanctioned exceptions
 
 The no-custom-color / no-fixed-size rules have a few deliberate, commented
