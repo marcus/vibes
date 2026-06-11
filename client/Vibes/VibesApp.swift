@@ -6,6 +6,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   static var model: AppModel?
   private var isTerminatingAfterOfflinePublish = false
 
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    AppAppearance.applyCurrent()
+  }
+
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !isTerminatingAfterOfflinePublish, let model = Self.model, model.isConfigured else {
       return .terminateNow

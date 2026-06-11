@@ -339,6 +339,9 @@ private struct GeneralSettingsPane: View {
   @State private var relayURL = ""
   @State private var copiedLinkCode = 0
   @State private var copiedLinkURL = 0
+  @AppStorage(AppAppearance.storageKey) private var appearanceRaw = AppAppearance.system.rawValue
+  @State private var launchAtLogin = LaunchAtLogin.isEnabled
+  @State private var launchAtLoginError: String?
 
   var body: some View {
     Form {
@@ -348,10 +351,39 @@ private struct GeneralSettingsPane: View {
       }
 
       Section("Appearance") {
+        Picker("Appearance", selection: $appearanceRaw) {
+          ForEach(AppAppearance.allCases) { appearance in
+            Text(appearance.label).tag(appearance.rawValue)
+          }
+        }
+        .onChange(of: appearanceRaw) {
+          AppAppearance.applyCurrent()
+        }
         Picker("Feed text size", selection: $feedTextSizeRaw) {
           ForEach(FeedTextSize.allCases) { size in
             Text(size.label).tag(size.rawValue)
           }
+        }
+      }
+
+      Section("Startup") {
+        Toggle("Open Vibes at login", isOn: $launchAtLogin)
+          .onChange(of: launchAtLogin) { _, enabled in
+            // The toggle can also be flipped back here when registration fails,
+            // so only touch SMAppService when the value actually diverges.
+            guard enabled != LaunchAtLogin.isEnabled else { return }
+            do {
+              try LaunchAtLogin.set(enabled: enabled)
+              launchAtLoginError = nil
+            } catch {
+              launchAtLogin = LaunchAtLogin.isEnabled
+              launchAtLoginError = error.localizedDescription
+            }
+          }
+        if let launchAtLoginError {
+          Text(launchAtLoginError)
+            .font(.caption)
+            .foregroundStyle(.red)
         }
       }
 
@@ -486,6 +518,8 @@ private struct GeneralSettingsPane: View {
     handle = model.config?.identity.handle ?? ""
     deviceLabel = model.config?.device.label ?? ""
     relayURL = model.config?.server.relayURL.absoluteString ?? ""
+    // The user may have changed the login item in System Settings.
+    launchAtLogin = LaunchAtLogin.isEnabled
   }
 
   private func deviceSubtitle(_ device: DeviceSummary) -> String {
