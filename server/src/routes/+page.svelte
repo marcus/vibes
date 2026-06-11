@@ -1,5 +1,5 @@
 <script>
-  import AuroraMockup from '$lib/components/AuroraMockup.svelte';
+  import OrbitMockup from '$lib/components/OrbitMockup.svelte';
   import MarketingShell from '$lib/components/MarketingShell.svelte';
   import SocialMeta from '$lib/components/SocialMeta.svelte';
 
@@ -57,7 +57,7 @@
         </svg>
       </div>
 
-      <div class="eyebrow"><span class="pip"></span> Now coding · 3 friends online</div>
+      <div class="eyebrow"><span class="pip"></span> Right now · 4 friends in orbit</div>
       <h1>See who's <span class="spectrum-text">coding</span><br />right now.</h1>
       <p class="hero-sub">Vibes shows which friends are online and how much they've coded today.</p>
       <p class="hero-lede">A Mac app for small groups. It turns your local Git activity into a simple, private friend feed.</p>
@@ -78,9 +78,9 @@
     <!-- ===================== MOCKUP ===================== -->
     <section class="stage shell">
       <div class="window-wrap">
-        <AuroraMockup siteTheme={theme} />
+        <OrbitMockup siteTheme={theme} />
       </div>
-      <p class="stage-cap">Interactive mockup of the Vibes Mac app. <b>Try toggling light and dark mode</b> on the window or website.</p>
+      <p class="stage-cap">Interactive mockup of the Vibes Mac app. <b>Try the orbit / list toggle</b> — and light or dark mode on the window or website.</p>
     </section>
 
     <!-- ===================== GET STARTED ===================== -->
