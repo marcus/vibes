@@ -58,7 +58,7 @@ private struct SetupPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 24) {
-      Header(title: "vibes", subtitle: "private presence for coding friends")
+      Header(title: "vibes")
 
       // Zero-effort path: iCloud Keychain carried the account over from
       // another Mac. One click mints this Mac its own token and signs in.
@@ -85,13 +85,8 @@ private struct SetupPanel: View {
           .foregroundStyle(Color.secondary)
       }
 
-      VStack(alignment: .leading, spacing: 8) {
-        Text("Let's set you up.")
-          .font(.title3.weight(.light))
-        Text("This stays on your Mac.")
-          .font(.subheadline)
-          .foregroundStyle(Color.secondary)
-      }
+      Text("Let's set you up.")
+        .font(.title3.weight(.light))
 
       Field("display name", text: $displayName, prompt: "Marcus")
 
@@ -105,7 +100,7 @@ private struct SetupPanel: View {
             )
           }
         } label: {
-          Label("Create my identity", systemImage: "checkmark")
+          Label("Save display name", systemImage: "checkmark")
         }
         .buttonStyle(.glassProminent)
         .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
@@ -241,19 +236,6 @@ private struct MainPanel: View {
           // Exact size kept: the wordmark is a deliberate display mark, at the
           // mockups' titlebar scale.
           .font(.system(size: 17, weight: .light))
-        if let count = onlineCount {
-          HStack(spacing: 5) {
-            Circle()
-              .fill(Color(nsColor: .systemGreen))
-              .frame(width: 6, height: 6)
-            Text(feedViewModeRaw == FeedViewMode.list.rawValue ? "\(count) online" : "\(count) in orbit")
-              .font(.caption)
-              .foregroundStyle(Color.secondary)
-              .monospacedDigit()
-          }
-          .padding(.top, 2)
-          .accessibilityElement(children: .combine)
-        }
         Spacer()
         GlassEffectContainer(spacing: 10) {
           HStack(spacing: 10) {
@@ -266,8 +248,13 @@ private struct MainPanel: View {
               Task { await model.scanPublishAndFetch() }
             } label: {
               Image(systemName: model.isBusy ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                .font(.system(size: FloatingControl.iconSize, weight: .medium))
+                .opacity(model.isBusy ? 0.4 : 1)
+                .frame(width: FloatingControl.height, height: FloatingControl.height)
+                .contentShape(Circle())
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .circle)
             .disabled(model.isBusy)
             .accessibilityLabel("Scan Now")
           }
@@ -302,44 +289,42 @@ private struct MainPanel: View {
     }
   }
 
-  // You + friends currently online; nil before the first feed so the count
-  // doesn't flash "0" during launch.
-  private var onlineCount: Int? {
-    guard let feed = model.feed else { return nil }
-    let you = feed.you.mode == .online ? 1 : 0
-    return you + feed.friends.filter { $0.mode == .online }.count
-  }
 }
 
 struct SettingsView: View {
   @EnvironmentObject private var model: AppModel
 
   var body: some View {
-    TabView {
+    TabView(selection: $model.settingsTab) {
       GeneralSettingsPane()
         .tabItem {
           Label("General", systemImage: "gearshape")
         }
+        .tag(SettingsTab.general)
 
       ProfileIconSettingsPane()
         .tabItem {
           Label("Profile Icon", systemImage: "person.crop.circle")
         }
+        .tag(SettingsTab.profileIcon)
 
       RepositoriesSettingsPane()
         .tabItem {
           Label("Repositories", systemImage: "folder")
         }
+        .tag(SettingsTab.repositories)
 
       SharingSettingsPane()
         .tabItem {
           Label("Sharing", systemImage: "hand.raised")
         }
+        .tag(SettingsTab.sharing)
 
       AdvancedSettingsPane()
         .tabItem {
           Label("Advanced", systemImage: "wrench.and.screwdriver")
         }
+        .tag(SettingsTab.advanced)
     }
     .frame(width: 600, height: 520)
   }
@@ -347,6 +332,7 @@ struct SettingsView: View {
 
 private struct GeneralSettingsPane: View {
   @EnvironmentObject private var model: AppModel
+  @AppStorage("feedTextSize") private var feedTextSizeRaw = FeedTextSize.large.rawValue
   @State private var displayName = ""
   @State private var handle = ""
   @State private var deviceLabel = ""
@@ -357,6 +343,14 @@ private struct GeneralSettingsPane: View {
       Section {
         Text("Account and relay details for this Mac.")
           .foregroundStyle(.secondary)
+      }
+
+      Section("Appearance") {
+        Picker("Feed text size", selection: $feedTextSizeRaw) {
+          ForEach(FeedTextSize.allCases) { size in
+            Text(size.label).tag(size.rawValue)
+          }
+        }
       }
 
       Section("Identity") {
@@ -838,15 +832,48 @@ private struct EditableSettingField: View {
   }
 }
 
+// Feed text size (Settings → General → Appearance): scales the Dynamic-Type
+// styles inside the feed — orbit labels, repo chips, list cards — without
+// touching the window chrome. Defaults one notch above the system size, a
+// deliberate readability bump.
+enum FeedTextSize: String, CaseIterable, Identifiable {
+  case standard
+  case large
+  case extraLarge
+
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .standard: "Standard"
+    case .large: "Large"
+    case .extraLarge: "Extra Large"
+    }
+  }
+
+  var dynamicTypeSize: DynamicTypeSize {
+    switch self {
+    case .standard: .large  // the system default
+    case .large: .xLarge
+    case .extraLarge: .xxLarge
+    }
+  }
+}
+
 // The primary view: manual-status field, then the Aurora II presence column —
 // "you" first, online friends as full cards, offline friends compressed into
 // quiet rows under an "away" divider. EmptyState when there are no friends.
 private struct HomeView: View {
   @EnvironmentObject private var model: AppModel
   @AppStorage("feedViewMode") private var feedViewModeRaw = FeedViewMode.orbit.rawValue
+  @AppStorage("feedTextSize") private var feedTextSizeRaw = FeedTextSize.large.rawValue
 
   private var feedViewMode: FeedViewMode {
     FeedViewMode(rawValue: feedViewModeRaw) ?? .orbit
+  }
+
+  private var feedTextSize: FeedTextSize {
+    FeedTextSize(rawValue: feedTextSizeRaw) ?? .large
   }
 
   // Orbit just needs a feed — with no friends yet it shows your own orb plus
@@ -882,6 +909,7 @@ private struct HomeView: View {
         feedList
       }
     }
+    .dynamicTypeSize(feedTextSize.dynamicTypeSize)
   }
 
   private var feedList: some View {
@@ -921,6 +949,14 @@ private struct HomeView: View {
   }
 }
 
+// Preview-style floating controls: every glass control in the header and
+// footer shares one height — circles for single-icon buttons, capsule pills
+// for grouped or labeled ones.
+enum FloatingControl {
+  static let height: CGFloat = 32
+  static let iconSize: CGFloat = 13
+}
+
 // Orbit ↔ list switcher, sitting with the other floating header controls: one
 // glass capsule with two labeled segments ("✦ orbit" / "☰ list" per the
 // mockups), the active one raised on a brighter pill. The raw-string binding
@@ -946,12 +982,12 @@ private struct FeedViewToggle: View {
     } label: {
       HStack(spacing: 5) {
         Image(systemName: icon)
-          .font(.system(size: 9, weight: .semibold))
+          .font(.system(size: 10, weight: .semibold))
         Text(title)
-          .font(.caption.weight(.medium))
+          .font(.callout.weight(.medium))
       }
-      .padding(.horizontal, 11)
-      .padding(.vertical, 4)
+      .padding(.horizontal, 12)
+      .frame(height: FloatingControl.height - 6)
       .foregroundStyle(isActive ? Color.primary : Color.secondary)
       .background(
         isActive ? AnyShapeStyle(Color(nsColor: .quaternarySystemFill)) : AnyShapeStyle(.clear),
@@ -980,15 +1016,16 @@ private struct PresenceLight: View {
             ? Color(nsColor: .systemGreen)
             : Color(nsColor: .tertiaryLabelColor)
         )
-        .frame(width: 9, height: 9)
+        .frame(width: 10, height: 10)
         .shadow(
           color: mode == .online ? Color(nsColor: .systemGreen).opacity(0.7) : .clear,
           radius: 4
         )
-        .padding(.horizontal, 5)
-        .padding(.vertical, 6)
+        .frame(width: FloatingControl.height, height: FloatingControl.height)
+        .contentShape(Circle())
     }
-    .buttonStyle(.glass)
+    .buttonStyle(.plain)
+    .glassEffect(.regular.interactive(), in: .circle)
     .help(mode == .online ? "Online — click to go offline" : "Offline — click to go online")
     .accessibilityLabel(mode == .online ? "Online" : "Offline")
     .accessibilityHint("Toggles your presence")
@@ -1221,38 +1258,103 @@ private struct Footer: View {
 
   var body: some View {
     HStack {
+      // Quiet corner: nothing when sync is healthy. A small warning surfaces
+      // problems; transient success messages still flash through.
       if let error = model.lastError {
-        Text(error)
+        Label(error, systemImage: "exclamationmark.triangle.fill")
           .foregroundStyle(Color.red)
           .lineLimit(1)
       } else if let message = model.successMessage {
         Text(message)
           .foregroundStyle(Color.secondary)
           .lineLimit(1)
-      } else {
-        Text(model.lastSyncedAt.map { "synced \($0.formatted(.relative(presentation: .named)))" } ?? "not synced")
-          .foregroundStyle(Color.secondary)
       }
       Spacer()
       GlassEffectContainer(spacing: 8) {
         HStack(spacing: 8) {
-          Button("Invite") {
+          Button {
             openInviteFriend()
+          } label: {
+            Text("Invite")
+              .font(.callout.weight(.medium))
+              .padding(.horizontal, 16)
+              .frame(height: FloatingControl.height)
+              .contentShape(Capsule())
           }
-          .buttonStyle(.glass)
+          .buttonStyle(.plain)
+          .glassEffect(.regular.interactive(), in: .capsule)
           .accessibilityLabel("Invite a Friend")
+          .overlay(alignment: .top) {
+            if needsFriends {
+              OnboardingNudge(text: "invite a friend")
+            }
+          }
 
           Button {
+            // First-run routing: with no repos yet, land directly on the
+            // Repositories pane the nudge arrow is pointing toward.
+            if needsRepos {
+              model.settingsTab = .repositories
+            }
             openSettings()
           } label: {
             Image(systemName: "gearshape")
+              .font(.system(size: FloatingControl.iconSize, weight: .medium))
+              .frame(width: FloatingControl.height, height: FloatingControl.height)
+              .contentShape(Circle())
           }
-          .buttonStyle(.glass)
+          .buttonStyle(.plain)
+          .glassEffect(.regular.interactive(), in: .circle)
           .accessibilityLabel("Open Settings")
+          .overlay(alignment: .top) {
+            if needsRepos {
+              OnboardingNudge(text: "add your repos")
+            }
+          }
         }
       }
     }
     .font(.caption)
+  }
+
+  // Onboarding ladder: repos first, then a friend. One nudge at a time.
+  private var needsRepos: Bool {
+    (model.config?.repos ?? []).isEmpty
+  }
+
+  private var needsFriends: Bool {
+    !needsRepos && (model.feed?.friends ?? []).isEmpty
+  }
+}
+
+// A quiet onboarding pointer: caption text over a gently bobbing arrow,
+// floated above the control it points at. Purely decorative — never blocks
+// clicks on the control underneath.
+private struct OnboardingNudge: View {
+  var text: String
+  @State private var bob = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  var body: some View {
+    VStack(spacing: 5) {
+      Text(text)
+        .font(.caption)
+        .foregroundStyle(Color.secondary)
+        .fixedSize()
+      Image(systemName: "arrow.down")
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundStyle(Color.secondary)
+    }
+    .offset(y: bob ? -3 : 3)
+    .onAppear {
+      guard !reduceMotion else { return }
+      withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+        bob = true
+      }
+    }
+    .alignmentGuide(.top) { $0[.bottom] + 14 }
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
   }
 }
 

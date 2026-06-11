@@ -4,9 +4,21 @@ import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
+// Settings tabs, selectable in code so onboarding can land the user on the
+// right pane (e.g. the footer gear opens straight to Repositories when none
+// are configured yet).
+enum SettingsTab: Hashable {
+  case general
+  case profileIcon
+  case repositories
+  case sharing
+  case advanced
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   @Published var config: VibesConfig?
+  @Published var settingsTab: SettingsTab = .general
   @Published var token: String = ""
   @Published var mode: PresenceMode = .online
   @Published var manualStatus: String = ""
