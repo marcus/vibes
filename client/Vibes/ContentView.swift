@@ -60,6 +60,19 @@ private struct SetupPanel: View {
     VStack(alignment: .leading, spacing: 24) {
       Header(title: "vibes")
 
+      // An invite arrived before sign-in — via the clipboard handoff from the
+      // invite page or a vibes://invite deep link. Registration below accepts
+      // it automatically (AppModel.install), so the banner promises that.
+      if let invite = model.pendingInvite {
+        VStack(alignment: .leading, spacing: 8) {
+          Text(invite.inviterName.map { "\($0) invited you to Vibes." } ?? "You have a Vibes invite.")
+            .font(.title3.weight(.light))
+          Text("Enter a display name below and you'll be connected automatically.")
+            .font(.subheadline)
+            .foregroundStyle(Color.secondary)
+        }
+      }
+
       // Zero-effort path: iCloud Keychain carried the account over from
       // another Mac. One click mints this Mac its own token and signs in.
       if let synced = model.syncedAccount {
@@ -195,8 +208,11 @@ private struct SetupPanel: View {
     .safeAreaPadding(.top, 28)
     // iCloud Keychain may deliver the synced account minutes after first
     // launch — re-check whenever the unconfigured app comes to the front.
+    // Same moment re-checks the clipboard: the user may have copied their
+    // invite link after launching the app.
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       model.recheckSyncedAccount()
+      model.checkClipboardForInvite()
     }
     // A vibes://link deep link can carry the source relay (self-hosted setups).
     .onReceive(model.$linkRelayHint) { hint in

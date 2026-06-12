@@ -34,6 +34,21 @@
       // selectable, so the user can still copy it manually.
     }
   }
+
+  // Deferred deep link: stash the invite link on the clipboard as the visitor
+  // heads to the download, so the app's first-run setup can detect it and
+  // accept the invite without them returning to this page. Copy first, then
+  // navigate — a pending clipboard write can be dropped on unload.
+  async function downloadWithInvite(event) {
+    if (!data.code) return;
+    event.preventDefault();
+    try {
+      await navigator.clipboard.writeText(new URL(`/i/${encodeURIComponent(data.code)}`, window.location.origin).href);
+    } catch {
+      // Clipboard blocked — the in-app code entry remains the fallback.
+    }
+    window.location.assign(event.currentTarget?.href ?? "/download");
+  }
 </script>
 
 <svelte:head>
@@ -73,12 +88,12 @@
 
         <div class="hero-cta">
           <a class="btn btn-primary" href={appURL}>Open in Vibes</a>
-          <a class="btn btn-ghost" href="/download">
+          <a class="btn btn-ghost" href="/download" onclick={downloadWithInvite}>
             <svg class="apple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
             Download for Mac
           </a>
         </div>
-        <p class="hero-fine">Already installed? "Open in Vibes" accepts the invite directly.</p>
+        <p class="hero-fine">New here? Downloading copies your invite — Vibes finds it automatically after you install. Already installed? "Open in Vibes" accepts the invite directly.</p>
 
         <div class="code-card">
           <span class="code-label">invite code</span>
@@ -86,7 +101,7 @@
             <code>{data.code}</code>
             <button type="button" class="copy" onclick={copyCode}>{copied ? "copied" : "copy"}</button>
           </div>
-          <p class="code-hint">New install? Paste this code in Friends after setup.</p>
+          <p class="code-hint">Backup plan: if Vibes doesn't spot your invite on its own, paste this code in Friends after setup.</p>
         </div>
 
         <div class="privacy">
@@ -119,7 +134,7 @@
           <div class="step">
             <div class="step-num">02</div>
             <h3>Accept the invite</h3>
-            <p>Hit "Open in Vibes" above, or paste the invite code in Friends.</p>
+            <p>Vibes spots your copied invite during setup and connects you automatically.</p>
           </div>
           <div class="step">
             <div class="step-num">03</div>

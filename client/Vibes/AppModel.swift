@@ -37,8 +37,9 @@ final class AppModel: ObservableObject {
   // An account found in iCloud Keychain on a not-yet-configured Mac — drives
   // the setup screen's one-click "continue as @handle" card.
   @Published var syncedAccount: SyncedAccount?
-  // Relay URL carried by a vibes://link/<code>?relay=… deep link, so codes
-  // from self-hosted relays work without touching the Advanced field.
+  // Relay URL carried by a vibes://link/<code>?relay=… deep link or a
+  // clipboard invite from a non-default relay, so self-hosted setups work
+  // without touching the Advanced field.
   @Published var linkRelayHint: String?
   @Published var isBusy = false
   @Published var lastError: String?
@@ -84,6 +85,8 @@ final class AppModel: ObservableObject {
   // a dead credential to the user's other Macs via iCloud Keychain.
   private var syncedAccountAdvertised = false
 
+  static let defaultRelayURL = URL(string: "https://vibes.opentangle.com")!
+
   var isConfigured: Bool {
     config != nil && !token.isEmpty
   }
@@ -115,6 +118,7 @@ final class AppModel: ObservableObject {
         Task { await refreshAll() }
       } else {
         recheckSyncedAccount()
+        checkClipboardForInvite()
       }
     } catch {
       lastError = error.localizedDescription
@@ -427,13 +431,111 @@ final class AppModel: ObservableObject {
       syncedAccountAdvertised = true
       refreshSyncedAccountItem()
       startLoop()
+      // Invite-first onboarding: when setup started from an invite (deep link
+      // or clipboard handoff), finish the job here instead of bouncing the
+      // freshly signed-in user to a sheet. Taking the invite before the first
+      // refresh keeps MainPanel's pendingInvite sheet from flashing open.
+      let invite = pendingInvite
+      pendingInvite = nil
       await refreshAll()
-      if pendingInvite != nil {
+      if let invite {
         successMessage = nil
+        await acceptInvite(code: invite.code)
       }
     } catch {
       lastError = error.localizedDescription
     }
+  }
+
+  // MARK: - Clipboard invite handoff
+
+  // The invite landing page copies the invite link to the clipboard when the
+  // visitor clicks "Download for Mac", so a brand-new install can greet them
+  // with "<name> invited you" instead of making them return to the browser.
+  // Only runs while unconfigured, and only reads the pasteboard once pattern
+  // detection (which never shows a prompt) says a web URL is present — so the
+  // system's "paste from another app" alert can't fire on an unrelated
+  // clipboard.
+  func checkClipboardForInvite() {
+    guard !isConfigured, pendingInvite == nil else { return }
+    Task { @MainActor in
+      let pasteboard = NSPasteboard.general
+      guard let patterns = try? await pasteboard.detectedPatterns(for: [\.probableWebURL]),
+            patterns.contains(\.probableWebURL),
+            !isConfigured, pendingInvite == nil,
+            let text = pasteboard.string(forType: .string),
+            let found = Self.invite(inCopiedText: text)
+      else { return }
+      pendingInvite = PendingInvite(code: found.code)
+      inviteCodeInput = found.code
+      if let relay = found.relayURL, isAllowedRelayURL(relay),
+         relay != Self.defaultRelayURL {
+        linkRelayHint = relay.absoluteString
+      }
+      fetchPendingInviteInviter(code: found.code, relayHint: found.relayURL)
+    }
+  }
+
+  struct ClipboardInvite: Equatable {
+    var code: String
+    // Origin of an https invite link — a relay hint for self-hosted setups.
+    var relayURL: URL?
+  }
+
+  // Recognize an invite in copied text: the landing page's canonical
+  // https://<relay>/i/<code> (or /invite/<code>) link, a vibes://invite/<code>
+  // deep link, or either of those embedded in a larger copied message.
+  static func invite(inCopiedText text: String) -> ClipboardInvite? {
+    let trimmed = String(text.prefix(4096)).trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    if let direct = invite(fromURLString: trimmed) {
+      return direct
+    }
+    if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
+      let range = NSRange(trimmed.startIndex..., in: trimmed)
+      for match in detector.matches(in: trimmed, range: range) {
+        if let url = match.url, let found = invite(from: url) {
+          return found
+        }
+      }
+    }
+    // NSDataDetector skips custom schemes — find a vibes:// link by hand.
+    if let vibesRange = trimmed.range(of: #"vibes://invite/[A-Za-z0-9_\-]+"#, options: .regularExpression) {
+      return invite(fromURLString: String(trimmed[vibesRange]))
+    }
+    return nil
+  }
+
+  private static func invite(fromURLString string: String) -> ClipboardInvite? {
+    guard let url = URL(string: string) else { return nil }
+    return invite(from: url)
+  }
+
+  private static func invite(from url: URL) -> ClipboardInvite? {
+    let code: String?
+    var relayURL: URL?
+    switch url.scheme?.lowercased() {
+    case "vibes":
+      guard url.host(percentEncoded: false)?.lowercased() == "invite" else { return nil }
+      code = url.pathComponents.first { $0 != "/" }
+    case "https", "http":
+      let parts = url.pathComponents.filter { $0 != "/" }
+      guard parts.count == 2, parts[0] == "i" || parts[0] == "invite" else { return nil }
+      code = parts[1]
+      var origin = URLComponents()
+      origin.scheme = url.scheme
+      origin.host = url.host(percentEncoded: false)
+      origin.port = url.port
+      relayURL = origin.url
+    default:
+      return nil
+    }
+    // Invite codes are base64url; the length window keeps short path slugs
+    // and arbitrary long tokens from masquerading as one.
+    guard let code, (16...64).contains(code.count),
+          code.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
+    else { return nil }
+    return ClipboardInvite(code: code, relayURL: relayURL)
   }
 
   func handleIncomingURL(_ url: URL) {
@@ -472,12 +574,14 @@ final class AppModel: ObservableObject {
     NSApp.activate(ignoringOtherApps: true)
   }
 
-  // Best-effort name lookup so the invite sheet can say who sent it. Failures
-  // (offline, expired code, old relay) just leave the generic copy in place.
-  private func fetchPendingInviteInviter(code: String) {
-    guard let config else { return }
+  // Best-effort name lookup so the invite sheet / setup banner can say who
+  // sent it. Works before sign-in too (the endpoint is unauthenticated — the
+  // code is the capability). Failures (offline, expired code, old relay) just
+  // leave the generic copy in place.
+  private func fetchPendingInviteInviter(code: String, relayHint: URL? = nil) {
+    let baseURL = config?.server.relayURL ?? relayHint ?? Self.defaultRelayURL
     Task {
-      guard let lookup = try? await client(for: config).inviteLookup(code: code),
+      guard let lookup = try? await RelayClient(baseURL: baseURL, token: "").inviteLookup(code: code),
             let name = lookup.inviter,
             !name.isEmpty,
             pendingInvite?.code == code
