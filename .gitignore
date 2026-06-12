@@ -54,3 +54,4 @@ release/release-notes/*.html
 .sidecar-start.sh
 .sidecar-base
 .td-root
+release/appcast/old_updates/
