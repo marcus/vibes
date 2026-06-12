@@ -219,7 +219,6 @@ private struct OrbView: View {
   var rank: Int
   var maxChurn: Int
 
-  @State private var floating = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.feedTextScale) private var textScale
 
@@ -236,23 +235,28 @@ private struct OrbView: View {
   }
 
   var body: some View {
-    VStack(spacing: 7) {
-      globe
-      labels
-    }
-    .frame(width: 168)
-    .offset(y: floating ? -5 : 5)
-    .onAppear {
-      guard !reduceMotion else { return }
-      // Stagger durations by rank so the orbs don't bob in lockstep.
-      withAnimation(
-        .easeInOut(duration: 6.0 + Double(rank % 3) * 1.3).repeatForever(autoreverses: true)
-      ) {
-        floating = true
+    TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+      VStack(spacing: 7) {
+        globe
+        labels
       }
+      .frame(width: 168)
+      .offset(y: floatOffset(at: context.date))
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilitySummary)
+  }
+
+  // Gentle bob, period and phase staggered by rank so the orbs don't move in
+  // lockstep. Driven by TimelineView (a committed offset each frame) rather
+  // than a repeatForever animation: the avatar PNG loads async, and content
+  // inserted under an in-flight persistent animation can end up out of phase
+  // with its clip circle, showing the bitmap's cropped edges as the orb floats.
+  private func floatOffset(at date: Date) -> CGFloat {
+    guard !reduceMotion else { return 0 }
+    let period = 12.0 + Double(rank % 3) * 2.6
+    let phase = Double(rank) * 0.9
+    return CGFloat(sin(date.timeIntervalSinceReferenceDate * 2 * .pi / period + phase) * 5)
   }
 
   private var globe: some View {
