@@ -844,7 +844,9 @@ final class AppModel: ObservableObject {
 
   @discardableResult
   func createInvite() async -> Bool {
-    guard let config, isConfigured else { return false }
+    guard let config, isConfigured, !isBusy else { return false }
+    isBusy = true
+    defer { isBusy = false }
     do {
       let invite = try await client(for: config).createInvite()
       latestInviteURL = invite.inviteURL

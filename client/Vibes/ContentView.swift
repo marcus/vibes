@@ -374,7 +374,10 @@ private struct GeneralSettingsPane: View {
           .onChange(of: launchAtLogin) { _, enabled in
             // The toggle can also be flipped back here when registration fails,
             // so only touch SMAppService when the value actually diverges.
-            guard enabled != LaunchAtLogin.isEnabled else { return }
+            // "Registered but awaiting approval in System Settings" counts as
+            // on here, so toggling off still unregisters the inert item.
+            let registered = LaunchAtLogin.isEnabled || LaunchAtLogin.requiresApproval
+            guard enabled != registered else { return }
             do {
               try LaunchAtLogin.set(enabled: enabled)
               launchAtLoginError = nil
