@@ -14,8 +14,6 @@ struct GitScanner {
       total.filesChanged += stats.filesChanged
       total.insertions += stats.insertions
       total.deletions += stats.deletions
-      total.uncommittedInsertions += stats.uncommittedInsertions
-      total.uncommittedDeletions += stats.uncommittedDeletions
       if let activity = stats.latestActivity,
          total.latestActivity == nil || activity > total.latestActivity! {
         total.latestActivity = activity
@@ -25,13 +23,13 @@ struct GitScanner {
     return total
   }
 
+  // Only committed work counts: commits authored by the repo's configured user
+  // email inside the day window. Uncommitted (staged/unstaged) diffs are ignored
+  // — they carry no timestamp, so a stale dirty file would otherwise mark the
+  // repo "worked on today" every day until committed or reverted.
   private func scanRepo(repo: RepoConfig, dayWindow: VibesDayWindow, now: Date) -> DailyGitStats {
     var stats = DailyGitStats()
     guard let authorEmail = configuredUserEmail(repo.path) else {
-      scanWorkingTree(repo: repo, into: &stats)
-      if stats.hasActivity {
-        stats.latestActivity = now
-      }
       return stats
     }
 
@@ -52,41 +50,22 @@ struct GitScanner {
           stats.commits += 1
         }
       } else if includeCurrentCommit {
-        parseNumstat(line, committed: true, into: &stats)
+        parseNumstat(line, into: &stats)
       }
     }
 
-    scanWorkingTree(repo: repo, into: &stats)
     if stats.hasActivity {
       stats.latestActivity = now
     }
     return stats
   }
 
-  private func scanWorkingTree(repo: RepoConfig, into stats: inout DailyGitStats) {
-    let unstaged = runGit(["-C", repo.path, "diff", "--numstat"])
-    for line in unstaged.split(separator: "\n") {
-      parseNumstat(line, committed: false, into: &stats)
-    }
-    let staged = runGit(["-C", repo.path, "diff", "--cached", "--numstat"])
-    for line in staged.split(separator: "\n") {
-      parseNumstat(line, committed: false, into: &stats)
-    }
-  }
-
-  private func parseNumstat(_ line: Substring, committed: Bool, into stats: inout DailyGitStats) {
+  private func parseNumstat(_ line: Substring, into stats: inout DailyGitStats) {
     let parts = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
     guard parts.count >= 2 else { return }
-    let inserted = Int(parts[0]) ?? 0
-    let deleted = Int(parts[1]) ?? 0
-    if committed {
-      stats.filesChanged += 1
-      stats.insertions += inserted
-      stats.deletions += deleted
-    } else {
-      stats.uncommittedInsertions += inserted
-      stats.uncommittedDeletions += deleted
-    }
+    stats.filesChanged += 1
+    stats.insertions += Int(parts[0]) ?? 0
+    stats.deletions += Int(parts[1]) ?? 0
   }
 
   private func runGit(_ arguments: [String]) -> String {
@@ -534,8 +513,6 @@ enum StatusBuilder {
           "files_changed": .int(stats.filesChanged),
           "insertions": .int(stats.insertions),
           "deletions": .int(stats.deletions),
-          "uncommitted_insertions": .int(stats.uncommittedInsertions),
-          "uncommitted_deletions": .int(stats.uncommittedDeletions),
           "repos_touched": .int(stats.reposTouched)
         ]
       )

@@ -246,14 +246,14 @@ struct DailyGitStats: Codable, Equatable {
   var filesChanged: Int = 0
   var insertions: Int = 0
   var deletions: Int = 0
-  var uncommittedInsertions: Int = 0
-  var uncommittedDeletions: Int = 0
   var reposTouched: Int = 0
   var latestActivity: Date?
   var repoAliases: [String] = []
 
+  // Committed activity only — see GitScanner.scanRepo for why uncommitted
+  // diffs are excluded.
   var hasActivity: Bool {
-    commits > 0 || insertions > 0 || deletions > 0 || uncommittedInsertions > 0 || uncommittedDeletions > 0
+    commits > 0 || insertions > 0 || deletions > 0
   }
 
   var summary: String {

@@ -113,11 +113,10 @@ Track per day:
 - insertions
 - deletions
 - repos touched
-- uncommitted insertions/deletions
 - latest activity timestamp
 - optional repo aliases
 
-Use the user's account-level Vibes day timezone for "today" rather than a rolling 24-hour window or each Mac's local midnight. The timezone is set during registration/import from the Mac timezone when possible and is stable across that user's devices. When the account Vibes day rolls over, each client rescans and republishes so the feed resets to the new day's stats; until it republishes, the previous `client_day` blob stays visible and the feed treats it as stale. The scanner should not count untracked files in v1; use committed changes, working tree diff, and staged diff only.
+Use the user's account-level Vibes day timezone for "today" rather than a rolling 24-hour window or each Mac's local midnight. The timezone is set during registration/import from the Mac timezone when possible and is stable across that user's devices. When the account Vibes day rolls over, each client rescans and republishes so the feed resets to the new day's stats; until it republishes, the previous `client_day` blob stays visible and the feed treats it as stale. The scanner counts committed changes only — no untracked files, and no working-tree or staged diffs (uncommitted changes carry no timestamp, so a stale dirty file would count as activity every day until committed or reverted).
 
 Use local Git CLI commands rather than GitHub APIs.
 
@@ -542,8 +541,6 @@ The app is for friends, but still avoid accidental oversharing.
         "files_changed": 31,
         "insertions": 1248,
         "deletions": 402,
-        "uncommitted_insertions": 184,
-        "uncommitted_deletions": 22,
         "repos_touched": 4
       }
     },

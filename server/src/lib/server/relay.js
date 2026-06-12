@@ -808,13 +808,13 @@ function sumNumber(total, value) {
 }
 
 function mergeGitStats(rows, chosenDay, chosenTimezone) {
+  // No uncommitted_* keys: only committed work counts, so uncommitted figures
+  // from older clients are dropped rather than merged into the feed.
   const stats = {
     commits: 0,
     files_changed: 0,
     insertions: 0,
     deletions: 0,
-    uncommitted_insertions: 0,
-    uncommitted_deletions: 0,
     repos_touched: 0,
   };
   let found = false;
