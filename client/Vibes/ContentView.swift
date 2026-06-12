@@ -648,7 +648,7 @@ private struct ProfileIconSettingsPane: View {
 
         if let error = model.avatarError {
           if model.avatarMaySetupNeeded {
-            Text("Apple Intelligence may still be setting up image generation. Open Image Playground once to finish the download, then try again.")
+            Text("Couldn't generate that icon. Try rewording the prompt — Apple Intelligence declines some subjects, like real people. If it's still setting up, open Image Playground once to finish the download, then try again.")
               .font(.callout)
               .foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)

@@ -743,8 +743,10 @@ final class AppModel: ObservableObject {
     } catch let error as AvatarGenerationError {
       avatarPreviewPNG = nil
       avatarError = error.localizedDescription
-      // A `.failed` after the generator's own one retry is the warm-up/"model
-      // still downloading" case — offer the Image Playground affordance.
+      // `.failed` is ambiguous: ImageCreator returns the same `creationFailed`
+      // for a guardrail-rejected prompt (e.g. wording that implies a person)
+      // and for a model that's still downloading. The UI copy covers both and
+      // offers the Image Playground affordance for the latter.
       avatarMaySetupNeeded = (error == .failed)
     } catch {
       avatarPreviewPNG = nil

@@ -16,9 +16,14 @@ const MAX_AVATAR_STYLE_LENGTH = 64;
  * generation. Served via /api/me so art direction is tunable without an app
  * release. The client composes prefix + user prompt + suffix and picks the
  * first of `styles` present in the device's available ImagePlayground styles.
+ *
+ * Wording constraint: ImageCreator's guardrails reject the word "avatar"
+ * (it implies a person, and Image Playground blocks people-from-text) with
+ * `creationFailed` before generation starts. "icon" passes. Verified
+ * empirically 2026-06-12 on macOS 26.
  */
 export const HOUSE_STYLE = {
-  prompt_prefix: "A friendly minimalist avatar of ",
+  prompt_prefix: "A friendly minimalist icon of ",
   prompt_suffix: ", centered, simple solid background, soft palette",
   styles: ["illustration", "animation", "sketch"],
   image_size: 512,
