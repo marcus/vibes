@@ -481,7 +481,8 @@ enum StatusBuilder {
     manualStatus: String,
     stats: DailyGitStats,
     now: Date = Date(),
-    dayWindow: VibesDayWindow? = nil
+    dayWindow: VibesDayWindow? = nil,
+    extraCards: [StatusCard] = []
   ) -> StatusPayload {
     let window = dayWindow ?? VibesDayWindow.current(
       now: now,
@@ -497,7 +498,9 @@ enum StatusBuilder {
       dayStartAt: window.startAt,
       dayEndAt: window.endAt,
       updatedAt: now,
-      cards: buildCards(stats: stats)
+      // Provider-built cards (music, weather) ride along after the git cards;
+      // AppModel gates them on the sharing toggles before they get here.
+      cards: buildCards(stats: stats) + extraCards
     )
   }
 

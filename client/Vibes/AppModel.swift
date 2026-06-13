@@ -78,6 +78,13 @@ final class AppModel: ObservableObject {
   private let syncedAccountStore = SyncedAccountStore()
   private let scanner = GitScanner()
   private var loopTask: Task<Void, Never>?
+
+  // Sender-side providers for the optional cards. Internal (not private) so
+  // the sharing settings pane can observe provider problems (e.g. a denied
+  // location prompt) next to the toggles.
+  let musicProvider = MusicProvider()
+  let weatherProvider = WeatherProvider()
+  private var musicPublishTask: Task<Void, Never>?
   private var successMessageDismissTask: Task<Void, Never>?
   private var lastDeviceStatusPayload: StatusPayload?
   // The synced-account item is (re)written only after this device's token has
@@ -643,7 +650,8 @@ final class AppModel: ObservableObject {
         manualStatus: manualStatus,
         stats: nextStats,
         now: now,
-        dayWindow: dayWindow
+        dayWindow: dayWindow,
+        extraCards: await sharedExtraCards(config: config)
       )
       try await client(for: config).publish(payload)
       lastDeviceStatusPayload = payload
@@ -762,6 +770,25 @@ final class AppModel: ObservableObject {
   func setCard(_ keyPath: WritableKeyPath<SharingCardsConfig, Bool>, enabled: Bool) {
     mutateConfig { config in
       config.sharing.cards[keyPath: keyPath] = enabled
+    }
+    syncProviders()
+    Task { await scanPublishAndFetch() }
+  }
+
+  func updateWeatherCity(_ value: String) {
+    let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard config?.sharing.weather.manualCity != clean else { return }
+    mutateConfig { config in
+      config.sharing.weather.manualCity = clean
+    }
+    // The cached coordinate belongs to the old city (or to Location Services).
+    weatherProvider.invalidate()
+    Task { await scanPublishAndFetch() }
+  }
+
+  func setWeatherShareCity(_ enabled: Bool) {
+    mutateConfig { config in
+      config.sharing.weather.shareCity = enabled
     }
     Task { await scanPublishAndFetch() }
   }
@@ -1035,6 +1062,7 @@ final class AppModel: ObservableObject {
   }
 
   private func startLoop() {
+    syncProviders()
     loopTask?.cancel()
     loopTask = Task { [weak self] in
       while !Task.isCancelled {
@@ -1044,10 +1072,50 @@ final class AppModel: ObservableObject {
     }
   }
 
+  // Music and weather cards for this publish, gated on the sharing toggles.
+  // Either provider returning nothing just drops that card from the payload.
+  private func sharedExtraCards(config: VibesConfig) async -> [StatusCard] {
+    var cards: [StatusCard] = []
+    if config.sharing.cards.music, let playing = musicProvider.current {
+      cards.append(playing.card)
+    }
+    if config.sharing.cards.weather,
+      let snapshot = await weatherProvider.snapshot(config: config.sharing.weather)
+    {
+      cards.append(snapshot.card(shareCity: config.sharing.weather.shareCity))
+    }
+    return cards
+  }
+
+  // Start/stop the now-playing observers to match the sharing toggle. Called
+  // on launch (startLoop) and whenever the toggle flips.
+  private func syncProviders() {
+    guard let config else { return }
+    if config.sharing.cards.music {
+      musicProvider.onChange = { [weak self] in self?.scheduleMusicPublish() }
+      musicProvider.start()
+      musicProvider.seedFromRunningPlayers()
+    } else {
+      musicProvider.stop()
+    }
+  }
+
+  // A track change shouldn't wait up to three minutes for the next loop tick,
+  // but it also shouldn't publish every skip while someone hunts for a song —
+  // give the dust 15 seconds to settle.
+  private func scheduleMusicPublish() {
+    musicPublishTask?.cancel()
+    musicPublishTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(15))
+      guard !Task.isCancelled else { return }
+      await self?.scanPublishAndFetch()
+    }
+  }
+
   private func enabledSharingCards() -> [String] {
     guard let cards = config?.sharing.cards else { return [] }
     var enabled: [String] = ["git_stats", "repo_aliases"]
-    if cards.spotify { enabled.append("spotify") }
+    if cards.music { enabled.append("music") }
     if cards.weather { enabled.append("weather") }
     return enabled
   }

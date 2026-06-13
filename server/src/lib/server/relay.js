@@ -898,7 +898,7 @@ function mergeUserStatuses(user, statusRows, nowMs) {
   const cards = [];
   const gitStats = mergeGitStats(rows, latestDay, chosenTimezone);
   if (gitStats) cards.push(gitStats);
-  for (const type of ["repo_aliases", "spotify", "weather"]) {
+  for (const type of ["repo_aliases", "music", "weather"]) {
     const card = getCard(cardSource.payload, type);
     if (card) cards.push(card);
   }

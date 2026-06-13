@@ -221,6 +221,7 @@ private struct OrbView: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.feedTextScale) private var textScale
+  @State private var musicHovered = false
 
   private static let minDiameter: CGFloat = 44
   private static let maxDiameter: CGFloat = 84
@@ -290,13 +291,30 @@ private struct OrbView: View {
           moon(status.repoAliases[1]).offset(x: -diameter * 0.46, y: -diameter * 0.10)
         }
       }
+      .overlay(alignment: .bottomTrailing) {
+        // Mirrors the second repo moon's perch on the opposite arc, so the
+        // expanded track line rides across the orb instead of the name label.
+        if let track = status.nowPlayingLine {
+          musicChip(track).offset(x: diameter * 0.46, y: -diameter * 0.10)
+        }
+      }
   }
 
   private var labels: some View {
     VStack(spacing: 1) {
-      Text(isYou ? "you" : status.user.displayName)
-        .font(.system(size: 11 * textScale, weight: .semibold))
-        .lineLimit(1)
+      HStack(spacing: 5) {
+        Text(isYou ? "you" : status.user.displayName)
+          .font(.system(size: 11 * textScale, weight: .semibold))
+          .lineLimit(1)
+        if let weather = status.weatherLine {
+          Text(weather)
+            .font(.system(size: 10 * textScale))
+            .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+            .monospacedDigit()
+            .lineLimit(1)
+            .help(status.weatherDetail ?? "")
+        }
+      }
       if let note = status.manualStatus, !note.isEmpty {
         Text(note)
           .font(.system(size: 10 * textScale))
@@ -346,6 +364,41 @@ private struct OrbView: View {
     .fixedSize()
   }
 
+  // The now-playing chip: a lone ♪ at rest so the sky stays quiet, expanding
+  // on hover to the track line. Same capsule family as the repo moons.
+  private func musicChip(_ track: String) -> some View {
+    HStack(spacing: 4) {
+      Text("♪")
+        .font(.system(size: 10 * textScale, weight: .semibold))
+        .foregroundStyle(Color.secondary)
+      if musicHovered {
+        Text(track)
+          .font(.system(size: 10 * textScale))
+          .foregroundStyle(Color.secondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .frame(maxWidth: 150)
+          .transition(.opacity.combined(with: .move(edge: .leading)))
+      }
+    }
+    .padding(.horizontal, 7)
+    .padding(.vertical, 2.5)
+    // At rest it's a moon-family chip; expanded it floats over whatever it
+    // crosses (the orb, the far repo moon), so it switches to an opaque
+    // material and reads as a tooltip.
+    .background(
+      musicHovered
+        ? AnyShapeStyle(.regularMaterial)
+        : AnyShapeStyle(Color(nsColor: .quaternarySystemFill)),
+      in: Capsule()
+    )
+    .fixedSize()
+    .onHover { hovering in
+      withAnimation(.snappy(duration: 0.18)) { musicHovered = hovering }
+    }
+    .help(track)
+  }
+
   // djb2 over unicode scalars: stable across launches (unlike hashValue, which
   // is seeded per process).
   private func stableHue(_ text: String) -> Double {
@@ -374,6 +427,12 @@ private struct OrbView: View {
     }
     if !status.repoAliases.isEmpty {
       parts.append("in \(status.repoAliases.joined(separator: ", "))")
+    }
+    if let track = status.nowPlayingLine {
+      parts.append("listening to \(track)")
+    }
+    if let weather = status.weatherDetail ?? status.weatherLine {
+      parts.append("weather \(weather)")
     }
     return parts.joined(separator: ", ")
   }
@@ -462,7 +521,8 @@ private struct DrifterItem: View {
     _ handle: String, _ name: String, mode: PresenceMode,
     manual: String? = nil, insertions: Int = 0, deletions: Int = 0,
     commits: Int = 0, typical: Int? = nil, repos: [String] = [],
-    gradient: (String, String)? = nil, agoHours: Double = 0
+    gradient: (String, String)? = nil, agoHours: Double = 0,
+    music: String? = nil, weather: (String, Int)? = nil
   ) -> MergedStatus {
     var user = UserSummary(id: handle, handle: handle, displayName: name, timezone: nil)
     if let gradient {
@@ -485,6 +545,28 @@ private struct DrifterItem: View {
         data: ["aliases": .array(repos.map { .string($0) })]
       ))
     }
+    if let music {
+      cards.append(StatusCard(
+        type: "music", enabled: true, summary: music,
+        data: [
+          "source": .string("spotify"),
+          "state": .string("playing"),
+          "captured_at": .string(ISO8601DateFormatter().string(from: Date())),
+        ]
+      ))
+    }
+    if let weather {
+      cards.append(StatusCard(
+        type: "weather", enabled: true, summary: "\(weather.0) \(weather.1)°",
+        data: [
+          "emoji": .string(weather.0),
+          "condition": .string("Partly cloudy"),
+          "temp_f": .int(weather.1),
+          "temp_c": .int(Int((Double(weather.1) - 32) * 5 / 9)),
+          "city": .string("Seattle"),
+        ]
+      ))
+    }
     return MergedStatus(
       user: user, mode: mode, manualStatus: manual, day: nil,
       updatedAt: Date().addingTimeInterval(-agoHours * 3600),
@@ -496,13 +578,15 @@ private struct DrifterItem: View {
     you: sample(
       "marcus", "Marcus", mode: .online, manual: "shipping the new titlebar ✨",
       insertions: 482, deletions: 127, commits: 9, typical: 800,
-      repos: ["vibes", "td-watch"], gradient: ("#4F8CFF", "#9B5CFF")
+      repos: ["vibes", "td-watch"], gradient: ("#4F8CFF", "#9B5CFF"),
+      music: "Pink Pony Club · Chappell Roan", weather: ("⛅️", 61)
     ),
     friends: [
       sample(
         "dana", "Dana", mode: .online, manual: "deep in the parser mines",
         insertions: 1204, deletions: 688, commits: 14, typical: 1100,
-        repos: ["perch", "perch-docs"], gradient: ("#FF7847", "#FF4787")
+        repos: ["perch", "perch-docs"], gradient: ("#FF7847", "#FF4787"),
+        music: "Starburster · Fontaines D.C.", weather: ("🌧", 54)
       ),
       sample(
         "priya", "Priya", mode: .online, manual: "refactor friday!!",

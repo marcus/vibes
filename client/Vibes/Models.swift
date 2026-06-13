@@ -89,25 +89,25 @@ struct RepoConfig: Codable, Equatable, Identifiable {
 struct SharingCardsConfig: Codable, Equatable {
   var gitStats: Bool
   var repoAliases: Bool
-  var spotify: Bool
+  var music: Bool
   var weather: Bool
 
   static let defaults = SharingCardsConfig(
     gitStats: true,
     repoAliases: true,
-    spotify: false,
+    music: false,
     weather: false
   )
 
   init(
     gitStats: Bool,
     repoAliases: Bool,
-    spotify: Bool,
+    music: Bool,
     weather: Bool
   ) {
     self.gitStats = gitStats
     self.repoAliases = repoAliases
-    self.spotify = spotify
+    self.music = music
     self.weather = weather
   }
 
@@ -115,15 +115,51 @@ struct SharingCardsConfig: Codable, Equatable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     gitStats = try container.decodeIfPresent(Bool.self, forKey: .gitStats) ?? Self.defaults.gitStats
     repoAliases = try container.decodeIfPresent(Bool.self, forKey: .repoAliases) ?? Self.defaults.repoAliases
-    spotify = try container.decodeIfPresent(Bool.self, forKey: .spotify) ?? Self.defaults.spotify
+    // "music" covers Spotify and Apple Music; it supersedes the never-shipped
+    // "spotify" key, which is still honored if an old config flipped it on.
+    let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+    music = try container.decodeIfPresent(Bool.self, forKey: .music)
+      ?? legacy.decodeIfPresent(Bool.self, forKey: .spotify)
+      ?? Self.defaults.music
     weather = try container.decodeIfPresent(Bool.self, forKey: .weather) ?? Self.defaults.weather
   }
 
   enum CodingKeys: String, CodingKey {
     case gitStats = "git_stats"
     case repoAliases = "repo_aliases"
-    case spotify
+    case music
     case weather
+  }
+
+  private enum LegacyKeys: String, CodingKey {
+    case spotify
+  }
+}
+
+// Sender-side weather settings, separate from the on/off card toggle. An empty
+// `manualCity` means "use Location Services"; a non-empty city is geocoded by
+// WeatherProvider instead (no location permission needed). City name rides
+// along in the shared card only when `shareCity` is on.
+struct WeatherConfig: Codable, Equatable {
+  var manualCity: String
+  var shareCity: Bool
+
+  static let defaults = WeatherConfig(manualCity: "", shareCity: false)
+
+  init(manualCity: String, shareCity: Bool) {
+    self.manualCity = manualCity
+    self.shareCity = shareCity
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    manualCity = try container.decodeIfPresent(String.self, forKey: .manualCity) ?? Self.defaults.manualCity
+    shareCity = try container.decodeIfPresent(Bool.self, forKey: .shareCity) ?? Self.defaults.shareCity
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case manualCity = "manual_city"
+    case shareCity = "share_city"
   }
 }
 
@@ -183,23 +219,31 @@ struct SharingRedactionsConfig: Codable, Equatable {
 struct SharingConfig: Codable, Equatable {
   var cards: SharingCardsConfig
   var redactions: SharingRedactionsConfig
+  var weather: WeatherConfig
 
-  static let defaults = SharingConfig(cards: .defaults, redactions: .defaults)
+  static let defaults = SharingConfig(cards: .defaults, redactions: .defaults, weather: .defaults)
 
-  init(cards: SharingCardsConfig, redactions: SharingRedactionsConfig = .defaults) {
+  init(
+    cards: SharingCardsConfig,
+    redactions: SharingRedactionsConfig = .defaults,
+    weather: WeatherConfig = .defaults
+  ) {
     self.cards = cards
     self.redactions = redactions
+    self.weather = weather
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     cards = try container.decodeIfPresent(SharingCardsConfig.self, forKey: .cards) ?? .defaults
     redactions = try container.decodeIfPresent(SharingRedactionsConfig.self, forKey: .redactions) ?? .defaults
+    weather = try container.decodeIfPresent(WeatherConfig.self, forKey: .weather) ?? .defaults
   }
 
   enum CodingKeys: String, CodingKey {
     case cards
     case redactions
+    case weather
   }
 }
 
@@ -310,9 +354,29 @@ enum JSONValue: Codable, Equatable {
     }
   }
 
+  var stringValue: String? {
+    if case .string(let value) = self { value } else { nil }
+  }
+
   var objectValue: [String: JSONValue]? {
     if case .object(let value) = self { value } else { nil }
   }
+
+  // ISO-8601 timestamp parsing for date fields that ride inside card `data`
+  // (the card payload is opaque JSON, so dates travel as strings). Tolerates
+  // both plain and fractional-second forms.
+  var dateValue: Date? {
+    guard case .string(let value) = self else { return nil }
+    if let date = JSONValue.isoFormatter.date(from: value) { return date }
+    return JSONValue.isoFractionalFormatter.date(from: value)
+  }
+
+  private static let isoFormatter = ISO8601DateFormatter()
+  private static let isoFractionalFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+  }()
 }
 
 struct StatusCard: Codable, Equatable, Identifiable {
@@ -522,6 +586,60 @@ extension MergedStatus {
       return summary.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
     }
     return []
+  }
+
+  var musicCard: StatusCard? {
+    cards.first { $0.type == "music" && $0.enabled }
+  }
+
+  var weatherCard: StatusCard? {
+    cards.first { $0.type == "weather" && $0.enabled }
+  }
+
+  // "Track · Artist" while the friend is actually listening. Gated on the
+  // sender-stamped player state and capture time so a track from hours ago
+  // never renders as now-playing (offline snapshots re-send old cards, and a
+  // device can go quiet without un-publishing). Missing fields stay lenient.
+  var nowPlayingLine: String? {
+    guard let card = musicCard, let summary = card.summary, !summary.isEmpty else { return nil }
+    if let state = card.data["state"]?.stringValue, state != "playing" { return nil }
+    if let captured = card.data["captured_at"]?.dateValue,
+      Date().timeIntervalSince(captured) > 20 * 60
+    {
+      return nil
+    }
+    return summary
+  }
+
+  // "⛅️ 61°", rendered in the viewer's units from the structured payload;
+  // falls back to the sender-rendered summary for older payloads.
+  var weatherLine: String? {
+    guard let card = weatherCard else { return nil }
+    if let emoji = card.data["emoji"]?.stringValue,
+      let temp = card.data[Self.viewerUsesFahrenheit ? "temp_f" : "temp_c"]?.intValue
+    {
+      return "\(emoji) \(temp)°"
+    }
+    if let summary = card.summary, !summary.isEmpty { return summary }
+    return nil
+  }
+
+  // Hover/tooltip detail: "Light rain · Seattle". City only when the friend
+  // shares it.
+  var weatherDetail: String? {
+    guard let card = weatherCard else { return nil }
+    var parts: [String] = []
+    if let condition = card.data["condition"]?.stringValue, !condition.isEmpty {
+      parts.append(condition)
+    }
+    if let city = card.data["city"]?.stringValue, !city.isEmpty {
+      parts.append(city)
+    }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
+
+  private static var viewerUsesFahrenheit: Bool {
+    Locale.current.measurementSystem == .us
   }
 }
 

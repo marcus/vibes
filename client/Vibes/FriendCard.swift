@@ -29,7 +29,7 @@ struct FriendCard: View {
       header
       LocBar(added: status.insertions, removed: status.deletions)
       legend
-      if spotifyLine != nil || weatherLine != nil {
+      if status.nowPlayingLine != nil || status.weatherLine != nil {
         extras
       }
     }
@@ -87,11 +87,12 @@ struct FriendCard: View {
     }
   }
 
-  // One quiet line: now-playing left, weather right. Either half drops out when
-  // the friend isn't sharing it; the row drops out entirely when both are absent.
+  // One quiet line: now-playing left, weather right. Either half drops out
+  // when the friend isn't sharing it (or the track has gone stale — see
+  // MergedStatus.nowPlayingLine); the row drops out when both are absent.
   private var extras: some View {
     HStack(alignment: .firstTextBaseline, spacing: 12) {
-      if let track = spotifyLine {
+      if let track = status.nowPlayingLine {
         Text("♪ \(track)")
           .font(.caption)
           .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
@@ -99,12 +100,13 @@ struct FriendCard: View {
           .truncationMode(.tail)
       }
       Spacer(minLength: 0)
-      if let weather = weatherLine {
+      if let weather = status.weatherLine {
         Text(weather)
           .font(.caption)
           .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
           .monospacedDigit()
           .lineLimit(1)
+          .help(status.weatherDetail ?? "")
       }
     }
   }
@@ -120,19 +122,6 @@ struct FriendCard: View {
     guard let updatedAt = status.updatedAt else { return "offline" }
     return "offline, synced \(updatedAt.formatted(.relative(presentation: .numeric)))"
   }
-
-  private func cardSummary(_ type: String) -> String? {
-    guard
-      let card = status.cards.first(where: { $0.type == type }),
-      card.enabled,
-      let summary = card.summary,
-      !summary.isEmpty
-    else { return nil }
-    return summary
-  }
-
-  private var spotifyLine: String? { cardSummary("spotify") }
-  private var weatherLine: String? { cardSummary("weather") }
 
   private var lastSeen: String {
     guard let date = status.updatedAt else { return "" }
@@ -286,7 +275,16 @@ private func sampleStatus(
     ))
   }
   if let spotify {
-    cards.append(StatusCard(type: "spotify", enabled: true, summary: spotify, data: [:]))
+    cards.append(StatusCard(
+      type: "music",
+      enabled: true,
+      summary: spotify,
+      data: [
+        "source": .string("spotify"),
+        "state": .string("playing"),
+        "captured_at": .string(ISO8601DateFormatter().string(from: Date())),
+      ]
+    ))
   }
   if let weather {
     cards.append(StatusCard(type: "weather", enabled: true, summary: weather, data: [:]))

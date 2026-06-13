@@ -35,8 +35,14 @@
 	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Vibes asks Spotify or Music for the track that is already playing, so your now-playing card starts current instead of waiting for the next song.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2026 Marcus Vorwaller</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Vibes uses your approximate location to show local weather on your card. Only the conditions and temperature are shared with friends, never your location.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Vibes uses your approximate location to show local weather on your card. Only the conditions and temperature are shared with friends, never your location.</string>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>

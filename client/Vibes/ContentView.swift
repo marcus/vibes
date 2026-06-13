@@ -825,19 +825,89 @@ private struct ProfileIconSettingsPane: View {
 }
 
 private struct SharingSettingsPane: View {
+  @EnvironmentObject private var model: AppModel
+  @State private var cityDraft: String = ""
+
   var body: some View {
     Form {
       Section {
-        Text("Optional cards will appear here as they become available.")
+        Text("Optional cards on your orb and presence card. Friends only see what you turn on.")
           .foregroundStyle(.secondary)
       }
 
-      Section("Cards") {
-        UnavailableCardRow(title: "Spotify", detail: "Not available yet")
-        UnavailableCardRow(title: "Weather", detail: "Not available yet")
+      Section("Music") {
+        Toggle("Now playing", isOn: musicEnabled)
+        Text(
+          musicEnabled.wrappedValue
+            ? "Sharing the track playing in Spotify or Apple Music. It disappears when you pause — and macOS may ask once to let Vibes check what's already playing."
+            : "Share the track you're playing in Spotify or Apple Music."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      }
+
+      Section("Weather") {
+        Toggle("Local weather", isOn: weatherEnabled)
+        Text("Friends see conditions and temperature only — your location never leaves this Mac.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        if weatherEnabled.wrappedValue {
+          EditableSettingField(
+            label: "City",
+            prompt: "Current location",
+            text: $cityDraft,
+            save: { model.updateWeatherCity(cityDraft) }
+          )
+          Text(
+            cityDraft.trimmingCharacters(in: .whitespaces).isEmpty
+              ? "Leave blank to use Location Services — macOS will ask once."
+              : "Weather is looked up for this city; Location Services stay untouched."
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          Toggle("Include city name", isOn: shareCity)
+          WeatherProblemRow(provider: model.weatherProvider)
+        }
       }
     }
     .formStyle(.grouped)
+    .onAppear { cityDraft = model.config?.sharing.weather.manualCity ?? "" }
+  }
+
+  private var musicEnabled: Binding<Bool> {
+    Binding(
+      get: { model.config?.sharing.cards.music ?? false },
+      set: { model.setCard(\.music, enabled: $0) }
+    )
+  }
+
+  private var weatherEnabled: Binding<Bool> {
+    Binding(
+      get: { model.config?.sharing.cards.weather ?? false },
+      set: { model.setCard(\.weather, enabled: $0) }
+    )
+  }
+
+  private var shareCity: Binding<Bool> {
+    Binding(
+      get: { model.config?.sharing.weather.shareCity ?? false },
+      set: { model.setWeatherShareCity($0) }
+    )
+  }
+}
+
+// Surfaces provider failures (denied location, unknown city, network) next to
+// the weather toggle — the card silently not appearing is undebuggable.
+// Separate view so the nested ObservableObject actually drives updates.
+private struct WeatherProblemRow: View {
+  @ObservedObject var provider: WeatherProvider
+
+  var body: some View {
+    if let problem = provider.lastProblem {
+      Label(problem, systemImage: "exclamationmark.triangle")
+        .font(.caption)
+        .foregroundStyle(.orange)
+    }
   }
 }
 
@@ -872,26 +942,6 @@ private struct AdvancedSettingsPane: View {
       }
     }
     .formStyle(.grouped)
-  }
-}
-
-private struct UnavailableCardRow: View {
-  var title: String
-  var detail: String
-
-  var body: some View {
-    LabeledContent {
-      Text("Soon")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color(nsColor: .quaternarySystemFill))
-        .clipShape(Capsule())
-    } label: {
-      Text(title)
-      Text(detail)
-    }
   }
 }
 
