@@ -85,6 +85,7 @@ final class AppModel: ObservableObject {
   let musicProvider = MusicProvider()
   let weatherProvider = WeatherProvider()
   private var musicPublishTask: Task<Void, Never>?
+  private var weatherRefreshTask: Task<Void, Never>?
   private var successMessageDismissTask: Task<Void, Never>?
   private var lastDeviceStatusPayload: StatusPayload?
   // The synced-account item is (re)written only after this device's token has
@@ -641,6 +642,9 @@ final class AppModel: ObservableObject {
       now: now,
       timezone: config.identity.timezone ?? TimeZone.current.identifier
     )
+    // Refresh weather off to the side; this cycle publishes whatever's already
+    // cached and the new reading is ready for the next one. Never awaited here.
+    refreshWeatherInBackground()
     let nextStats = await scanner.scan(repos: config.repos, dayWindow: dayWindow, now: now)
     stats = nextStats
     do {
@@ -651,7 +655,7 @@ final class AppModel: ObservableObject {
         stats: nextStats,
         now: now,
         dayWindow: dayWindow,
-        extraCards: await sharedExtraCards(config: config)
+        extraCards: sharedExtraCards(config: config)
       )
       try await client(for: config).publish(payload)
       lastDeviceStatusPayload = payload
@@ -1073,18 +1077,30 @@ final class AppModel: ObservableObject {
   }
 
   // Music and weather cards for this publish, gated on the sharing toggles.
-  // Either provider returning nothing just drops that card from the payload.
-  private func sharedExtraCards(config: VibesConfig) async -> [StatusCard] {
+  // Reads ONLY cached provider state — never awaits — so the publish + feed are
+  // never blocked behind a provider (weather's location resolution in
+  // particular can hang on the permission prompt). A provider with nothing
+  // cached yet just drops its card from this publish and appears on the next.
+  private func sharedExtraCards(config: VibesConfig) -> [StatusCard] {
     var cards: [StatusCard] = []
     if config.sharing.cards.music, let playing = musicProvider.current {
       cards.append(playing.card)
     }
-    if config.sharing.cards.weather,
-      let snapshot = await weatherProvider.snapshot(config: config.sharing.weather)
-    {
+    if config.sharing.cards.weather, let snapshot = weatherProvider.latest {
       cards.append(snapshot.card(shareCity: config.sharing.weather.shareCity))
     }
     return cards
+  }
+
+  // Kick a weather refresh off the publish path. The new reading lands in
+  // weatherProvider.latest for a subsequent publish; this publish doesn't wait.
+  private func refreshWeatherInBackground() {
+    guard let config, config.sharing.cards.weather else { return }
+    let weatherConfig = config.sharing.weather
+    weatherRefreshTask?.cancel()
+    weatherRefreshTask = Task { [weak self] in
+      await self?.weatherProvider.refresh(config: weatherConfig)
+    }
   }
 
   // Start/stop the now-playing observers to match the sharing toggle. Called
@@ -1097,6 +1113,11 @@ final class AppModel: ObservableObject {
       musicProvider.seedFromRunningPlayers()
     } else {
       musicProvider.stop()
+    }
+    // Start resolving weather (and its location prompt) in the background so a
+    // reading is cached before the next publish — never on the feed's path.
+    if config.sharing.cards.weather {
+      refreshWeatherInBackground()
     }
   }
 

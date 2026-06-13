@@ -46,6 +46,12 @@ struct WeatherSnapshot: Equatable {
 
 final class WeatherProvider: NSObject, ObservableObject {
   private let session: URLSession
+
+  // The most recent reading, refreshed in the background. The publish path
+  // reads THIS synchronously — it must never await weather, because location
+  // resolution can block on the permission prompt and would otherwise stall
+  // the whole status publish + friend feed behind it.
+  @Published private(set) var latest: WeatherSnapshot?
   private var cached: WeatherSnapshot?
 
   // One coordinate per resolution source, cached for the session: a Mac
@@ -73,14 +79,18 @@ final class WeatherProvider: NSObject, ObservableObject {
 
   // MARK: - Entry point
 
-  // Returns the current reading, refreshing if the cache is stale or the
-  // configured city changed. nil when location can't be resolved or the fetch
-  // fails — the card is simply omitted from that publish.
-  func snapshot(config: WeatherConfig) async -> WeatherSnapshot? {
+  // Refresh the cached reading in the background, resolving location (which can
+  // block on the permission prompt) and fetching conditions. ALWAYS call this
+  // off the publish path — never `await` it before publishing status or
+  // fetching the friend feed, or a pending location prompt stalls both. The
+  // result lands in `latest` for the next publish to read synchronously.
+  @discardableResult
+  func refresh(config: WeatherConfig) async -> WeatherSnapshot? {
     let manualCity = config.manualCity.trimmingCharacters(in: .whitespacesAndNewlines)
     if let cached, Date().timeIntervalSince(cached.capturedAt) < 15 * 60,
       resolvedForCity == manualCity
     {
+      latest = cached
       return cached
     }
 
@@ -90,6 +100,7 @@ final class WeatherProvider: NSObject, ObservableObject {
     lastProblem = nil
     cached = reading
     resolvedForCity = manualCity
+    latest = reading
     return reading
   }
 
@@ -97,6 +108,7 @@ final class WeatherProvider: NSObject, ObservableObject {
     cached = nil
     resolvedCoordinate = nil
     resolvedForCity = nil
+    latest = nil
   }
 
   // MARK: - Location
