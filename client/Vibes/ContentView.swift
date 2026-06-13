@@ -361,6 +361,7 @@ private struct GeneralSettingsPane: View {
   @State private var launchAtLogin = false
   @State private var launchAtLoginError: String?
   @State private var launchAtLoginNeedsApproval = false
+  @AppStorage(DockIcon.storageKey) private var hideDockIcon = false
 
   var body: some View {
     Form {
@@ -420,6 +421,15 @@ private struct GeneralSettingsPane: View {
           Text(launchAtLoginError)
             .font(.caption)
             .foregroundStyle(.red)
+        }
+        Toggle("Hide Dock icon", isOn: $hideDockIcon)
+          .onChange(of: hideDockIcon) { _, hidden in
+            DockIcon.set(hidden: hidden)
+          }
+        if hideDockIcon {
+          Text("Vibes keeps running in the menu bar — use the menu bar item to reopen or quit it.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
       }
 

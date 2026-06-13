@@ -37,6 +37,31 @@ enum AppAppearance: String, CaseIterable, Identifiable {
   }
 }
 
+/// Dock icon visibility. Hidden runs the app as an accessory: no Dock tile
+/// or Cmd-Tab entry, but windows and the menu bar item keep working.
+enum DockIcon {
+  static let storageKey = "hideDockIcon"
+
+  static var isHidden: Bool {
+    UserDefaults.standard.bool(forKey: storageKey)
+  }
+
+  /// Reads the stored preference and applies it to the running app.
+  static func applyCurrent() {
+    NSApp.setActivationPolicy(isHidden ? .accessory : .regular)
+  }
+
+  /// Settings-toggle entry point. Flipping the activation policy deactivates
+  /// the app, which would drop the Settings window behind other apps, so
+  /// reactivate once the policy switch lands.
+  static func set(hidden: Bool) {
+    NSApp.setActivationPolicy(hidden ? .accessory : .regular)
+    DispatchQueue.main.async {
+      NSApp.activate(ignoringOtherApps: true)
+    }
+  }
+}
+
 /// Thin wrapper over SMAppService for the "open at login" toggle.
 /// Unregistered (off) is the default for new installs.
 enum LaunchAtLogin {
