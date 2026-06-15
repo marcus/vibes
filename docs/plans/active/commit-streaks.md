@@ -150,6 +150,8 @@ Wiring in `getFeed` (mirror the `typical_churn` line at `relay.js:967`):
 - Pass the user's **real current Vibes day** as `currentDay`, not the merged `status.day`. `status.day` falls back to the newest online row's `client_day` for offline users (`chooseVibesDay`), so it can be stale; the streak's "ignore future days" and "through yesterday" rules need the genuine timezone-derived day. Reuse the same `formatDayInTimezone(nowMs, user.timezone)` path `chooseVibesDay` already uses, falling back to `status.day` when the user has no supported timezone.
 - Gate the attachment on a **visible** `git_stats` card by inspecting the already-merged result: `status.cards.some((c) => c.type === "git_stats")`. `mergeGitStats` already returns null when sharing is off or no card exists, so this one check covers the first two null cases in the Server Contract. Note this differs from `typical_churn`, which is currently attached unconditionally — `commit_streak` is deliberately gated.
 
+When the user has no stored (or unsupported) `timezone`, the timezone-derived current day is unavailable, so anchor the walk on `status.day` instead. Accept the limitation: without a timezone the helper cannot know the user's day has rolled over, so a stale streak can only be kept honest by the freshness gate (the same staleness handling that governs old Git stats), not by the streak math itself. Do not invent a server-clock "today" for these users — that would compute the streak against the wrong day boundary, which the Product Semantics section explicitly forbids.
+
 Details:
 
 - Multiple devices on the same day count as one streak day.
@@ -184,6 +186,8 @@ Initial display rules:
 - Hide `commit_streak` for `days < 2`; "1 day streak" adds clutter and feels like a metric.
 - Show "2 day streak" or "5 day streak" for online or stale rows with visible Git stats.
 - If the row is explicit Offline and the product later hides old Git cards there, hide the streak with them.
+
+Render "through yesterday" streaks quietly rather than suppressing them (resolves Open Question 1). The `days >= 2` rule and the "wait for today" rule compound badly if we suppress: a streak through yesterday would vanish at midnight and reappear once the user commits today, a visible flicker on the friend's card. Showing the last-known streak through its `through_day` is steadier and matches how the feed already renders stale Git stats. The freshness/Offline gating above is what prevents a genuinely abandoned streak from looking live; the client should not add its own "is today done yet" warning state.
 
 ## Privacy
 
@@ -289,6 +293,6 @@ Manual proof:
 
 ## Open Questions
 
-1. Should a streak through yesterday render for friends when today has no commit yet, or should the UI wait until the user commits today?
-2. Should the user be able to hide streaks separately from `git_stats`, or is the existing Git stats sharing switch enough for v1?
-3. Should admin detail expose aggregate streak debugging, or should `/api/feed` be the only surfaced path until someone needs it?
+1. ~~Should a streak through yesterday render for friends when today has no commit yet, or should the UI wait until the user commits today?~~ **Resolved:** render it quietly through its `through_day`; do not suppress (see Client UX — suppressing causes a midnight flicker).
+2. Should the user be able to hide streaks separately from `git_stats`, or is the existing Git stats sharing switch enough for v1? **Leaning:** the existing switch is enough for v1 — streaks are derived entirely from `git_stats` data, so a separate toggle adds settings surface for no new disclosure. Revisit only if a user asks.
+3. ~~Should admin detail expose aggregate streak debugging, or should `/api/feed` be the only surfaced path until someone needs it?~~ **Resolved:** `/api/feed` is the only surfaced path for v1. Add aggregate admin debugging when a real need arises; this does not block the build.
