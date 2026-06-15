@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -1200,7 +1200,7 @@ describe("http helpers", () => {
 
 describe("daily activity and typical churn", () => {
   function postDay(user, day, { commits = 1, insertions, deletions, deviceId = "device-1" }) {
-    upsertStatus(db, user, {
+    return upsertStatus(db, user, {
       device_id: deviceId,
       mode: "online",
       day,
@@ -1237,6 +1237,63 @@ describe("daily activity and typical churn", () => {
 
     const row = db.prepare("SELECT commits, insertions, deletions FROM daily_activity").get();
     expect(row).toEqual({ commits: 3, insertions: 0, deletions: 0 });
+  });
+
+  it("stores commit counts per device/day and replaces cumulative totals", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-05T18:01:00.000Z"));
+      postDay(user, "2026-06-05", {
+        deviceId: "laptop",
+        commits: 2,
+        insertions: 11,
+        deletions: 3,
+      });
+      vi.setSystemTime(new Date("2026-06-05T18:02:00.000Z"));
+      const replaced = postDay(user, "2026-06-05", {
+        deviceId: "laptop",
+        commits: 5,
+        insertions: 0,
+        deletions: 0,
+      });
+      vi.setSystemTime(new Date("2026-06-05T18:03:00.000Z"));
+      const desktop = postDay(user, "2026-06-05", {
+        deviceId: "desktop",
+        commits: 4,
+        insertions: 20,
+        deletions: 2,
+      });
+
+      const rows = db
+        .prepare(
+          `SELECT device_id, client_day, commits, insertions, deletions, updated_at
+           FROM daily_activity
+           ORDER BY device_id`,
+        )
+        .all();
+      expect(rows).toEqual([
+        {
+          device_id: "desktop",
+          client_day: "2026-06-05",
+          commits: 4,
+          insertions: 20,
+          deletions: 2,
+          updated_at: desktop.server_received_at,
+        },
+        {
+          device_id: "laptop",
+          client_day: "2026-06-05",
+          commits: 5,
+          insertions: 0,
+          deletions: 0,
+          updated_at: replaced.server_received_at,
+        },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("computes the median over past active days, excluding the given day", () => {
