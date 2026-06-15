@@ -15,6 +15,7 @@ import {
   avatarUrlFor,
   claimDeviceLinkCode,
   clearUserAvatar,
+  commitStreak,
   createDeviceLinkCode,
   createInvite,
   createToken,
@@ -1296,6 +1297,86 @@ describe("daily activity and typical churn", () => {
     }
   });
 
+  it("computes consecutive commit days through the newest active day", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-04", { commits: 1, insertions: 20, deletions: 2 });
+    postDay(user, "2026-06-05", { commits: 2, insertions: 30, deletions: 3 });
+    postDay(user, "2026-06-06", { commits: 1, insertions: 10, deletions: 1 });
+
+    expect(commitStreak(db, user.id, "2026-06-06")).toEqual({
+      days: 3,
+      through_day: "2026-06-06",
+    });
+  });
+
+  it("resets the commit streak at gaps", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-04", { commits: 1, insertions: 20, deletions: 2 });
+    postDay(user, "2026-06-06", { commits: 1, insertions: 10, deletions: 1 });
+
+    expect(commitStreak(db, user.id, "2026-06-06")).toEqual({
+      days: 1,
+      through_day: "2026-06-06",
+    });
+  });
+
+  it("counts same-day multi-device commits as one streak day", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-05", { commits: 1, insertions: 20, deletions: 2 });
+    postDay(user, "2026-06-06", {
+      deviceId: "laptop",
+      commits: 2,
+      insertions: 30,
+      deletions: 3,
+    });
+    postDay(user, "2026-06-06", {
+      deviceId: "desktop",
+      commits: 4,
+      insertions: 40,
+      deletions: 4,
+    });
+
+    expect(commitStreak(db, user.id, "2026-06-06")).toEqual({
+      days: 2,
+      through_day: "2026-06-06",
+    });
+  });
+
+  it("ignores future commit days when computing the streak", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-05", { commits: 1, insertions: 20, deletions: 2 });
+    postDay(user, "2026-06-06", { commits: 1, insertions: 10, deletions: 1 });
+    postDay(user, "2026-06-07", { commits: 1, insertions: 900, deletions: 90 });
+
+    expect(commitStreak(db, user.id, "2026-06-06")).toEqual({
+      days: 2,
+      through_day: "2026-06-06",
+    });
+  });
+
+  it("counts zero-churn commit days", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-05", { commits: 1, insertions: 0, deletions: 0 });
+    postDay(user, "2026-06-06", { commits: 1, insertions: 10, deletions: 1 });
+
+    expect(commitStreak(db, user.id, "2026-06-06")).toEqual({
+      days: 2,
+      through_day: "2026-06-06",
+    });
+  });
+
+  it("does not count churn-only legacy days as commit streak days", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-04", { commits: 1, insertions: 20, deletions: 2 });
+    postDay(user, "2026-06-05", { commits: 0, insertions: 100, deletions: 10 });
+    postDay(user, "2026-06-06", { commits: 1, insertions: 10, deletions: 1 });
+
+    expect(commitStreak(db, user.id, "2026-06-06")).toEqual({
+      days: 1,
+      through_day: "2026-06-06",
+    });
+  });
+
   it("computes the median over past active days, excluding the given day", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
     postDay(user, "2026-06-02", { insertions: 80, deletions: 20 }); // churn 100
@@ -1337,5 +1418,69 @@ describe("daily activity and typical churn", () => {
 
     const friendless = createUser(db, { handle: "new", displayName: "New" });
     expect(getFeed(db, friendless, Date.parse("2026-06-06T18:10:00.000Z")).you.typical_churn).toBeNull();
+  });
+
+  it("exposes commit_streak only when git stats are visible in the feed", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-04", { commits: 1, insertions: 20, deletions: 2 });
+    postDay(user, "2026-06-05", { commits: 1, insertions: 30, deletions: 3 });
+    postDay(user, "2026-06-06", { commits: 1, insertions: 10, deletions: 1 });
+
+    const feed = getFeed(db, user, Date.parse("2026-06-06T18:10:00.000Z"));
+    expect(feed.you.commit_streak).toEqual({ days: 3, through_day: "2026-06-06" });
+    expect(feed.you.cards.find((card) => card.type === "commit_streak")).toBeUndefined();
+    expect(JSON.stringify(feed)).not.toContain("daily_activity");
+    expect(JSON.stringify(feed)).not.toContain("device-1");
+
+    const hidden = createUser(db, { handle: "hidden", displayName: "Hidden" });
+    postDay(hidden, "2026-06-04", { commits: 1, insertions: 20, deletions: 2 });
+    postDay(hidden, "2026-06-05", { commits: 1, insertions: 30, deletions: 3 });
+    upsertStatus(db, hidden, {
+      device_id: "manual-device",
+      mode: "online",
+      day: "2026-06-06",
+      updated_at: "2026-06-06T18:00:00.000Z",
+      cards: [
+        {
+          type: "git_stats",
+          enabled: false,
+          summary: null,
+          data: { commits: 1, insertions: 10, deletions: 1 },
+        },
+      ],
+    });
+
+    const hiddenFeed = getFeed(db, hidden, Date.parse("2026-06-06T18:10:00.000Z"));
+    expect(hiddenFeed.you.cards.find((card) => card.type === "git_stats")).toBeUndefined();
+    expect(hiddenFeed.you.commit_streak).toBeNull();
+  });
+
+  it("anchors feed commit streaks on account timezone and falls back to status day", () => {
+    const nowMs = Date.parse("2026-06-06T18:10:00.000Z");
+    const insertHistory = db.prepare(
+      `INSERT INTO daily_activity (
+         user_id, device_id, client_day, commits, insertions, deletions, updated_at
+       )
+       VALUES (?, ?, ?, 1, 0, 0, ?)`,
+    );
+    const zoned = createUser(db, {
+      handle: "zoned",
+      displayName: "Zoned",
+      timezone: "America/Los_Angeles",
+    });
+    postDay(zoned, "2026-06-05", { commits: 1, insertions: 10, deletions: 1 });
+    insertHistory.run(zoned.id, "history-device", "2026-06-06", "2026-06-06T18:00:00.000Z");
+
+    const zonedFeed = getFeed(db, zoned, nowMs);
+    expect(zonedFeed.you.day).toBe("2026-06-05");
+    expect(zonedFeed.you.commit_streak).toEqual({ days: 2, through_day: "2026-06-06" });
+
+    const legacy = createUser(db, { handle: "legacy", displayName: "Legacy" });
+    postDay(legacy, "2026-06-05", { commits: 1, insertions: 10, deletions: 1 });
+    insertHistory.run(legacy.id, "history-device", "2026-06-06", "2026-06-06T18:00:00.000Z");
+
+    const legacyFeed = getFeed(db, legacy, nowMs);
+    expect(legacyFeed.you.day).toBe("2026-06-05");
+    expect(legacyFeed.you.commit_streak).toEqual({ days: 1, through_day: "2026-06-05" });
   });
 });

@@ -802,6 +802,46 @@ export function typicalChurn(db, userId, excludeDay) {
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
+function previousDay(day) {
+  const timestamp = Date.parse(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(timestamp)) return null;
+  return new Date(timestamp - DAY_MS).toISOString().slice(0, 10);
+}
+
+/**
+ * Current commit streak, summed across devices and capped at the user's current
+ * Vibes day. Returns only the aggregate summary safe for feed responses.
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} userId
+ * @param {string | null} currentDay
+ * @returns {{ days: number, through_day: string } | null}
+ */
+export function commitStreak(db, userId, currentDay) {
+  if (!currentDay) return null;
+  const rows = db
+    .prepare(
+      `SELECT client_day
+       FROM daily_activity
+       WHERE user_id = ? AND client_day <= ?
+       GROUP BY client_day
+       HAVING SUM(commits) > 0
+       ORDER BY client_day DESC`,
+    )
+    .all(userId, currentDay);
+  if (!rows.length) return null;
+
+  const throughDay = rows[0].client_day;
+  let days = 0;
+  let expectedDay = throughDay;
+  for (const row of rows) {
+    if (row.client_day !== expectedDay) break;
+    days += 1;
+    expectedDay = previousDay(expectedDay);
+    if (!expectedDay) break;
+  }
+  return { days, through_day: throughDay };
+}
+
 function getCard(payload, type) {
   return payload.cards?.find((card) => card.type === type && card.enabled) ?? null;
 }
@@ -1030,6 +1070,10 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
   const merged = [viewerRow, ...users.slice(1)].map((user) => {
     const status = mergeUserStatuses(user, statusQuery.all(user.id), nowMs);
     status.typical_churn = typicalChurn(db, user.id, status.day);
+    const hasVisibleGitStats = status.cards.some((card) => card.type === "git_stats");
+    const timezone = user.timezone && isSupportedTimezone(user.timezone) ? user.timezone : null;
+    const currentDay = timezone ? formatDayInTimezone(nowMs, timezone) : status.day;
+    status.commit_streak = hasVisibleGitStats ? commitStreak(db, user.id, currentDay) : null;
     return status;
   });
   return { you: merged[0], friends: merged.slice(1) };
