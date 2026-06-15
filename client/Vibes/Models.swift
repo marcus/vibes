@@ -396,6 +396,16 @@ struct StatusCard: Codable, Equatable, Identifiable {
   var data: [String: JSONValue]
 }
 
+struct CommitStreak: Codable, Equatable {
+  var days: Int
+  var throughDay: String
+
+  enum CodingKeys: String, CodingKey {
+    case days
+    case throughDay = "through_day"
+  }
+}
+
 // A two-color gradient profile icon, rendered client-side (no PNG asset). Synced
 // to all the user's devices and to friends via the feed. Both ends are
 // "#RRGGBB" hex strings (server-validated `^#[0-9a-fA-F]{6}$`).
@@ -559,6 +569,9 @@ struct MergedStatus: Codable, Equatable, Identifiable {
   // days, computed by the relay. nil until they have enough history — the
   // orbit ring then falls back to a fixed cold-start scale (see ChurnMeter).
   var typicalChurn: Int?
+  // Server-derived aggregate streak summary. nil for older relays, hidden Git
+  // stats, or users without a current streak.
+  var commitStreak: CommitStreak?
 
   enum CodingKeys: String, CodingKey {
     case user
@@ -568,6 +581,7 @@ struct MergedStatus: Codable, Equatable, Identifiable {
     case updatedAt = "updated_at"
     case cards
     case typicalChurn = "typical_churn"
+    case commitStreak = "commit_streak"
   }
 }
 
@@ -584,6 +598,11 @@ extension MergedStatus {
 
   // Total lines touched today — the orbit ring's progress quantity.
   var churn: Int { insertions + deletions }
+
+  var commitStreakLine: String? {
+    guard gitStatsCard != nil, let streak = commitStreak, streak.days >= 2 else { return nil }
+    return "\(streak.days) day streak"
+  }
 
   var repoAliases: [String] {
     let card = cards.first { $0.type == "repo_aliases" }

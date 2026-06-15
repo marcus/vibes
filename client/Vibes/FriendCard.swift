@@ -70,10 +70,21 @@ struct FriendCard: View {
 
   private var legend: some View {
     HStack(alignment: .firstTextBaseline) {
-      Text("\(Text("\(status.commitCount)").fontWeight(.bold).foregroundColor(Color.primary))\(status.commitCount == 1 ? " commit today" : " commits today")")
-      .font(.system(size: 10 * textScale))
-      .foregroundStyle(Color.secondary)
-      .monospacedDigit()
+      HStack(alignment: .firstTextBaseline, spacing: 7) {
+        Text("\(Text("\(status.commitCount)").fontWeight(.bold).foregroundColor(Color.primary))\(status.commitCount == 1 ? " commit today" : " commits today")")
+          .font(.system(size: 10 * textScale))
+          .foregroundStyle(Color.secondary)
+          .monospacedDigit()
+          .lineLimit(1)
+        if let streak = status.commitStreakLine {
+          Text(streak)
+            .font(.system(size: 10 * textScale))
+            .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+            .monospacedDigit()
+            .lineLimit(1)
+        }
+      }
+      .layoutPriority(1)
 
       Spacer(minLength: 8)
 
@@ -252,7 +263,9 @@ private func sampleStatus(
   deletions: Int = 96,
   repos: [String] = ["vibes", "relay"],
   spotify: String? = nil,
-  weather: String? = nil
+  weather: String? = nil,
+  streakDays: Int? = nil,
+  streakThroughDay: String = "2026-06-15"
 ) -> MergedStatus {
   var cards: [StatusCard] = [
     StatusCard(
@@ -295,7 +308,8 @@ private func sampleStatus(
     manualStatus: manual,
     day: nil,
     updatedAt: updatedAt,
-    cards: cards
+    cards: cards,
+    commitStreak: streakDays.map { CommitStreak(days: $0, throughDay: streakThroughDay) }
   )
 }
 
@@ -305,14 +319,16 @@ private func sampleStatus(
       status: sampleStatus(
         handle: "me", name: "Marcus", mode: .online, manual: "VIBES",
         commits: 3, insertions: 777, deletions: 34, repos: ["braid"],
-        spotify: "Pink Pony Club · Chappell Roan", weather: "⛅️ 61°"
+        spotify: "Pink Pony Club · Chappell Roan", weather: "⛅️ 61°",
+        streakDays: 4
       ),
       isYou: true
     )
     FriendCard(status: sampleStatus(
       handle: "ana", name: "Ana", mode: .online, manual: "rewriting the parser, again",
       commits: 7, insertions: 412, deletions: 96, repos: ["lexer", "docs"],
-      spotify: "Starburster · Fontaines D.C.", weather: "☀️ 72°"
+      spotify: "Starburster · Fontaines D.C.", weather: "☀️ 72°",
+      streakDays: 1
     ))
     FriendCard(status: sampleStatus(
       handle: "theo", name: "Theo", mode: .online, manual: "shipping the billing fix 🤞",
