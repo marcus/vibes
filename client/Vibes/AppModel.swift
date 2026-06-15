@@ -1135,7 +1135,9 @@ final class AppModel: ObservableObject {
 
   private func enabledSharingCards() -> [String] {
     guard let cards = config?.sharing.cards else { return [] }
-    var enabled: [String] = ["git_stats", "repo_aliases"]
+    var enabled: [String] = []
+    if cards.gitStats { enabled.append("git_stats") }
+    if cards.repoAliases { enabled.append("repo_aliases") }
     if cards.music { enabled.append("music") }
     if cards.weather { enabled.append("weather") }
     return enabled

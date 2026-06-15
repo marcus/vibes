@@ -293,6 +293,7 @@ struct DailyGitStats: Codable, Equatable {
   var reposTouched: Int = 0
   var latestActivity: Date?
   var repoAliases: [String] = []
+  var commitDetails: [GitCommitStats] = []
 
   // Committed activity only — see GitScanner.scanRepo for why uncommitted
   // diffs are excluded.
@@ -303,6 +304,14 @@ struct DailyGitStats: Codable, Equatable {
   var summary: String {
     "\(reposTouched) repos touched - \(commits) commits - +\(insertions) / -\(deletions) LOC"
   }
+}
+
+struct GitCommitStats: Codable, Equatable {
+  var id: String
+  var committedAt: Date
+  var filesChanged: Int = 0
+  var insertions: Int = 0
+  var deletions: Int = 0
 }
 
 enum JSONValue: Codable, Equatable {

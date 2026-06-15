@@ -1,22 +1,29 @@
+import CryptoKit
 import Foundation
 
 struct GitScanner {
   func scan(repos: [RepoConfig], dayWindow: VibesDayWindow, now: Date = Date()) async -> DailyGitStats {
     var total = DailyGitStats()
+    var seenCommits = Set<String>()
     for repo in repos {
       guard FileManager.default.fileExists(atPath: repo.path) else { continue }
       let stats = scanRepo(repo: repo, dayWindow: dayWindow, now: now)
       if stats.hasActivity {
         total.reposTouched += 1
-        total.repoAliases.append(repo.alias)
+        if repo.shareAlias {
+          total.repoAliases.append(repo.alias)
+        }
       }
-      total.commits += stats.commits
-      total.filesChanged += stats.filesChanged
-      total.insertions += stats.insertions
-      total.deletions += stats.deletions
-      if let activity = stats.latestActivity,
-         total.latestActivity == nil || activity > total.latestActivity! {
-        total.latestActivity = activity
+      for commit in stats.commitDetails where !seenCommits.contains(commit.id) {
+        seenCommits.insert(commit.id)
+        total.commitDetails.append(commit)
+        total.commits += 1
+        total.filesChanged += commit.filesChanged
+        total.insertions += commit.insertions
+        total.deletions += commit.deletions
+        if total.latestActivity == nil || commit.committedAt > total.latestActivity! {
+          total.latestActivity = commit.committedAt
+        }
       }
     }
     total.repoAliases.sort()
@@ -36,36 +43,69 @@ struct GitScanner {
     let log = runGit([
       "-C", repo.path,
       "log",
+      "--branches",
       "--since=\(DateFormatters.isoWithFractional.string(from: dayWindow.startAt))",
       "--until=\(DateFormatters.isoWithFractional.string(from: min(now, dayWindow.endAt)))",
       "--numstat",
-      "--pretty=format:__VIBES_COMMIT__%ae"
+      "--pretty=format:__VIBES_COMMIT__%H%x09%ae%x09%cI"
     ])
     var includeCurrentCommit = false
-    for line in log.split(separator: "\n", omittingEmptySubsequences: false) {
-      if line.hasPrefix("__VIBES_COMMIT__") {
-        let email = line.replacingOccurrences(of: "__VIBES_COMMIT__", with: "")
-        includeCurrentCommit = email.caseInsensitiveCompare(authorEmail) == .orderedSame
-        if includeCurrentCommit {
-          stats.commits += 1
-        }
-      } else if includeCurrentCommit {
-        parseNumstat(line, into: &stats)
+    var currentCommit: GitCommitStats?
+
+    func finishCurrentCommit() {
+      guard includeCurrentCommit, let commit = currentCommit else { return }
+      stats.commitDetails.append(commit)
+      stats.commits += 1
+      stats.filesChanged += commit.filesChanged
+      stats.insertions += commit.insertions
+      stats.deletions += commit.deletions
+      if stats.latestActivity == nil || commit.committedAt > stats.latestActivity! {
+        stats.latestActivity = commit.committedAt
       }
     }
 
-    if stats.hasActivity {
-      stats.latestActivity = now
+    for line in log.split(separator: "\n", omittingEmptySubsequences: false) {
+      if line.hasPrefix("__VIBES_COMMIT__") {
+        finishCurrentCommit()
+        let fields = line
+          .replacingOccurrences(of: "__VIBES_COMMIT__", with: "")
+          .split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+        guard fields.count == 3 else {
+          includeCurrentCommit = false
+          currentCommit = nil
+          continue
+        }
+        let email = String(fields[1])
+        includeCurrentCommit = email.caseInsensitiveCompare(authorEmail) == .orderedSame
+        currentCommit = includeCurrentCommit
+          ? GitCommitStats(
+            id: Self.commitFingerprint(String(fields[0])),
+            committedAt: DateFormatters.iso.date(from: String(fields[2]))
+              ?? DateFormatters.isoWithFractional.date(from: String(fields[2]))
+              ?? now
+          )
+          : nil
+      } else if includeCurrentCommit {
+        parseNumstat(line, into: &currentCommit)
+      }
     }
+    finishCurrentCommit()
+
     return stats
   }
 
-  private func parseNumstat(_ line: Substring, into stats: inout DailyGitStats) {
+  private func parseNumstat(_ line: Substring, into commit: inout GitCommitStats?) {
     let parts = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
     guard parts.count >= 2 else { return }
-    stats.filesChanged += 1
-    stats.insertions += Int(parts[0]) ?? 0
-    stats.deletions += Int(parts[1]) ?? 0
+    commit?.filesChanged += 1
+    commit?.insertions += Int(parts[0]) ?? 0
+    commit?.deletions += Int(parts[1]) ?? 0
+  }
+
+  private static func commitFingerprint(_ rawHash: String) -> String {
+    let namespaced = "vibes.git.commit.v1:\(rawHash.lowercased())"
+    let digest = SHA256.hash(data: Data(namespaced.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
   }
 
   private func runGit(_ arguments: [String]) -> String {
@@ -500,28 +540,42 @@ enum StatusBuilder {
       updatedAt: now,
       // Provider-built cards (music, weather) ride along after the git cards;
       // AppModel gates them on the sharing toggles before they get here.
-      cards: buildCards(stats: stats) + extraCards
+      cards: buildCards(stats: stats, sharing: config.sharing.cards) + extraCards
     )
   }
 
-  private static func buildCards(stats: DailyGitStats) -> [StatusCard] {
+  private static func buildCards(stats: DailyGitStats, sharing: SharingCardsConfig) -> [StatusCard] {
     var cards: [StatusCard] = []
-    cards.append(
-      StatusCard(
-        type: "git_stats",
-        enabled: true,
-        summary: stats.summary,
-        data: [
-          "commits": .int(stats.commits),
-          "files_changed": .int(stats.filesChanged),
-          "insertions": .int(stats.insertions),
-          "deletions": .int(stats.deletions),
-          "repos_touched": .int(stats.reposTouched)
-        ]
+    if sharing.gitStats {
+      var gitData: [String: JSONValue] = [
+        "commits": .int(stats.commits),
+        "files_changed": .int(stats.filesChanged),
+        "insertions": .int(stats.insertions),
+        "deletions": .int(stats.deletions),
+        "repos_touched": .int(stats.reposTouched)
+      ]
+      if !stats.commitDetails.isEmpty {
+        gitData["commit_details"] = .array(stats.commitDetails.map { commit in
+          .object([
+            "id": .string(commit.id),
+            "committed_at": .string(DateFormatters.isoWithFractional.string(from: commit.committedAt)),
+            "files_changed": .int(commit.filesChanged),
+            "insertions": .int(commit.insertions),
+            "deletions": .int(commit.deletions)
+          ])
+        })
+      }
+      cards.append(
+        StatusCard(
+          type: "git_stats",
+          enabled: true,
+          summary: stats.summary,
+          data: gitData
+        )
       )
-    )
+    }
 
-    if !stats.repoAliases.isEmpty {
+    if sharing.repoAliases, !stats.repoAliases.isEmpty {
       cards.append(
         StatusCard(
           type: "repo_aliases",
