@@ -167,6 +167,25 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 8,
+    name: "daily_activity_commits",
+    sql: `
+      ALTER TABLE daily_activity ADD COLUMN commits INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE daily_commits (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        client_day TEXT NOT NULL,
+        commit_id TEXT NOT NULL,
+        files_changed INTEGER NOT NULL DEFAULT 0,
+        insertions INTEGER NOT NULL DEFAULT 0,
+        deletions INTEGER NOT NULL DEFAULT 0,
+        committed_at TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, client_day, commit_id)
+      );
+      CREATE INDEX idx_daily_commits_user_day ON daily_commits(user_id, client_day);
+    `,
+  },
 ];
 
 /**

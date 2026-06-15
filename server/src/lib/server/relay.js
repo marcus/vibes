@@ -759,16 +759,19 @@ export function upsertStatus(db, user, input) {
 function recordDailyActivity(db, userId, deviceId, payload, receivedAt) {
   const card = getCard(payload, "git_stats");
   if (!card) return;
+  const commits = Math.max(0, Number(card.data?.commits) || 0);
   const insertions = Math.max(0, Number(card.data?.insertions) || 0);
   const deletions = Math.max(0, Number(card.data?.deletions) || 0);
   db.prepare(
-    `INSERT INTO daily_activity (user_id, device_id, client_day, insertions, deletions, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO daily_activity (user_id, device_id, client_day, commits, insertions, deletions, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id, device_id, client_day) DO UPDATE SET
+       commits = excluded.commits,
        insertions = excluded.insertions,
        deletions = excluded.deletions,
        updated_at = excluded.updated_at`,
-  ).run(userId, deviceId, payload.day, insertions, deletions, receivedAt);
+  ).run(userId, deviceId, payload.day, commits, insertions, deletions, receivedAt);
+  recordDailyCommits(db, userId, payload.day, card, receivedAt);
 }
 
 /**
@@ -807,6 +810,54 @@ function sumNumber(total, value) {
   return total + (Number.isFinite(Number(value)) ? Number(value) : 0);
 }
 
+function commitDetails(card) {
+  if (!Array.isArray(card.data?.commit_details)) return [];
+  return card.data.commit_details
+    .map((commit) => {
+      if (!commit || typeof commit !== "object" || Array.isArray(commit)) return null;
+      const id = String(commit.id ?? "").trim();
+      if (!/^[a-f0-9]{64}$/.test(id)) return null;
+      return {
+        id,
+        committed_at: typeof commit.committed_at === "string" ? commit.committed_at : null,
+        files_changed: Math.max(0, Number(commit.files_changed) || 0),
+        insertions: Math.max(0, Number(commit.insertions) || 0),
+        deletions: Math.max(0, Number(commit.deletions) || 0),
+      };
+    })
+    .filter(Boolean);
+}
+
+function recordDailyCommits(db, userId, clientDay, card, receivedAt) {
+  const details = commitDetails(card);
+  if (!details.length) return;
+  const insert = db.prepare(
+    `INSERT INTO daily_commits (
+       user_id, client_day, commit_id, files_changed, insertions, deletions,
+       committed_at, updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, client_day, commit_id) DO UPDATE SET
+       files_changed = excluded.files_changed,
+       insertions = excluded.insertions,
+       deletions = excluded.deletions,
+       committed_at = COALESCE(excluded.committed_at, daily_commits.committed_at),
+       updated_at = excluded.updated_at`,
+  );
+  for (const commit of details) {
+    insert.run(
+      userId,
+      clientDay,
+      commit.id,
+      commit.files_changed,
+      commit.insertions,
+      commit.deletions,
+      commit.committed_at,
+      receivedAt,
+    );
+  }
+}
+
 function mergeGitStats(rows, chosenDay, chosenTimezone) {
   // No uncommitted_* keys: only committed work counts, so uncommitted figures
   // from older clients are dropped rather than merged into the feed.
@@ -818,6 +869,7 @@ function mergeGitStats(rows, chosenDay, chosenTimezone) {
     repos_touched: 0,
   };
   let found = false;
+  const seenCommits = new Set();
   for (const row of rows) {
     if (row.client_day !== chosenDay) continue;
     if (chosenTimezone && row.payload.day_timezone && row.payload.day_timezone !== chosenTimezone) {
@@ -826,8 +878,21 @@ function mergeGitStats(rows, chosenDay, chosenTimezone) {
     const card = getCard(row.payload, "git_stats");
     if (!card) continue;
     found = true;
-    for (const key of Object.keys(stats)) {
-      stats[key] = sumNumber(stats[key], card.data?.[key]);
+    const details = commitDetails(card);
+    if (details.length) {
+      for (const commit of details) {
+        if (seenCommits.has(commit.id)) continue;
+        seenCommits.add(commit.id);
+        stats.commits += 1;
+        stats.files_changed += commit.files_changed;
+        stats.insertions += commit.insertions;
+        stats.deletions += commit.deletions;
+      }
+      stats.repos_touched = sumNumber(stats.repos_touched, card.data?.repos_touched);
+    } else {
+      for (const key of Object.keys(stats)) {
+        stats[key] = sumNumber(stats[key], card.data?.[key]);
+      }
     }
   }
   if (!found) return null;

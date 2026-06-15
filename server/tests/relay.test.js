@@ -143,10 +143,15 @@ describe("migrations", () => {
       .all()
       .map((row) => row.name);
     expect(tables).toContain("daily_activity");
+    expect(tables).toContain("daily_commits");
 
     const columns = db.prepare("PRAGMA table_info(daily_activity)").all().map((row) => row.name);
-    for (const c of ["user_id", "device_id", "client_day", "insertions", "deletions", "updated_at"]) {
+    for (const c of ["user_id", "device_id", "client_day", "commits", "insertions", "deletions", "updated_at"]) {
       expect(columns).toContain(c);
+    }
+    const commitColumns = db.prepare("PRAGMA table_info(daily_commits)").all().map((row) => row.name);
+    for (const c of ["user_id", "client_day", "commit_id", "files_changed", "insertions", "deletions", "committed_at", "updated_at"]) {
+      expect(commitColumns).toContain(c);
     }
   });
 });
@@ -656,6 +661,93 @@ describe("statuses and feed", () => {
     expect(feed.you.cards.find((card) => card.type === "agent_mix")).toBeUndefined();
   });
 
+  it("deduplicates upgraded commit details across devices without exposing fingerprints", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const duplicate = "a".repeat(64);
+    const unique = "b".repeat(64);
+    const base = {
+      ...fixture("status-online"),
+      cards: [
+        {
+          type: "git_stats",
+          enabled: true,
+          summary: null,
+          data: {
+            commits: 2,
+            files_changed: 5,
+            insertions: 110,
+            deletions: 15,
+            repos_touched: 1,
+            commit_details: [
+              {
+                id: duplicate,
+                committed_at: "2026-06-06T17:00:00.000Z",
+                files_changed: 2,
+                insertions: 40,
+                deletions: 5,
+              },
+              {
+                id: unique,
+                committed_at: "2026-06-06T17:30:00.000Z",
+                files_changed: 3,
+                insertions: 70,
+                deletions: 10,
+              },
+            ],
+          },
+        },
+      ],
+    };
+    upsertStatus(db, user, base);
+    upsertStatus(db, user, {
+      ...base,
+      device_id: "device-marcus-desktop",
+      updated_at: "2026-06-06T18:04:00.000Z",
+      cards: [
+        {
+          type: "git_stats",
+          enabled: true,
+          summary: null,
+          data: {
+            commits: 1,
+            files_changed: 2,
+            insertions: 40,
+            deletions: 5,
+            repos_touched: 1,
+            commit_details: [
+              {
+                id: duplicate,
+                committed_at: "2026-06-06T17:00:00.000Z",
+                files_changed: 2,
+                insertions: 40,
+                deletions: 5,
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const feed = getFeed(db, user, FEED_NOW);
+    const stats = feed.you.cards.find((card) => card.type === "git_stats").data;
+    expect(stats).toEqual({
+      commits: 2,
+      files_changed: 5,
+      insertions: 110,
+      deletions: 15,
+      repos_touched: 2,
+    });
+    expect(JSON.stringify(feed)).not.toContain("commit_details");
+    expect(JSON.stringify(feed)).not.toContain(duplicate);
+    const rows = db
+      .prepare("SELECT commit_id, files_changed, insertions, deletions FROM daily_commits ORDER BY commit_id")
+      .all();
+    expect(rows).toEqual([
+      { commit_id: duplicate, files_changed: 2, insertions: 40, deletions: 5 },
+      { commit_id: unique, files_changed: 3, insertions: 70, deletions: 10 },
+    ]);
+  });
+
   it("chooses the account timezone's current Vibes day over a newer stale device day", () => {
     const user = createUser(db, {
       handle: "marcus",
@@ -1107,7 +1199,7 @@ describe("http helpers", () => {
 });
 
 describe("daily activity and typical churn", () => {
-  function postDay(user, day, { insertions, deletions, deviceId = "device-1" }) {
+  function postDay(user, day, { commits = 1, insertions, deletions, deviceId = "device-1" }) {
     upsertStatus(db, user, {
       device_id: deviceId,
       mode: "online",
@@ -1118,7 +1210,7 @@ describe("daily activity and typical churn", () => {
           type: "git_stats",
           enabled: true,
           summary: null,
-          data: { commits: 1, insertions, deletions },
+          data: { commits, insertions, deletions },
         },
       ],
     });
@@ -1131,12 +1223,20 @@ describe("daily activity and typical churn", () => {
     postDay(user, "2026-06-06", { insertions: 10, deletions: 0 });
 
     const rows = db
-      .prepare("SELECT client_day, insertions, deletions FROM daily_activity ORDER BY client_day")
+      .prepare("SELECT client_day, commits, insertions, deletions FROM daily_activity ORDER BY client_day")
       .all();
     expect(rows).toEqual([
-      { client_day: "2026-06-05", insertions: 200, deletions: 80 },
-      { client_day: "2026-06-06", insertions: 10, deletions: 0 },
+      { client_day: "2026-06-05", commits: 1, insertions: 200, deletions: 80 },
+      { client_day: "2026-06-06", commits: 1, insertions: 10, deletions: 0 },
     ]);
+  });
+
+  it("persists commit counts for history rows", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    postDay(user, "2026-06-05", { commits: 3, insertions: 0, deletions: 0 });
+
+    const row = db.prepare("SELECT commits, insertions, deletions FROM daily_activity").get();
+    expect(row).toEqual({ commits: 3, insertions: 0, deletions: 0 });
   });
 
   it("computes the median over past active days, excluding the given day", () => {
