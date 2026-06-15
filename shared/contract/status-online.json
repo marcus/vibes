@@ -18,7 +18,58 @@
         "files_changed": 31,
         "insertions": 1248,
         "deletions": 402,
-        "repos_touched": 4
+        "repos_touched": 4,
+        "commit_details": [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "committed_at": "2026-06-06T17:00:00.000Z",
+            "files_changed": 5,
+            "insertions": 200,
+            "deletions": 60
+          },
+          {
+            "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "committed_at": "2026-06-06T17:30:00.000Z",
+            "files_changed": 4,
+            "insertions": 160,
+            "deletions": 50
+          },
+          {
+            "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "committed_at": "2026-06-06T17:40:00.000Z",
+            "files_changed": 6,
+            "insertions": 240,
+            "deletions": 70
+          },
+          {
+            "id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "committed_at": "2026-06-06T17:45:00.000Z",
+            "files_changed": 3,
+            "insertions": 120,
+            "deletions": 30
+          },
+          {
+            "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "committed_at": "2026-06-06T17:50:00.000Z",
+            "files_changed": 5,
+            "insertions": 180,
+            "deletions": 80
+          },
+          {
+            "id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "committed_at": "2026-06-06T17:55:00.000Z",
+            "files_changed": 4,
+            "insertions": 148,
+            "deletions": 52
+          },
+          {
+            "id": "1111111111111111111111111111111111111111111111111111111111111111",
+            "committed_at": "2026-06-06T18:00:00.000Z",
+            "files_changed": 4,
+            "insertions": 200,
+            "deletions": 60
+          }
+        ]
       }
     },
     {

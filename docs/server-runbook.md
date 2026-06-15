@@ -358,3 +358,10 @@ Contract validation tests are located in [relay.test.js](file:///Users/marcusvor
 Still to build: broader admin tooling and packaged Mac app distribution.
 
 Bearer token auth for v1. Identities, friend links, invites, and latest status blobs live in SQLite; the schema and migrations are in `server/src/lib/server/db.js`.
+
+Git activity is still published as aggregate `git_stats`, but upgraded clients
+also send one-way `commit_details` fingerprints inside the status blob. The
+relay deduplicates those fingerprints across a user's devices for the selected
+Vibes day, stores unique entries in `daily_commits`, and returns only aggregate
+counts in `/api/feed`; raw commit hashes, branch names, messages, filenames,
+repo paths, device IDs, and timezones stay out of feed responses.

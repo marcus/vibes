@@ -116,21 +116,19 @@ Track per day:
 - latest activity timestamp
 - optional repo aliases
 
-Use the user's account-level Vibes day timezone for "today" rather than a rolling 24-hour window or each Mac's local midnight. The timezone is set during registration/import from the Mac timezone when possible and is stable across that user's devices. When the account Vibes day rolls over, each client rescans and republishes so the feed resets to the new day's stats; until it republishes, the previous `client_day` blob stays visible and the feed treats it as stale. The scanner counts committed changes only — no untracked files, and no working-tree or staged diffs (uncommitted changes carry no timestamp, so a stale dirty file would count as activity every day until committed or reverted).
+Use the user's account-level Vibes day timezone for "today" rather than a rolling 24-hour window or each Mac's local midnight. The timezone is set during registration/import from the Mac timezone when possible and is stable across that user's devices. When the account Vibes day rolls over, each client rescans and republishes so the feed resets to the new day's stats; until it republishes, the previous `client_day` blob stays visible and the feed treats it as stale. The scanner counts committed changes only — no untracked files, and no working-tree or staged diffs (uncommitted changes carry no timestamp, so a stale dirty file would count as activity every day until committed or reverted). The scanner walks local branches, not just the checked-out branch, so a same-day commit does not disappear because the user switches branches.
 
 Use local Git CLI commands rather than GitHub APIs.
 
 Useful commands:
 
 ```bash
-git log --since=<account-day-start-iso> --numstat --pretty=format:
-git diff --numstat
-git diff --cached --numstat
+git log --branches --since=<account-day-start-iso> --until=<now-or-account-day-end-iso> --numstat --pretty=format:
 ```
 
 Stats should be aggregated locally before publishing.
 
-Default shared payload should avoid sensitive details such as branch names, commit messages, file names, raw repo paths, and private repo names. Repo aliases may be user-configured and opt-in.
+Default shared payload should avoid sensitive details such as branch names, commit messages, file names, raw repo paths, raw commit hashes, and private repo names. Repo aliases may be user-configured and opt-in. Upgraded clients include per-commit aggregate entries under `git_stats.data.commit_details` using one-way commit fingerprints plus line/file counts; the relay uses those fingerprints only to deduplicate the same commit reported by multiple Macs, then strips them from feed responses.
 
 ## Code-Origin Attribution
 
@@ -207,7 +205,7 @@ Initial stack:
 
 ### Status Semantics
 
-The relay stores the latest status only. It does not store status history by default.
+The relay stores the latest status row per device. It also stores narrow daily Git aggregate history for baseline/streak-style summaries: per-device daily totals in `daily_activity` and deduped upgraded commit fingerprints in `daily_commits`. It does not store full status history, raw commit hashes, messages, filenames, branches, repo paths, or editor/tool activity.
 
 Status records do not expire. If a user has ever published a status, friends can continue to see that latest status with its `updated_at` timestamp. The client can render stale states such as "last updated 3h ago" or "last updated yesterday", but the relay should not delete or hide a status just because it is old.
 
@@ -226,7 +224,7 @@ The feed merges a user's device rows into one presence view per user on read. Me
 - Presence mode is the strongest mode across the user's devices, using the order online > offline (`MODE_RANK = {offline: 0, online: 1}`). A user is Offline only when every device is Offline or absent.
 - The relay prefers the current Vibes day computed from the user's account timezone. If no online row exists for that day, it falls back to the latest online row's `client_day`.
 - Manual status and singleton cards (`spotify`, `weather`, `repo_aliases`) come from the newest online source device for the chosen Vibes day. Repo aliases are not cross-device merged in v1.
-- `git_stats` is summed across online devices whose `client_day` matches the chosen Vibes day. Devices reporting an older `client_day` are ignored so a stale laptop does not inflate today's totals.
+- `git_stats` is merged across online devices whose `client_day` matches the chosen Vibes day. Upgraded rows are deduplicated by commit fingerprint so a pushed commit pulled onto another Mac only counts once. Legacy aggregate rows still contribute as best-effort totals. Devices reporting an older `client_day` are ignored so a stale laptop does not inflate today's totals.
 - `updated_at` for the merged view is the newest online device's `updated_at` across devices, so last-seen remains accurate even when a stale row does not contribute stats.
 - Recency gates the reported state: an `online` row whose newest online `updated_at` is within 10 minutes reports `online`. If that timestamp is stale the merged view reports `offline` but preserves the merged `updated_at` as the last-seen time so the client can render "online … ago". A genuinely-offline (toggled) user reports `offline` with `updated_at: null`.
 - Feed responses do not expose account or device timezones. Admin detail may show them for debugging.
@@ -323,6 +321,29 @@ CREATE TABLE statuses (
   PRIMARY KEY (user_id, device_id)
 );
 
+CREATE TABLE daily_activity (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL,
+  client_day TEXT NOT NULL,
+  commits INTEGER NOT NULL DEFAULT 0,
+  insertions INTEGER NOT NULL DEFAULT 0,
+  deletions INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, device_id, client_day)
+);
+
+CREATE TABLE daily_commits (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_day TEXT NOT NULL,
+  commit_id TEXT NOT NULL,
+  files_changed INTEGER NOT NULL DEFAULT 0,
+  insertions INTEGER NOT NULL DEFAULT 0,
+  deletions INTEGER NOT NULL DEFAULT 0,
+  committed_at TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, client_day, commit_id)
+);
+
 ALTER TABLE users ADD COLUMN timezone TEXT;
 
 CREATE TABLE schema_migrations (
@@ -337,6 +358,8 @@ Notes:
 - `updated_at` comes from the client payload; `server_received_at` is when the relay accepted it.
 - `users.timezone` stores the account-level IANA timezone used for the Vibes day. `client_day` remains the merge key, and upgraded clients also publish `day_timezone`, `day_start_at`, and `day_end_at` inside `payload_json` for validation and debugging.
 - If a legacy account has no timezone and upgraded device statuses disagree, the relay persists the newest valid device timezone once. Otherwise it leaves the account timezone unchanged.
+- `daily_activity` stores cumulative per-device Git totals for one Vibes day. Upserts replace the row because clients publish cumulative day totals.
+- `daily_commits` stores dedupe fingerprints from upgraded `git_stats.data.commit_details` payloads, keyed by `(user_id, client_day, commit_id)`. Feed responses never expose these fingerprints.
 - `payload_json` stores the publishable status blob, not raw scanner output.
 - `friendships` stores reciprocal rows for v1. Feed queries stay simple and direct. Unfriending deletes both rows.
 - `expires_at` on invites is allowed because invite lifetime is different from status lifetime.
@@ -535,13 +558,22 @@ The app is for friends, but still avoid accidental oversharing.
     {
       "type": "git_stats",
       "enabled": true,
-      "summary": "4 repos touched - 7 commits - +1,248 / -402 LOC",
+      "summary": "1 repo touched - 1 commit - +512 / -120 LOC",
       "data": {
-        "commits": 7,
-        "files_changed": 31,
-        "insertions": 1248,
-        "deletions": 402,
-        "repos_touched": 4
+        "commits": 1,
+        "files_changed": 12,
+        "insertions": 512,
+        "deletions": 120,
+        "repos_touched": 1,
+        "commit_details": [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "committed_at": "2026-06-06T17:00:00.000Z",
+            "files_changed": 12,
+            "insertions": 512,
+            "deletions": 120
+          }
+        ]
       }
     },
     {
