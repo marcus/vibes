@@ -65,7 +65,7 @@ The main gap: a day with a commit but zero line churn, or a future scanner that 
 
 ## Data Model
 
-Append a new migration; do not edit migration 6.
+Append a new migration; do not edit migration 6. Migrations run through version 7 today (`device_link_codes`), so this is **version 8**.
 
 ```sql
 ALTER TABLE daily_activity ADD COLUMN commits INTEGER NOT NULL DEFAULT 0;
@@ -79,10 +79,12 @@ PRIMARY KEY (user_id, device_id, client_day)
 
 Update `recordDailyActivity` so each upsert stores:
 
-- `commits`
+- `commits` (read from `card.data?.commits`, clamped to `>= 0`, same as the existing churn fields)
 - `insertions`
 - `deletions`
 - `updated_at`
+
+Add `commits` to both the `INSERT ... VALUES` column list and the `ON CONFLICT(...) DO UPDATE SET` clause — the upsert replaces the day's totals on every publish, so omitting it from the update half would freeze the column at its first-seen value.
 
 Backfill behavior:
 
@@ -142,6 +144,11 @@ Suggested query shape:
 5. Count consecutive calendar days with activity.
 
 Calendar walking should use the user's account timezone model. Since `client_day` is already a `YYYY-MM-DD` Vibes-day string, the helper can subtract one Gregorian day from the day string. It does not need to expose or return timezone data.
+
+Wiring in `getFeed` (mirror the `typical_churn` line at `relay.js:967`):
+
+- Pass the user's **real current Vibes day** as `currentDay`, not the merged `status.day`. `status.day` falls back to the newest online row's `client_day` for offline users (`chooseVibesDay`), so it can be stale; the streak's "ignore future days" and "through yesterday" rules need the genuine timezone-derived day. Reuse the same `formatDayInTimezone(nowMs, user.timezone)` path `chooseVibesDay` already uses, falling back to `status.day` when the user has no supported timezone.
+- Gate the attachment on a **visible** `git_stats` card by inspecting the already-merged result: `status.cards.some((c) => c.type === "git_stats")`. `mergeGitStats` already returns null when sharing is off or no card exists, so this one check covers the first two null cases in the Server Contract. Note this differs from `typical_churn`, which is currently attached unconditionally — `commit_streak` is deliberately gated.
 
 Details:
 
@@ -208,7 +215,7 @@ Acceptance:
 - Add `commitStreak(db, userId, currentDay)`.
 - Call it from `getFeed` for each merged status.
 - Only attach a streak when the merged status includes visible `git_stats`.
-- Update `shared/contract/feed-response.json`.
+- Update `shared/contract/feed-response.json`. Note this fixture is currently stale — it predates `typical_churn` and does not include it. Add both `typical_churn` and `commit_streak` so the contract matches what `getFeed` actually returns.
 
 Acceptance:
 
