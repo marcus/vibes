@@ -62,7 +62,7 @@
 <Modal bind:open {title} {description} size="sm">
   <form method="POST" {action} use:enhance={submit}>
     {@render fields?.()}
-    {#if body}<div class="body">{@render body()}</div>{/if}
+    {#if body}<div class="confirm-body">{@render body()}</div>{/if}
 
     {#if requireText}
       <Field

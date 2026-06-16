@@ -28,7 +28,7 @@
       {#if actions}<div class="actions">{@render actions()}</div>{/if}
     </div>
   {/if}
-  <div class="body">{@render children?.()}</div>
+  <div class="section-body">{@render children?.()}</div>
 </section>
 
 <style>
