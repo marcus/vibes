@@ -9,7 +9,7 @@
 
   let copied = $state(false);
   let downloadCopyFailed = $state(false);
-  let copyAlert;
+  let copyAlert = $state();
   let copyTimer;
   const appURL = $derived(`vibes://invite/${encodeURIComponent(data.code ?? "")}`);
 
