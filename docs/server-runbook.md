@@ -359,9 +359,17 @@ Still to build: broader admin tooling and packaged Mac app distribution.
 
 Bearer token auth for v1. Identities, friend links, invites, and latest status blobs live in SQLite; the schema and migrations are in `server/src/lib/server/db.js`.
 
-Git activity is still published as aggregate `git_stats`, but upgraded clients
-also send one-way `commit_details` fingerprints inside the status blob. The
-relay deduplicates those fingerprints across a user's devices for the selected
-Vibes day, stores unique entries in `daily_commits`, and returns only aggregate
-counts in `/api/feed`; raw commit hashes, branch names, messages, filenames,
-repo paths, device IDs, and timezones stay out of feed responses.
+Git activity is still published as aggregate `git_stats`. The relay records one
+aggregate `daily_activity` row per `(user_id, device_id, client_day)` with
+cumulative `commits`, `insertions`, and `deletions`; each publish replaces that
+device's totals for the day. `daily_activity.commits` powers the derived
+`commit_streak` feed summary (`{days, through_day}`), which is returned only
+when the merged row has visible `git_stats`. If Git stats sharing is off, the
+feed returns no streak.
+
+Upgraded clients also send one-way `commit_details` fingerprints inside the
+status blob. The relay deduplicates those fingerprints across a user's devices
+for the selected Vibes day, stores unique entries in `daily_commits`, and
+returns only aggregate counts in `/api/feed`; raw commit hashes, branch names,
+messages, filenames, repo paths, device IDs, timezones, per-day feed history,
+and repo-level history stay out of feed responses.

@@ -130,6 +130,8 @@ Stats should be aggregated locally before publishing.
 
 Default shared payload should avoid sensitive details such as branch names, commit messages, file names, raw repo paths, raw commit hashes, and private repo names. Repo aliases may be user-configured and opt-in. Upgraded clients include per-commit aggregate entries under `git_stats.data.commit_details` using one-way commit fingerprints plus line/file counts; the relay uses those fingerprints only to deduplicate the same commit reported by multiple Macs, then strips them from feed responses.
 
+The relay may derive a small `commit_streak` summary from shared Git aggregate history. A streak day is the user's account-level Vibes day with at least one committed change, summed across that user's devices. Friends receive only the current `{days, through_day}` summary when `git_stats` is visible; they never receive a calendar, missing-day history, repo paths, branches, commit messages, filenames, raw hashes, commit fingerprints, device rows, editor/tool activity, or code-origin attribution. The UI should treat the label as a quiet "still building" cue, not a score.
+
 ## Code-Origin Attribution
 
 Vibes should not track, infer, configure, publish, or display how code was produced. Do not add agent lists, editor lists, per-repo coding-tool labels, process detection, transcript scanning, commit-message attribution, or "human vs AI" summaries.
@@ -205,7 +207,7 @@ Initial stack:
 
 ### Status Semantics
 
-The relay stores the latest status row per device. It also stores narrow daily Git aggregate history for baseline/streak-style summaries: per-device daily totals in `daily_activity` and deduped upgraded commit fingerprints in `daily_commits`. It does not store full status history, raw commit hashes, messages, filenames, branches, repo paths, or editor/tool activity.
+The relay stores the latest status row per device. It also stores narrow daily Git aggregate history for baseline/streak-style summaries: per-device daily totals in `daily_activity` and deduped upgraded commit fingerprints in `daily_commits`. The feed may attach relay-derived summaries such as `typical_churn` and `commit_streak`; `commit_streak` is computed against the user's own account-level Vibes day and is gated by visible `git_stats`. It does not store full status history, raw commit hashes, messages, filenames, branches, repo paths, per-day feed history, or editor/tool activity.
 
 Status records do not expire. If a user has ever published a status, friends can continue to see that latest status with its `updated_at` timestamp. The client can render stale states such as "last updated 3h ago" or "last updated yesterday", but the relay should not delete or hide a status just because it is old.
 
