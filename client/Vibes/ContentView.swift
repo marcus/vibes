@@ -67,7 +67,11 @@ private struct SetupPanel: View {
         VStack(alignment: .leading, spacing: 8) {
           Text(invite.inviterName.map { "\($0) invited you to Vibes." } ?? "You have a Vibes invite.")
             .font(.title3.weight(.light))
-          Text("Enter a display name below and you'll be connected automatically.")
+          Text(
+            invite.inviterName.map {
+              "Enter a display name to create your account and connect with \($0)."
+            } ?? "Enter a display name to create your account and accept the invite."
+          )
             .font(.subheadline)
             .foregroundStyle(Color.secondary)
         }
@@ -113,7 +117,10 @@ private struct SetupPanel: View {
             )
           }
         } label: {
-          Label("Save display name", systemImage: "checkmark")
+          Label(
+            model.pendingInvite == nil ? "Save display name" : "Create account and accept invite",
+            systemImage: "checkmark"
+          )
         }
         .buttonStyle(.glassProminent)
         .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
@@ -126,7 +133,9 @@ private struct SetupPanel: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("Already using Vibes on another Mac?")
           .font(.subheadline)
-        Text("In Vibes on that Mac, open Settings → General → Link Another Mac, then enter the code here.")
+        Text(
+          "In Vibes on that Mac, open Settings -> General -> Link Another Mac, then enter the code here. This is for your own second Mac, not a friend invite."
+        )
           .font(.caption)
           .foregroundStyle(Color.secondary)
           .fixedSize(horizontal: false, vertical: true)

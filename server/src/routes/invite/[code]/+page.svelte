@@ -1,4 +1,5 @@
 <script>
+  import { tick } from 'svelte';
   import MarketingShell from '$lib/components/MarketingShell.svelte';
   import SocialMeta from '$lib/components/SocialMeta.svelte';
   import HeroRibbons from '$lib/components/HeroRibbons.svelte';
@@ -7,6 +8,8 @@
   let { data } = $props();
 
   let copied = $state(false);
+  let downloadCopyFailed = $state(false);
+  let copyAlert;
   let copyTimer;
   const appURL = $derived(`vibes://invite/${encodeURIComponent(data.code ?? "")}`);
 
@@ -27,6 +30,7 @@
     try {
       await navigator.clipboard.writeText(data.code);
       copied = true;
+      downloadCopyFailed = false;
       clearTimeout(copyTimer);
       copyTimer = setTimeout(() => (copied = false), 2000);
     } catch {
@@ -44,8 +48,12 @@
     event.preventDefault();
     try {
       await navigator.clipboard.writeText(new URL(`/i/${encodeURIComponent(data.code)}`, window.location.origin).href);
+      downloadCopyFailed = false;
     } catch {
-      // Clipboard blocked — the in-app code entry remains the fallback.
+      downloadCopyFailed = true;
+      await tick();
+      copyAlert?.focus();
+      return;
     }
     window.location.assign(event.currentTarget?.href ?? "/download");
   }
@@ -86,22 +94,37 @@
         <p class="hero-sub">Vibes shows which friends are online and how much they've coded today.</p>
         <p class="hero-lede">A Mac app for small groups. It turns your local Git activity into a simple, private friend feed.</p>
 
-        <div class="hero-cta">
-          <a class="btn btn-primary" href={appURL}>Open in Vibes</a>
-          <a class="btn btn-ghost" href="/download" onclick={downloadWithInvite}>
-            <svg class="apple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-            Download for Mac
-          </a>
+        <div class="hero-cta split-cta">
+          <div class="cta-path">
+            <span class="cta-label">New here?</span>
+            <a class="btn btn-primary" href="/download" onclick={downloadWithInvite}>
+              <svg class="apple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+              Download and copy invite
+            </a>
+          </div>
+          <div class="cta-path">
+            <span class="cta-label">Already installed?</span>
+            <a class="btn btn-ghost" href={appURL}>Open in Vibes</a>
+          </div>
         </div>
-        <p class="hero-fine">New here? Downloading copies your invite — Vibes finds it automatically after you install. Already installed? "Open in Vibes" accepts the invite directly.</p>
+        <p class="hero-fine">
+          After installing, open Vibes. If you see "You have a Vibes invite," just enter your display name.
+          If not, paste the invite code below.
+        </p>
+        {#if downloadCopyFailed}
+          <p class="copy-alert" role="alert" aria-live="assertive" tabindex="-1" bind:this={copyAlert}>
+            Your browser did not let us copy the invite. Copy the code below, then
+            <a href="/download">continue to download</a>.
+          </p>
+        {/if}
 
         <div class="code-card">
-          <span class="code-label">invite code</span>
+          <span class="code-label">Need it later?</span>
           <div class="code-row">
             <code>{data.code}</code>
             <button type="button" class="copy" onclick={copyCode}>{copied ? "copied" : "copy"}</button>
           </div>
-          <p class="code-hint">Backup plan: if Vibes doesn't spot your invite on its own, paste this code in Friends after setup.</p>
+          <p class="code-hint">If the app does not find your invite automatically, paste this code in Vibes -> Invite -> Have an invite code.</p>
         </div>
 
         <div class="privacy">
@@ -129,12 +152,12 @@
           <div class="step">
             <div class="step-num">01</div>
             <h3>Install</h3>
-            <p>Download and install Vibes for macOS, then enter a display name.</p>
+            <p>Download and install Vibes for macOS, then open it.</p>
           </div>
           <div class="step">
             <div class="step-num">02</div>
             <h3>Accept the invite</h3>
-            <p>Vibes spots your copied invite during setup and connects you automatically.</p>
+            <p>Enter a display name. Vibes accepts the copied invite during setup.</p>
           </div>
           <div class="step">
             <div class="step-num">03</div>
@@ -176,7 +199,29 @@
     font-size: var(--t-base); color: var(--text-secondary); line-height: 1.62;
   }
   .hero-cta { display: flex; gap: var(--s-3); justify-content: center; align-items: center; margin-top: var(--s-8); flex-wrap: wrap; }
+  .split-cta { align-items: end; gap: var(--s-5); }
+  .cta-path { display: grid; gap: var(--s-2); justify-items: center; }
+  .cta-label {
+    font-size: var(--t-xs);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
   .hero-fine { margin-top: var(--s-3); font-size: var(--t-xs); color: var(--text-tertiary); }
+  .copy-alert {
+    max-width: 460px;
+    margin: var(--s-4) auto 0;
+    padding: var(--s-3) var(--s-4);
+    border: 1px solid color-mix(in oklab, var(--accent-default) 35%, var(--border-subtle));
+    border-radius: var(--r-md);
+    background: color-mix(in oklab, var(--accent-default) 8%, var(--bg-secondary));
+    color: var(--text-secondary);
+    font-size: var(--t-sm);
+    line-height: 1.35;
+  }
+  .copy-alert a { color: var(--accent-default); font-weight: 600; }
+  .copy-alert a:hover { text-decoration: underline; }
 
   /* ---- Invite code ---- */
   .code-card {
@@ -272,6 +317,12 @@
   @media (max-width: 860px) {
     .steps { grid-template-columns: 1fr; }
     .hero { padding-top: var(--s-11); }
+  }
+
+  @media (max-width: 640px) {
+    .split-cta { align-items: stretch; }
+    .cta-path { justify-items: stretch; width: 100%; }
+    .cta-path :global(.btn) { justify-content: center; width: 100%; }
   }
 
   @media (prefers-reduced-motion: reduce) {
