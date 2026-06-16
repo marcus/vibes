@@ -1072,6 +1072,9 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
     status.typical_churn = typicalChurn(db, user.id, status.day);
     const hasVisibleGitStats = status.cards.some((card) => card.type === "git_stats");
     const timezone = user.timezone && isSupportedTimezone(user.timezone) ? user.timezone : null;
+    // The streak anchors on the live current day (not status.day, which is the
+    // last published day) so it caps out future-dated rows while still keeping a
+    // through-yesterday streak alive when the user hasn't committed yet today.
     const currentDay = timezone ? formatDayInTimezone(nowMs, timezone) : status.day;
     status.commit_streak = hasVisibleGitStats ? commitStreak(db, user.id, currentDay) : null;
     return status;
