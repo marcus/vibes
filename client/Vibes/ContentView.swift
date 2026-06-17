@@ -272,9 +272,10 @@ private struct MainPanel: View {
             Button {
               Task { await model.scanPublishAndFetch() }
             } label: {
-              Image(systemName: model.isBusy ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+              Image(systemName: "arrow.clockwise")
                 .font(.system(size: FloatingControl.iconSize, weight: .medium))
-                .opacity(model.isBusy ? 0.4 : 1)
+                .foregroundStyle(model.isBusy ? Color(nsColor: .systemGreen) : .primary)
+                .opacity(model.isBusy ? 0.6 : 1)
                 .frame(width: FloatingControl.height, height: FloatingControl.height)
                 .contentShape(Circle())
             }
@@ -290,12 +291,17 @@ private struct MainPanel: View {
       // inset the wordmark past them with a small gap.
       .padding(.leading, 72)
 
+      // Float the actions over the feed instead of parking them in their own
+      // footer row: they sit bottom-trailing, overlapping the drifting dock /
+      // the tail of the last status — which is fine to overlay — and reclaim
+      // the vertical band the footer used to cost the sky.
       HomeView(openInviteFriend: { showInviteFriend = true })
-
-      Footer(
-        openInviteFriend: { showInviteFriend = true },
-        openSettings: { openSettings() }
-      )
+        .overlay(alignment: .bottom) {
+          Footer(
+            openInviteFriend: { showInviteFriend = true },
+            openSettings: { openSettings() }
+          )
+        }
     }
     .padding(.horizontal, 22)
     .padding(.bottom, 22)
@@ -352,6 +358,79 @@ struct SettingsView: View {
         .tag(SettingsTab.advanced)
     }
     .frame(width: 600, height: 520)
+    .background(SettingsTrafficLightInsetter())
+  }
+}
+
+// The Settings window's default titlebar parks the traffic lights hard in the
+// top-left corner. The main window gets a roomier liquid-glass placement via a
+// unified toolbar (TrafficLightAligner), but Settings can't borrow that trick —
+// its TabView already owns the window toolbar for the tab strip. So we nudge the
+// three standard window buttons down and to the right ourselves, re-applying
+// whenever AppKit re-lays-out the titlebar (resize, key changes). Offsets are
+// measured from each button's AppKit-default origin so repeated applies don't
+// compound.
+private struct SettingsTrafficLightInsetter: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSView { InsetView() }
+  func updateNSView(_ nsView: NSView, context: Context) {
+    // Re-apply after the current layout pass: a tab switch re-lays-out the
+    // titlebar buttons after SwiftUI's update runs, so a synchronous call here
+    // would be overwritten.
+    DispatchQueue.main.async { (nsView as? InsetView)?.applyInset() }
+  }
+
+  final class InsetView: NSView {
+    private static let extraInset = CGSize(width: 8, height: 8)
+    private static let buttonTypes: [NSWindow.ButtonType] = [
+      .closeButton, .miniaturizeButton, .zoomButton,
+    ]
+    private var defaults: [NSWindow.ButtonType: CGPoint] = [:]
+    private var observers: [Any] = []
+    private var applying = false
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      observers.forEach(NotificationCenter.default.removeObserver)
+      observers.removeAll()
+      guard let window else { return }
+      // The button container re-lays-out on resize, tab switch, and key
+      // changes; watch its frame so we re-apply whenever AppKit resets the
+      // buttons to their default corner.
+      if let bar = window.standardWindowButton(.closeButton)?.superview {
+        bar.postsFrameChangedNotifications = true
+        observers.append(NotificationCenter.default.addObserver(
+          forName: NSView.frameDidChangeNotification, object: bar, queue: .main
+        ) { [weak self] _ in self?.applyInset() })
+      }
+      for name in [NSWindow.didResizeNotification, NSWindow.didBecomeKeyNotification] {
+        observers.append(NotificationCenter.default.addObserver(
+          forName: name, object: window, queue: .main
+        ) { [weak self] _ in self?.applyInset() })
+      }
+      DispatchQueue.main.async { [weak self] in self?.applyInset() }
+    }
+
+    func applyInset() {
+      guard let window, !applying else { return }
+      applying = true
+      defer { applying = false }
+      for type in Self.buttonTypes {
+        guard let button = window.standardWindowButton(type) else { continue }
+        // Capture AppKit's default origin once; the titlebar lays the buttons
+        // out from the left so it stays put across width changes.
+        let base = defaults[type] ?? {
+          let origin = button.frame.origin
+          defaults[type] = origin
+          return origin
+        }()
+        // Titlebar uses a top-left-ish flipped feel but NSView origin is
+        // bottom-left, so "down" is a smaller y.
+        let target = CGPoint(
+          x: base.x + Self.extraInset.width, y: base.y - Self.extraInset.height
+        )
+        if button.frame.origin != target { button.setFrameOrigin(target) }
+      }
+    }
   }
 }
 
@@ -1033,7 +1112,12 @@ private struct HomeView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      VStack(alignment: .leading, spacing: 8) {
+      // The inline status row must keep roughly the original two-line height:
+      // when it's too short the field sits up against the header (which lives in
+      // the titlebar/toolbar band via ignoresSafeArea), and the window's
+      // draggable region swallows clicks on the orbit/list, presence and refresh
+      // buttons. The minHeight preserves that clearance.
+      HStack(spacing: 10) {
         Text("status")
           .font(.caption)
           .foregroundStyle(Color.secondary)
@@ -1049,6 +1133,7 @@ private struct HomeView: View {
           Task { await model.scanPublishAndFetch() }
         }
       }
+      .frame(minHeight: 60)
 
       if showsOrbit, let feed = model.feed {
         OrbitView(you: feed.you, friends: feed.friends)
