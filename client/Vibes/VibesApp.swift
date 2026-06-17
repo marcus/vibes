@@ -108,6 +108,10 @@ struct VibesApp: App {
   @Environment(\.openSettings) private var openSettings
   @StateObject private var model = AppModel()
   @State private var showInviteFriend = false
+  // Mirrors the views' shared "feedViewMode" key so the ⌘L command can flip it;
+  // @AppStorage works in an App struct, and MainPanel/HomeView re-render off the
+  // same UserDefaults key with no extra plumbing.
+  @AppStorage("feedViewMode") private var feedViewModeRaw = FeedViewMode.orbit.rawValue
 
   // Owns the Sparkle updater for the app's lifetime; starts it immediately so
   // background checks run and `canCheckForUpdates` is observable.
@@ -144,11 +148,32 @@ struct VibesApp: App {
       CommandGroup(after: .appInfo) {
         CheckForUpdatesView(updater: updaterController.updater)
       }
+      CommandMenu("Friends") {
+        Button("Invite a Friend…") { showInviteFriend = true }
+          .keyboardShortcut(Shortcuts.invite)
+      }
+      CommandGroup(after: .toolbar) {
+        Button(feedViewModeRaw == FeedViewMode.orbit.rawValue ? "Switch to List" : "Switch to Orbit") {
+          feedViewModeRaw = (feedViewModeRaw == FeedViewMode.orbit.rawValue
+            ? FeedViewMode.list : FeedViewMode.orbit).rawValue
+        }
+        .keyboardShortcut(Shortcuts.toggleFeed)
+        Button("Scan Now") {
+          // Mirror the refresh button's re-entry guard: scanPublishAndFetch
+          // doesn't self-guard, and .disabled isn't available on a menu command.
+          guard !model.isBusy else { return }
+          Task { await model.scanPublishAndFetch() }
+        }
+        .keyboardShortcut(Shortcuts.scan)
+      }
     }
 
     Settings {
       SettingsView()
         .environmentObject(model)
+        // The native Settings scene ignores ESC; treat it like a modal and
+        // close the focused (Settings) window on the cancel command.
+        .onExitCommand { NSApp.keyWindow?.performClose(nil) }
     }
     .windowResizability(.contentSize)
 
@@ -162,6 +187,7 @@ struct VibesApp: App {
         openWindow(id: "main")
         showInviteFriend = true
       }
+      .keyboardShortcut(Shortcuts.invite)
       CheckForUpdatesView(updater: updaterController.updater)
       Divider()
       // Menu counterpart of the in-app PresenceLight (ContentView.swift). The
@@ -181,6 +207,7 @@ struct VibesApp: App {
       Button("Scan Now") {
         Task { await model.scanPublishAndFetch() }
       }
+      .keyboardShortcut(Shortcuts.scan)
       Divider()
       // With the Dock icon hidden there is no app menu, so the menu bar item
       // is the only always-available way into Settings.

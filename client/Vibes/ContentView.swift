@@ -281,6 +281,7 @@ private struct MainPanel: View {
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: .circle)
             .accessibilityLabel("Scan Now")
+            .help("Scan Now (⌘R)")
           }
         }
       }
@@ -1206,6 +1207,7 @@ private struct FeedViewToggle: View {
     .glassEffect(.regular, in: .capsule)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Feed View")
+    .help("Toggle Orbit / List (⌘L)")
   }
 
   private func segment(_ title: String, icon: String, mode: FeedViewMode) -> some View {
@@ -1570,6 +1572,7 @@ private struct Footer: View {
           .buttonStyle(.plain)
           .glassEffect(.regular.interactive(), in: .capsule)
           .accessibilityLabel("Invite a Friend")
+          .help("Invite a Friend (⌘I)")
           .overlay(alignment: .top) {
             if needsFriends {
               OnboardingNudge(text: "invite a friend", anchor: .center)
