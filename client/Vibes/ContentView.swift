@@ -1116,22 +1116,24 @@ private struct HomeView: View {
       // the titlebar/toolbar band via ignoresSafeArea), and the window's
       // draggable region swallows clicks on the orbit/list, presence and refresh
       // buttons. The minHeight preserves that clearance.
-      HStack(spacing: 10) {
-        Text("status")
-          .font(.caption)
-          .foregroundStyle(Color.secondary)
+      HStack(spacing: 12) {
+        Text("Status")
+          .font(.body)
+          .foregroundStyle(.primary)
         TextField("what are you working on?", text: Binding(
           get: { model.manualStatus },
           set: { model.updateManualStatus($0) }
         ))
         .textFieldStyle(.plain)
-        .padding(10)
-        .background(Color(nsColor: .quaternarySystemFill))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .foregroundStyle(.primary)
         .onSubmit {
           Task { await model.scanPublishAndFetch() }
         }
       }
+      .padding(.horizontal, 18)
+      .padding(.vertical, 12)
+      .background(Color(nsColor: .quaternarySystemFill))
+      .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
       .frame(minHeight: 60)
 
       if showsOrbit, let feed = model.feed {
@@ -1345,26 +1347,36 @@ private struct ReposSection: View {
 private struct RepoRow: View {
   @EnvironmentObject private var model: AppModel
   @State var repo: RepoConfig
+  @State private var isRemoveHovering = false
 
   var body: some View {
-    HStack {
-      VStack(alignment: .leading, spacing: 4) {
-        TextField("repo name", text: $repo.alias)
-          .textFieldStyle(.plain)
-          .onSubmit { model.updateRepo(repo) }
-        Text(repo.path)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-          .truncationMode(.middle)
-      }
-      Spacer()
+    HStack(alignment: .center) {
+      Text(repo.path)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.head)
+        .layoutPriority(0)
+
+      Spacer(minLength: 12)
+
+      TextField("", text: $repo.alias, prompt: Text("repo name"))
+        .textFieldStyle(.plain)
+        .multilineTextAlignment(.trailing)
+        .lineLimit(1)
+        .frame(minWidth: 72, idealWidth: 120, maxWidth: 120)
+        .layoutPriority(1)
+        .onSubmit { model.updateRepo(repo) }
+        .accessibilityLabel("Repo Alias")
+
       Button {
         model.removeRepo(repo)
       } label: {
-        Image(systemName: "minus")
+        Image(systemName: isRemoveHovering ? "minus.circle.fill" : "minus.circle")
+          .imageScale(.large)
+          .foregroundStyle(isRemoveHovering ? Color.red : Color.secondary)
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.plain)
+      .onHover { isRemoveHovering = $0 }
       .accessibilityLabel("Remove Repository")
     }
   }
