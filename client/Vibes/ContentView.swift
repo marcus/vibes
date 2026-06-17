@@ -270,18 +270,16 @@ private struct MainPanel: View {
               toggle: { model.setMode(model.mode == .online ? .offline : .online) }
             )
             Button {
+              // Guard re-entry in the action rather than via .disabled():
+              // .disabled dims the whole button, which would wash out the green
+              // busy tint. scanPublishAndFetch doesn't self-guard.
+              guard !model.isBusy else { return }
               Task { await model.scanPublishAndFetch() }
             } label: {
-              Image(systemName: "arrow.clockwise")
-                .font(.system(size: FloatingControl.iconSize, weight: .medium))
-                .foregroundStyle(model.isBusy ? Color(nsColor: .systemGreen) : .primary)
-                .opacity(model.isBusy ? 0.6 : 1)
-                .frame(width: FloatingControl.height, height: FloatingControl.height)
-                .contentShape(Circle())
+              RefreshGlyph(isBusy: model.isBusy)
             }
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: .circle)
-            .disabled(model.isBusy)
             .accessibilityLabel("Scan Now")
           }
         }
@@ -1264,6 +1262,52 @@ private struct PresenceLight: View {
     .help(mode == .online ? "Online — click to go offline" : "Offline — click to go online")
     .accessibilityLabel(mode == .online ? "Online" : "Offline")
     .accessibilityHint("Toggles your presence")
+  }
+}
+
+// The scan/refresh icon. A single steady glyph — no symbol swap — so a quick
+// refresh no longer blinks. While busy the glyph turns green and a soft green
+// glow breathes around it: present if you're watching the button, easy to miss
+// if you're not. Reduce Motion holds a steady green glow instead of breathing.
+private struct RefreshGlyph: View {
+  var isBusy: Bool
+  @State private var pulsing = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  var body: some View {
+    Image(systemName: "arrow.clockwise")
+      .font(.system(size: FloatingControl.iconSize, weight: .medium))
+      // Glyph stays a fully-opaque green while busy so it reads clearly green in
+      // both light and dark — dimming the glyph instead would just wash the
+      // green toward the light glass.
+      .foregroundStyle(isBusy ? Color(nsColor: .systemGreen) : .primary)
+      // The pulse is a soft green glow that breathes, not an opacity dip.
+      .shadow(color: glowColor, radius: glowRadius)
+      .frame(width: FloatingControl.height, height: FloatingControl.height)
+      .contentShape(Circle())
+      .animation(.easeInOut(duration: 0.4), value: isBusy)
+      .onChange(of: isBusy) { _, busy in
+        guard !reduceMotion else { return }
+        if busy {
+          pulsing = false
+          withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+            pulsing = true
+          }
+        } else {
+          withAnimation(.easeInOut(duration: 0.3)) { pulsing = false }
+        }
+      }
+  }
+
+  private var glowColor: Color {
+    guard isBusy else { return .clear }
+    let strength = reduceMotion ? 0.4 : (pulsing ? 0.6 : 0.15)
+    return Color(nsColor: .systemGreen).opacity(strength)
+  }
+
+  private var glowRadius: CGFloat {
+    guard isBusy, !reduceMotion else { return isBusy ? 3 : 0 }
+    return pulsing ? 4.5 : 1.5
   }
 }
 
