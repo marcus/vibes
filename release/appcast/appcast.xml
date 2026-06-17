@@ -3,6 +3,21 @@
     <channel>
         <title>Vibes</title>
         <item>
+            <title>0.8.0</title>
+            <pubDate>Wed, 17 Jun 2026 09:01:02 -0700</pubDate>
+            <sparkle:version>18</sparkle:version>
+            <sparkle:shortVersionString>0.8.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://vibes.opentangle.com/downloads/Vibes-0.8.0.zip" length="5227180" type="application/octet-stream" sparkle:edSignature="HknEwwg64OpD69neEuQugS1NMVc96bdA0VGcdolsIELUFSL1cfT3ktkYpLIzEe4iZ20d16zOTubSS4Pn2z4QAg=="/>
+            <sparkle:deltas>
+                <enclosure url="https://vibes.opentangle.com/downloads/Vibes18-17.delta" sparkle:deltaFrom="17" length="254950" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="h3NB7UKa17nxWy1NVzgnb9Ad6F+zPfaiuX+Gi7sDEY7Wp4GI8Db6qN8ltNz1ON1vnT+WtukKNjKNTPm/QgplAQ=="/>
+                <enclosure url="https://vibes.opentangle.com/downloads/Vibes18-16.delta" sparkle:deltaFrom="16" length="276758" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="/AmI3m55R5DOfmEbOg7+rnH3fpkFzMcYlJC59w167f6kdINx16tKzrV6V3wfk6raWIZep9hqVJLWvgdv7tf+BQ=="/>
+                <enclosure url="https://vibes.opentangle.com/downloads/Vibes18-15.delta" sparkle:deltaFrom="15" length="300862" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="JTb8u4ey5H5NxRz3JJnnQ+FSKxIj+Ef5fIh25sA7yJPr5cdt9o14GaUJkZEanHivQ0Z6rGjcR6w/a+ZrpDy+Cw=="/>
+                <enclosure url="https://vibes.opentangle.com/downloads/Vibes18-14.delta" sparkle:deltaFrom="14" length="325266" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="7WDqvvNclerVIdfGttu2KlqTstBNlMD5Xg01DIR+rYzc2Ix4nAS8EjvMAKske7NrGCWA1i9oHDI7pVuCu6nQAw=="/>
+                <enclosure url="https://vibes.opentangle.com/downloads/Vibes18-13.delta" sparkle:deltaFrom="13" length="338226" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="9iEJFF4iK8alwKuBi3oZbH9SrAXPb3yRU0pUS/jTcCQeBhk+UvrxLSH/FBUzntU3V7pfvSCCWpa6kK6k7YXwAQ=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.7.1</title>
             <pubDate>Tue, 16 Jun 2026 18:35:51 -0700</pubDate>
             <sparkle:version>17</sparkle:version>
@@ -30,21 +45,6 @@
                 <enclosure url="https://vibes.opentangle.com/downloads/Vibes16-13.delta" sparkle:deltaFrom="13" length="239638" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="OLdMp+lDtHKNNzd4JAci3c1txkvjDxbFwR/xlh29Q4H/U9Pllw3XrwQYY/w2b1ujjqaKl9OjkMRsl0uRL2d2CQ=="/>
                 <enclosure url="https://vibes.opentangle.com/downloads/Vibes16-12.delta" sparkle:deltaFrom="12" length="389818" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="6uCuBGfpPaB992E54W8y0yGi3V6QwD0cxZ8o9XiVoUj1v6PghPeMZ3N/qIchq9FXPPIEoY7UBQ2bhUVHEWmaBQ=="/>
                 <enclosure url="https://vibes.opentangle.com/downloads/Vibes16-11.delta" sparkle:deltaFrom="11" length="392054" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="TsTVSN2cginmNhiZY+kXbSYsgnFmPeG34VHl14qQCzelf7zmzEsj/41W9YjKlPijvibr/UPD84hP2rHU09ekAQ=="/>
-            </sparkle:deltas>
-        </item>
-        <item>
-            <title>0.6.2</title>
-            <pubDate>Mon, 15 Jun 2026 16:33:33 -0700</pubDate>
-            <sparkle:version>15</sparkle:version>
-            <sparkle:shortVersionString>0.6.2</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://vibes.opentangle.com/downloads/Vibes-0.6.2.zip" length="5188874" type="application/octet-stream" sparkle:edSignature="wlGJW1EibJVLo2oFaktnvwoGPQJY6P7bL+RIwLntIFxlMaMARuevt+NVJtmRSNpojJLmLrHFGU56K33EHdsKDA=="/>
-            <sparkle:deltas>
-                <enclosure url="https://vibes.opentangle.com/downloads/Vibes15-14.delta" sparkle:deltaFrom="14" length="201110" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="XRnHHuCD/5075Z9HX/BICOLEhzJnAGwA3OeDaS6ZPBfpdFEQjxb6t44W8hdbiJGP7gi2ZwuN4qHvd0wBMb7BAA=="/>
-                <enclosure url="https://vibes.opentangle.com/downloads/Vibes15-13.delta" sparkle:deltaFrom="13" length="216286" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="RchvZRwtu43PD69TuzLpAgX5E/WMoq8singofqUTt5groqlWm1jQJHE/QvdEplZoeGL+nE+EQuUKBIEuJn7cAA=="/>
-                <enclosure url="https://vibes.opentangle.com/downloads/Vibes15-12.delta" sparkle:deltaFrom="12" length="377742" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="AHkFYeOUknnOx/GFZvClWn0VXtU6zpUjIbl/xsiNHo6tEIVfSl6CgwLoykquJQ2MyyPvch/KLgCjm6RNqgU/BA=="/>
-                <enclosure url="https://vibes.opentangle.com/downloads/Vibes15-11.delta" sparkle:deltaFrom="11" length="379586" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="zCU+nvVNmMMoepAzIwRfguzOLt5S0JQSRdkFE7kSpbyx9eV+vE9DknCt4KbE20xy6XOTv8Ur8oXwLxsCvgQQBA=="/>
-                <enclosure url="https://vibes.opentangle.com/downloads/Vibes15-10.delta" sparkle:deltaFrom="10" length="409426" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="vZurEt3U64qrSm8dgyIDymvIzKYuTf5DlmjT6QGqaLaEjqPy+AZoenX8iGSfZ3eQBO9nt6QXRIqAaky/sFKRAA=="/>
             </sparkle:deltas>
         </item>
     </channel>
