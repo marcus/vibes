@@ -1,7 +1,11 @@
 import CryptoKit
 import Foundation
 
-struct GitScanner {
+// `nonisolated` so the scan never runs on the main actor. The project builds
+// with default main-actor isolation (SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor),
+// which would otherwise pin these synchronous, blocking git calls to the main
+// thread and freeze the UI on a slow or large repo.
+nonisolated struct GitScanner {
   func scan(repos: [RepoConfig], dayWindow: VibesDayWindow, now: Date = Date()) async -> DailyGitStats {
     var total = DailyGitStats()
     var seenCommits = Set<String>()
@@ -108,6 +112,11 @@ struct GitScanner {
     return digest.map { String(format: "%02x", $0) }.joined()
   }
 
+  // Hard ceiling on any single git invocation. A repo that hangs (filesystem
+  // stall, lock contention, pathological history) must not wedge the scan
+  // forever — past this, the process is killed and the call returns "".
+  private static let gitTimeout: TimeInterval = 20
+
   private func runGit(_ arguments: [String]) -> String {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -118,12 +127,42 @@ struct GitScanner {
     process.standardError = error
     do {
       try process.run()
-      process.waitUntilExit()
-      guard process.terminationStatus == 0 else { return "" }
-      return String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     } catch {
       return ""
     }
+
+    // Drain BOTH pipes concurrently. macOS pipe buffers are ~64KB: if we waited
+    // for the process to exit before reading (or read one pipe while the other
+    // filled), a chatty `git log --numstat` on a large repo would block git's
+    // write() while we block on waitUntilExit() — a permanent deadlock.
+    let outputQueue = DispatchQueue(label: "vibes.git.stdout")
+    let errorQueue = DispatchQueue(label: "vibes.git.stderr")
+    var outputData = Data()
+    let outputGroup = DispatchGroup()
+    outputQueue.async(group: outputGroup) {
+      outputData = output.fileHandleForReading.readDataToEndOfFile()
+    }
+    errorQueue.async(group: outputGroup) {
+      _ = error.fileHandleForReading.readDataToEndOfFile()
+    }
+
+    // Wait for exit with a timeout; kill the process if it overruns so the
+    // pipe readers above can hit EOF and the group can complete.
+    let waiter = DispatchGroup()
+    waiter.enter()
+    DispatchQueue(label: "vibes.git.wait").async {
+      process.waitUntilExit()
+      waiter.leave()
+    }
+    let exited = waiter.wait(timeout: .now() + Self.gitTimeout) == .success
+    if !exited {
+      process.terminate()
+      process.waitUntilExit()
+    }
+    outputGroup.wait()
+
+    guard exited, process.terminationStatus == 0 else { return "" }
+    return String(data: outputData, encoding: .utf8) ?? ""
   }
 
   private func configuredUserEmail(_ path: String) -> String? {
@@ -133,7 +172,7 @@ struct GitScanner {
   }
 }
 
-struct VibesDayWindow: Equatable {
+nonisolated struct VibesDayWindow: Equatable {
   var day: String
   var timezone: String
   var startAt: Date

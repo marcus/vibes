@@ -285,7 +285,9 @@ struct VibesConfig: Codable, Equatable {
   }
 }
 
-struct DailyGitStats: Codable, Equatable {
+// nonisolated so GitScanner (which runs off the main actor) can build these.
+// Pure value type with no shared mutable state, so it's safe from any context.
+nonisolated struct DailyGitStats: Codable, Equatable {
   var commits: Int = 0
   var filesChanged: Int = 0
   var insertions: Int = 0
@@ -306,7 +308,7 @@ struct DailyGitStats: Codable, Equatable {
   }
 }
 
-struct GitCommitStats: Codable, Equatable {
+nonisolated struct GitCommitStats: Codable, Equatable {
   var id: String
   var committedAt: Date
   var filesChanged: Int = 0

@@ -127,14 +127,18 @@ enum JSONCoding {
   }()
 }
 
-enum DateFormatters {
-  static let isoWithFractional: ISO8601DateFormatter = {
+// nonisolated so both the main actor and the off-main GitScanner can parse/
+// format dates. ISO8601DateFormatter is configured once and only read
+// thereafter; Foundation's date formatters are safe for concurrent reads, so
+// nonisolated(unsafe) is the honest annotation for these shared instances.
+nonisolated enum DateFormatters {
+  nonisolated(unsafe) static let isoWithFractional: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter
   }()
 
-  static let iso: ISO8601DateFormatter = {
+  nonisolated(unsafe) static let iso: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime]
     return formatter
