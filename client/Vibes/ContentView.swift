@@ -1350,34 +1350,35 @@ private struct RepoRow: View {
   @State private var isRemoveHovering = false
 
   var body: some View {
-    HStack(alignment: .center) {
+    // Mirror EditableSettingField's LabeledContent layout: the path is the
+    // label (head-truncated so a long repo path collapses from the start to a
+    // single line) and the alias field + remove button are the trailing value.
+    // LabeledContent owns the label/value width split, so the row stays one
+    // clean line at any path length instead of wrapping.
+    LabeledContent {
+      HStack(spacing: 8) {
+        TextField("", text: $repo.alias, prompt: Text("repo name"))
+          .labelsHidden()
+          .multilineTextAlignment(.trailing)
+          .onSubmit { model.updateRepo(repo) }
+          .accessibilityLabel("Repo Alias")
+
+        Button {
+          model.removeRepo(repo)
+        } label: {
+          Image(systemName: isRemoveHovering ? "minus.circle.fill" : "minus.circle")
+            .imageScale(.large)
+            .foregroundStyle(isRemoveHovering ? Color.red : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .onHover { isRemoveHovering = $0 }
+        .accessibilityLabel("Remove Repository")
+      }
+    } label: {
       Text(repo.path)
         .foregroundStyle(.secondary)
         .lineLimit(1)
         .truncationMode(.head)
-        .layoutPriority(0)
-
-      Spacer(minLength: 12)
-
-      TextField("", text: $repo.alias, prompt: Text("repo name"))
-        .textFieldStyle(.plain)
-        .multilineTextAlignment(.trailing)
-        .lineLimit(1)
-        .frame(minWidth: 72, idealWidth: 120, maxWidth: 120)
-        .layoutPriority(1)
-        .onSubmit { model.updateRepo(repo) }
-        .accessibilityLabel("Repo Alias")
-
-      Button {
-        model.removeRepo(repo)
-      } label: {
-        Image(systemName: isRemoveHovering ? "minus.circle.fill" : "minus.circle")
-          .imageScale(.large)
-          .foregroundStyle(isRemoveHovering ? Color.red : Color.secondary)
-      }
-      .buttonStyle(.plain)
-      .onHover { isRemoveHovering = $0 }
-      .accessibilityLabel("Remove Repository")
     }
   }
 }
