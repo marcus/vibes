@@ -717,10 +717,25 @@ final class AppModel: ObservableObject {
     Task { await scanPublishAndFetch() }
   }
 
+  // Persist a repo's edited `hidden` state (caller passes the desired value) and
+  // republish so a paused repo drops out of friends' feeds right away.
+  func setRepoHidden(_ repo: RepoConfig) {
+    mutateConfig { config in
+      guard let index = config.repos.firstIndex(where: { $0.id == repo.id }) else { return }
+      config.repos[index].hidden = repo.hidden
+    }
+    Task { await scanPublishAndFetch() }
+  }
+
   func updateRepo(_ repo: RepoConfig) {
     mutateConfig { config in
       guard let index = config.repos.firstIndex(where: { $0.id == repo.id }) else { return }
-      config.repos[index] = repo
+      // Write only the fields this edit owns. RepoRow holds a long-lived @State
+      // snapshot, so a full-row replace would clobber `hidden` with a stale
+      // value if it was toggled through another control (e.g. a future context
+      // menu) after the row appeared.
+      config.repos[index].alias = repo.alias
+      config.repos[index].shareAlias = repo.shareAlias
     }
   }
 

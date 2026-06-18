@@ -70,12 +70,17 @@ struct RepoConfig: Codable, Equatable, Identifiable {
   var path: String
   var alias: String
   var shareAlias: Bool
+  // When true the repo is paused: GitScanner skips it entirely, so it
+  // contributes no commits, churn, repos_touched, or alias to the feed. The
+  // config row is kept so it can be un-hidden later.
+  var hidden: Bool
 
-  init(id: UUID = UUID(), path: String, alias: String, shareAlias: Bool = true) {
+  init(id: UUID = UUID(), path: String, alias: String, shareAlias: Bool = true, hidden: Bool = false) {
     self.id = id
     self.path = path
     self.alias = alias
     self.shareAlias = shareAlias
+    self.hidden = hidden
   }
 
   enum CodingKeys: String, CodingKey {
@@ -83,6 +88,19 @@ struct RepoConfig: Codable, Equatable, Identifiable {
     case path
     case alias
     case shareAlias = "share_alias"
+    case hidden
+  }
+
+  // Custom decode so configs written before these flags existed still load:
+  // a missing `share_alias`/`hidden` defaults rather than failing the whole
+  // repo list. Encoding stays synthesized.
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(UUID.self, forKey: .id)
+    path = try container.decode(String.self, forKey: .path)
+    alias = try container.decode(String.self, forKey: .alias)
+    shareAlias = try container.decodeIfPresent(Bool.self, forKey: .shareAlias) ?? true
+    hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
   }
 }
 

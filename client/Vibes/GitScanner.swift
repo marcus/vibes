@@ -9,7 +9,7 @@ nonisolated struct GitScanner {
   func scan(repos: [RepoConfig], dayWindow: VibesDayWindow, now: Date = Date()) async -> DailyGitStats {
     var total = DailyGitStats()
     var seenCommits = Set<String>()
-    for repo in repos {
+    for repo in repos where !repo.hidden {
       guard FileManager.default.fileExists(atPath: repo.path) else { continue }
       let stats = scanRepo(repo: repo, dayWindow: dayWindow, now: now)
       if stats.hasActivity {

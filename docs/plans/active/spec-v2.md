@@ -664,7 +664,7 @@ The footer holds two controls:
 
 A standard Settings scene (Cmd-,) provides minimal in-app editing so non-developers are not forced into JSON:
 
-- Repos: add a tracked repo with a folder picker, remove one, and per repo set its alias and publish-alias toggle. Because the app is not sandboxed, the folder picker needs no security-scoped bookmarks.
+- Repos: add a tracked repo with a folder picker, remove one, and per repo set its alias and publish-alias toggle. An eye toggle also hides/shows a repo (`hidden`): a hidden repo is skipped entirely by the scanner, so it contributes no commits, churn, repos-touched, or alias to the feed until un-hidden — its config row is kept so the pause is reversible. Because the app is not sandboxed, the folder picker needs no security-scoped bookmarks.
 - Sharing: toggle each card in `sharing.cards` and each item in `sharing.redactions`.
 - Identity and relay: show handle, display name, device label, and relay URL. These are mostly read-only in v1.
 
@@ -738,12 +738,13 @@ Example:
       {
         "path": "~/code/vibes",
         "alias": "Vibes",
-        "publish_alias": true
+        "share_alias": true
       },
       {
         "path": "~/code/braid",
         "alias": "Braid",
-        "publish_alias": true
+        "share_alias": true,
+        "hidden": false
       }
     ]
   },

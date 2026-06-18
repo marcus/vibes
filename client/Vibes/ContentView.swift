@@ -1348,6 +1348,7 @@ private struct RepoRow: View {
   @EnvironmentObject private var model: AppModel
   @State var repo: RepoConfig
   @State private var isRemoveHovering = false
+  @State private var isHideHovering = false
 
   var body: some View {
     // Mirror EditableSettingField's LabeledContent layout: the path is the
@@ -1362,6 +1363,20 @@ private struct RepoRow: View {
           .multilineTextAlignment(.trailing)
           .onSubmit { model.updateRepo(repo) }
           .accessibilityLabel("Repo Alias")
+          .opacity(repo.hidden ? 0.45 : 1)
+
+        Button {
+          repo.hidden.toggle()
+          model.setRepoHidden(repo)
+        } label: {
+          Image(systemName: repo.hidden ? "eye.slash" : "eye")
+            .imageScale(.large)
+            .foregroundStyle(isHideHovering ? Color.accentColor : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHideHovering = $0 }
+        .accessibilityLabel(repo.hidden ? "Show Repository" : "Hide Repository")
+        .help(repo.hidden ? "Show in friends’ feed" : "Hide from friends’ feed")
 
         Button {
           model.removeRepo(repo)
@@ -1379,6 +1394,7 @@ private struct RepoRow: View {
         .foregroundStyle(.secondary)
         .lineLimit(1)
         .truncationMode(.head)
+        .opacity(repo.hidden ? 0.45 : 1)
     }
   }
 }
