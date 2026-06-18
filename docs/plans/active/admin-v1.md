@@ -112,7 +112,23 @@ The existing CLI remains a fallback for a headless bootstrap (`users create`, `i
 
 ## Design
 
-The admin uses the Teenage Engineering tokens in `server/src/lib/styles/tokens.css`: warm off-black/off-white, thin sans, spacing-driven layout, no emoji, monospace only for tokens/ids. It reads as a calm, dense operator tool — quiet tables, generous whitespace, the single accent reserved for the primary action and destructive confirmations. Light and dark via the existing `prefers-color-scheme` tokens. Tables avoid heavy borders; rows are separated by spacing and the hairline token.
+The admin should move away from the original Teenage Engineering token system and follow the current native macOS glass direction used by the app: soft layered surfaces, system typography, restrained contrast, rounded controls, subtle depth, and quiet status color. It is primarily an operator tool for the maintainer, so the default admin styling can be Mac-biased rather than trying to look equally native on every operating system.
+
+Update `server/src/lib/styles/tokens.css` and `server/src/lib/styles/admin.css` so the canonical web/admin defaults feel closer to the current Mac client:
+
+- soft white/near-white light-mode surfaces with dark-mode equivalents
+- translucent panels where browser support is reliable
+- solid fallbacks for every glass or backdrop treatment
+- subtle blur/backdrop usage, not decorative haze
+- quiet shadows only when they help establish depth
+- rounded fields, buttons, pills, modals, and table containers
+- system sans typography; monospace only for tokens, ids, and code
+- presence/status color used sparingly
+- clear but restrained primary and destructive states
+
+The admin should stay dense and practical: tables, filters, and mutation forms should remain easy to scan and operate. Avoid marketing-page composition, oversized hero treatment, decorative gradients, and ornamental glass effects.
+
+Future Windows/Linux token extensions belong to the Tauri app's platform layer. The server admin may continue using the Mac-like default tokens because it is not the public cross-platform client.
 
 ## Security
 

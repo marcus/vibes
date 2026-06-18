@@ -17,6 +17,8 @@ Vibes should have two client families:
 
 The Tauri app should feel like Vibes, not like the web signup page dropped into a window. It should reuse the design language and tokens, but its first screen is the actual presence app: feed, status, mode toggle, scan state, and invite action.
 
+Tauri provides a native desktop shell around a web UI. The app should use native shell integrations for windows, menus, tray, folder pickers, secure storage, autostart, updates, and packaging, but the content area is still HTML/CSS rendered in the platform webview. Do not plan on Tauri giving Vibes real SwiftUI, WinUI, or GTK controls inside the app. The product should use one shared Svelte UI with platform-adaptive styling, not three separate UI implementations.
+
 ## Goals
 
 - Support Linux and Windows without weakening the local-scanning model.
@@ -73,7 +75,7 @@ Use:
 - Rust for the shell, platform adapters, secure storage bridge, and command boundary.
 - Svelte or SvelteKit-style Svelte components for the UI. Prefer a plain Vite/Svelte app if the Tauri surface does not need SvelteKit routing.
 - Shared TypeScript models generated from or checked against the existing relay contract fixtures.
-- Existing web tokens from `server/src/lib/styles/tokens.css` as the visual source of truth, mirrored into the Tauri UI.
+- Existing web tokens from `server/src/lib/styles/tokens.css` as the visual source of truth, mirrored into the Tauri UI. Those tokens should move away from the original Teenage Engineering palette toward the current native macOS glass direction, with Windows and Linux extensions layered on top for the Tauri app.
 
 The Rust side should own local capabilities:
 
@@ -95,6 +97,59 @@ The web side should own presentation:
 - Sharing toggles.
 - Invite create/accept/revoke.
 - Basic diagnostics.
+
+## Visual System Direction
+
+Use the current native macOS app as the design north star. The visual system has moved away from the original Teenage Engineering hardware reference and toward a clean, quiet macOS glass language: soft translucent surfaces, system typography, restrained contrast, rounded controls, subtle depth, and spacious but practical information density.
+
+The default shared web tokens should therefore become "macOS glass by default" because the primary maintainer and admin user works on Mac and because the native Mac app remains the most polished first-party experience. This affects:
+
+- Svelte admin pages under `/admin`.
+- Future Tauri Svelte UI.
+- Shared web components and marketing/support surfaces when they use the canonical tokens.
+
+Do not make the Tauri UI "Liquid Glass everywhere" as a literal cross-platform clone. Instead:
+
+- **macOS Tauri**: use the closest webview approximation of the Mac look for development parity, while the native SwiftUI app remains the public Mac recommendation.
+- **Windows Tauri**: adapt the default tokens toward Fluent/Mica conventions where available: system font, Windows title/tray behavior, slightly clearer edges, and Windows-friendly acrylic or Mica-style shell effects only when they perform well.
+- **Linux Tauri**: adapt the default tokens toward restrained native desktop expectations: system font, solid or softly translucent surfaces, clear focus rings, no hard dependency on compositor blur, and graceful behavior when tray support varies.
+
+The app should have one component set with OS token extensions, not separate Mac, Windows, and Linux UIs. Platform-specific styling should live behind small classes, data attributes, or token layers such as `data-platform="macos" | "windows" | "linux"`.
+
+Native shell pieces should remain native where Tauri supports them:
+
+- app/window menus
+- tray menus
+- file/folder dialogs
+- secure storage prompts
+- updater prompts
+- autostart integration
+- window shape, titlebar, vibrancy/blur/Mica where practical
+
+Custom web UI pieces should remain shared:
+
+- feed cards/orbit
+- settings panes
+- buttons and segmented controls
+- forms and fields
+- tables
+- empty/error/loading states
+- diagnostics
+
+### Admin Styling Implication
+
+Update the Svelte admin component styling before or alongside Tauri UI work. The admin is an operator surface for the main maintainer, so it should default to the macOS glass-like token direction rather than preserving the original Teenage Engineering system. Keep it dense and calm, but make panels, buttons, fields, tables, modals, and hover states feel like the current Mac client:
+
+- soft white/near-white surfaces in light mode
+- translucent layered panels where web rendering makes that reliable
+- subtle blur/backdrop usage with solid fallbacks
+- quiet shadows only when they help establish depth
+- rounded controls consistent with the Mac client
+- system sans typography
+- status color used sparingly
+- destructive and primary states clear but not loud
+
+Windows and Linux token extensions should be added for the Tauri app, not for the server admin initially. The admin may stay Mac-biased because it is primarily used by the maintainer.
 
 ## Portable Core Boundary
 
@@ -139,6 +194,7 @@ Purpose: development and parity testing, not the preferred public Mac download.
 - Autostart: Launch Services or Tauri autostart plugin.
 - Updates: Tauri updater for the Tauri app only. Sparkle remains the native Mac app updater.
 - Packaging: signed/notarized `.app`/DMG later, but early internal builds can be unsigned.
+- UI style: match the shared macOS-glass default tokens closely, but treat this as parity/test coverage rather than the primary Mac user experience.
 
 Avoid sharing the native app's Keychain items or config path at first. Explicit migration can come later; accidental cross-client mutation would be harder to debug.
 
@@ -151,6 +207,7 @@ Avoid sharing the native app's Keychain items or config path at first. Explicit 
 - Autostart: XDG autostart or systemd user unit, selected by what Tauri supports cleanly.
 - Packaging: AppImage first for broad testing, `.deb` once Debian/Ubuntu users are real, Flatpak later only after filesystem permissions are understood.
 - Repo access: make explicit folder selection required. Do not ask for broad home-directory access by default in sandboxed package formats.
+- UI style: use the shared component set with Linux token overrides. Prefer stable solid/soft surfaces over blur, because compositor behavior is not dependable across desktop environments.
 
 ### Windows
 
@@ -167,6 +224,7 @@ Avoid sharing the native app's Keychain items or config path at first. Explicit 
   - never publish raw paths
   - handle spaces, drive letters, UNC paths, and non-ASCII paths in tests
 - Packaging: MSI or NSIS installer after the first working alpha. Use code signing before public distribution.
+- UI style: use the shared component set with Windows token overrides. Prefer Fluent/Mica-adjacent surfaces where available, with performance-safe fallbacks.
 
 ## UI Scope For The First Tauri Alpha
 
@@ -260,6 +318,7 @@ Minimum proof for the Tauri alpha:
 - Identify Swift scanner behavior that must be matched.
 - Add or confirm contract fixtures for status publish and feed.
 - Decide Tauri workspace location, likely `tauri/` or `client-tauri/`.
+- Update the canonical web/admin token direction from the original Teenage Engineering palette to the current macOS glass-like defaults, then document the Windows/Linux token extension points.
 
 ### Phase 1: Portable Scanner Prototype
 
@@ -278,7 +337,7 @@ Minimum proof for the Tauri alpha:
 ### Phase 3: First Real UI
 
 - Build the main panel, setup, repositories, sharing, and invite flows.
-- Mirror the existing visual tokens without copying marketing-page layout.
+- Mirror the updated macOS-glass default visual tokens without copying marketing-page layout.
 - Add tray actions for show/hide, online/offline, scan now, and quit.
 - Capture screenshot proof on macOS.
 

@@ -61,19 +61,19 @@ Default shared payloads must avoid:
 
 ## Visual Style
 
-Vibes takes visual inspiration from Teenage Engineering: spare, premium, and quiet. The same language applies to the SwiftUI client and the web signup pages.
+Vibes has moved away from the original Teenage Engineering reference and now follows a clean native macOS glass direction: soft layered surfaces, system typography, restrained contrast, rounded controls, subtle depth, and quiet status color. The SwiftUI client is the highest-fidelity expression of this style. The web admin and future Tauri client should use the same macOS-like tokens by default, with Windows and Linux extensions layered on top for the cross-platform app.
 
 Principles:
 
-- Two-color base: a warm off-black and a warm off-white. Light and dark mode swap which one is background and which is foreground.
-- One restrained accent, used rarely — a single highlight, never decoration. The per-vibe feed tints are the one place more color is allowed.
-- Thin sans-serif type: light weights for display, regular for body. Inter or the system sans. Never a monospaced font except for actual code, and never for stats, numbers, or labels.
-- Extremely conservative use of retro or display faces — at most an occasional wordmark, never body text.
-- No emoji anywhere. Use SF Symbols (client) or simple line glyphs (web) when an icon is genuinely needed.
-- Layout comes from spacing and alignment, not borders and shadows. Avoid borders, dividers, and drop shadows unless absolutely necessary; when a separation is unavoidable, prefer a hairline in a near-background tone over a heavy rule.
-- Generous whitespace, tight type, calm density. Let emptiness do the work.
+- Default to a calm macOS-glass feel: near-white/light surfaces, dark-mode equivalents, gentle translucency where reliable, and solid fallbacks everywhere.
+- Use restrained accent and status color. Primary, destructive, and presence states should be clear but not loud; avoid decorative color.
+- Use system sans typography. Never use a monospaced font except for actual code, ids, tokens, and diagnostics.
+- Keep controls rounded, soft, and native-feeling without pretending web UI is real SwiftUI/WinUI/GTK.
+- No emoji anywhere. Use SF Symbols in the native client and simple line glyphs or icon components on web/Tauri when an icon is genuinely needed.
+- Layout comes from spacing, alignment, and subtle depth. Avoid heavy borders, dividers, and drop shadows; when separation is unavoidable, use quiet hairlines or soft surface contrast.
+- Admin and app surfaces should stay dense and practical: no marketing-page heroes, decorative gradients, or ornamental glass effects inside operator/product UI.
 
-Tokens: the canonical web tokens live in `server/src/lib/styles/tokens.css`. The core palette is a warm off-black (`#1a1714`) and warm off-white (`#f2eee6`) with warm-neutral grays and a single burnt-orange accent (`#e0531f`). The SwiftUI client mirrors the same palette, type scale, and spacing scale so both surfaces feel identical; update the tokens file first and mirror from it.
+Tokens: the canonical web/admin tokens live in `server/src/lib/styles/tokens.css`, with admin extensions in `server/src/lib/styles/admin.css`. Update those toward the macOS-glass defaults first, then add narrow Windows/Linux token extensions for the Tauri app rather than building separate UIs for each OS.
 
 ## Client Conventions
 

@@ -37,7 +37,7 @@ Planned cross-platform target:
 - Tauri app for macOS, Linux, and Windows
 - same relay contract
 - same local Git scanning and privacy contract
-- shared visual language and tokens
+- shared Svelte UI with platform-adaptive visual tokens
 - platform-specific secure storage, tray, autostart, updater, and packaging adapters
 
 The native SwiftUI client remains the recommended Mac app. The Tauri client is the portability lane for Linux and Windows, with a Mac build available for development and parity testing. See `docs/plans/active/cross-platform-tauri-client.md`.
@@ -702,6 +702,10 @@ Settings writes the same config JSON described in Configuration, so hand-edited 
 The app is native SwiftUI and supports both light and dark mode, following the system accent. The tone is calm and low-density: generous spacing, SF Pro text, and SF Symbols. Presence is shown with a simple two-state indicator so the feed reads at a glance: a green dot for Online and a muted gray dot for Offline. An offline row that still has a last-seen timestamp renders "online … ago" next to the muted dot; a toggled-offline row just reads "offline".
 
 Exact symbols and tints are not critical for v1; the indicator exists so presence is visually clear rather than text-only.
+
+The product's visual source has moved away from the original Teenage Engineering reference and toward the current native macOS glass direction: soft layered surfaces, system typography, restrained contrast, rounded controls, subtle depth, and quiet status color. The native Mac client is the highest-fidelity expression of that style.
+
+The shared web/admin/Tauri tokens should use the macOS glass direction as the default. Windows and Linux should be platform-adaptive extensions of that system, not separate redesigns and not literal Mac chrome cloned onto every OS. Tauri shell pieces should use native platform integrations where available, while the app content remains one shared Svelte UI with token overrides.
 
 ### Brand Assets
 
