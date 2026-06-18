@@ -4,7 +4,7 @@ Supersedes `docs/plans/deprecated/spec-v1.md`. This version removes code-origin 
 
 ## Concept
 
-Vibes is a small macOS desktop app for private, ambient presence among coding friends. It shows who is around, what kind of building day they are having, and lightweight stats from configured local repos.
+Vibes is a small desktop app for private, ambient presence among coding friends. It shows who is around, what kind of building day they are having, and lightweight stats from configured local repos.
 
 The core feeling:
 
@@ -30,7 +30,17 @@ Primary target:
 - Online / offline control
 - Friend feed
 
-Assume users are technical Mac users.
+Assume initial users are technical Mac users.
+
+Planned cross-platform target:
+
+- Tauri app for macOS, Linux, and Windows
+- same relay contract
+- same local Git scanning and privacy contract
+- shared visual language and tokens
+- platform-specific secure storage, tray, autostart, updater, and packaging adapters
+
+The native SwiftUI client remains the recommended Mac app. The Tauri client is the portability lane for Linux and Windows, with a Mac build available for development and parity testing. See `docs/plans/active/cross-platform-tauri-client.md`.
 
 ## Product Shape
 
@@ -157,7 +167,7 @@ listening to Boards of Canada - Dayvan Cowboy
 
 ## Architecture
 
-Use a native SwiftUI macOS app plus a small centralized relay service.
+Use a native SwiftUI macOS app plus a small centralized relay service. Add a Tauri client as the cross-platform lane for macOS, Linux, and Windows without changing the relay's core responsibilities.
 
 ### Client
 
@@ -181,6 +191,23 @@ SwiftUI macOS app:
 The app will not target the Mac App Store. V1 can be signed for local distribution without App Store sandboxing. This keeps arbitrary local repo scanning straightforward and avoids security-scoped bookmark work during the hackathon.
 
 Use JSON config and lightweight local persistence for the first build. If local persistence grows beyond simple settings and cached feed state, SQLite is fine.
+
+### Tauri Client
+
+The Tauri client should provide the same core product on macOS, Linux, and Windows:
+
+- setup and account linking
+- explicit local repo configuration
+- local Git scanner
+- privacy-preserving status aggregation
+- online/offline toggle
+- manual status editor
+- friend feed
+- invite create/accept/revoke flows
+- tray actions where the platform supports them
+- secure token storage through platform adapters
+
+The Tauri app should use the same relay API and publish the same privacy-preserving payload shape as the SwiftUI client. It should not introduce a GitHub-only mode as the cross-platform shortcut.
 
 ### Relay
 
