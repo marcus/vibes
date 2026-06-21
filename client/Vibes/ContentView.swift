@@ -1137,7 +1137,7 @@ private struct HomeView: View {
       .frame(minHeight: 60)
 
       if showsOrbit, let feed = model.feed {
-        OrbitView(you: feed.you, friends: feed.friends)
+        OrbitView(you: feed.you, friends: feed.friends, pulse: feed.pulse)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         feedList
@@ -1149,6 +1149,11 @@ private struct HomeView: View {
   private var feedList: some View {
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
+          // The network pulse history pins to the top of the list (no footer),
+          // only when the server emits it.
+          if let pulse = model.feed?.pulse {
+            PulseHistory(pulse: pulse)
+          }
           if let you = model.feed?.you {
             FriendCard(status: you, isYou: true)
           }

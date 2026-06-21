@@ -694,6 +694,99 @@ extension MergedStatus {
 struct FeedResponse: Codable, Equatable {
   var you: MergedStatus
   var friends: [MergedStatus]
+  // Aggregate, privacy-safe "sign of life" for the whole network. Optional so
+  // an older server that doesn't emit it decodes fine (missing => nil => the
+  // client renders no pulse at all).
+  var pulse: NetworkPulse?
+}
+
+// MARK: - Network Pulse
+
+// The network-wide aggregate the server folds across all users (td-30cdb2):
+// sums/counts/date-strings only — never any user id, handle, or avatar. When
+// fewer than 3 people committed today the day is `statless`: `today` is null and
+// the client shows a wordless "people are vibing today" sign of life instead of
+// numbers, so a quiet day can't re-identify anyone.
+struct NetworkPulse: Codable, Equatable {
+  var windowDays: Int
+  var statless: Bool
+  var today: PulseToday?
+  var history: [PulseDay]
+
+  enum CodingKeys: String, CodingKey {
+    case windowDays = "window_days"
+    case statless
+    case today
+    case history
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    windowDays = try container.decodeIfPresent(Int.self, forKey: .windowDays) ?? 14
+    statless = try container.decodeIfPresent(Bool.self, forKey: .statless) ?? false
+    today = try container.decodeIfPresent(PulseToday.self, forKey: .today)
+    history = try container.decodeIfPresent([PulseDay].self, forKey: .history) ?? []
+  }
+
+  init(windowDays: Int = 14, statless: Bool = false, today: PulseToday?, history: [PulseDay]) {
+    self.windowDays = windowDays
+    self.statless = statless
+    self.today = today
+    self.history = history
+  }
+}
+
+// Today's network totals. `typicalChurn` (the network's median day) may be null
+// until enough history accrues; `lap` is churn/typical when > 1.0, else null.
+struct PulseToday: Codable, Equatable {
+  var insertions: Int
+  var deletions: Int
+  var churn: Int
+  var contributors: Int
+  var typicalChurn: Int?
+  var lap: Double?
+
+  enum CodingKeys: String, CodingKey {
+    case insertions
+    case deletions
+    case churn
+    case contributors
+    case typicalChurn = "typical_churn"
+    case lap
+  }
+}
+
+// One day in the 14-day window, oldest→newest. A day with < 3 contributors is
+// suppressed: `churn`/`insertions`/`deletions` come through null (an empty bar).
+struct PulseDay: Codable, Equatable, Identifiable {
+  var day: String
+  var churn: Int?
+  var contributors: Int?
+  var insertions: Int?
+  var deletions: Int?
+
+  var id: String { day }
+
+  // Local calendar date parsed from the "yyyy-MM-dd" day string, for weekday /
+  // weekend derivation in the history chart.
+  var date: Date? { PulseDay.dayFormatter.date(from: day) }
+
+  // Suppressed days (< 3 contributors) arrive with null churn — drawn as an
+  // empty/min bar.
+  var isSuppressed: Bool { churn == nil }
+
+  var isWeekend: Bool {
+    guard let date else { return false }
+    return Calendar.current.isDateInWeekend(date)
+  }
+
+  private static let dayFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = .current
+    f.dateFormat = "yyyy-MM-dd"
+    return f
+  }()
 }
 
 // Color <-> "#RRGGBB" hex bridging via NSColor (so SwiftUI ColorPicker selections

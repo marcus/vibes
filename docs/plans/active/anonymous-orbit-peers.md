@@ -1,5 +1,43 @@
 # Vibes: Anonymous "distant" peers in the orbit
 
+Status: partially implemented. **Direction 2 (aggregate sky stat) shipped as the
+"Network Pulse"** — see "Implemented: Network Pulse" below. The remaining
+directions (statless ghost orbs, per-orb anonymized numbers) are still open.
+
+## Implemented: Network Pulse (Direction 2)
+
+Shipped 2026-06-21 (epic `td-30cdb2`). A single privacy-safe aggregate across
+**all** users, so a 0–1-friend sky still reads as populated.
+
+- **Server** — `networkPulse(db, nowMs)` in `relay.js` aggregates the existing
+  `daily_activity` table (no migration) into a 14-day window; returned as `pulse`
+  on `getFeed()`. Per day: summed insertions/deletions, churn, and
+  `COUNT(DISTINCT user_id)` contributors. Global `networkTypicalChurn` median
+  (excludes today) drives a `lap`. 60s in-memory TTL cache keyed on the date
+  (identical for every viewer, so it ticks up through the day). Output is
+  numbers + `YYYY-MM-DD` strings only — no identity.
+- **k = 3 floor** — today's headline numbers only when ≥ 3 contributors, else
+  `statless: true` / `today: null`. Each history day with < 3 contributors is
+  suppressed (`churn: null`). (Chosen over k = 8: LOC totals carry little
+  re-identification risk and 3 is enough to anonymize.)
+- **Orbit** — `PulseCore` (`PulseView.swift`): a dim, slow-breathing neutral
+  "core" orb the real friend-orbs drift around, churn ring = network today vs
+  typical, the 14-day sparkline drawn across its empty center with a "14 days"
+  label inside, caption "across vibes · today / +Xk −Yk / N vibing". Statless →
+  twinkling dots + "people are vibing today".
+- **List** — `PulseHistory` pinned at the **top** of `feedList` (no footer): a
+  14-day bar chart, weekends shaded, today highlighted, statless fallback.
+- **Decisions taken:** no new consent toggle (aggregates only already-shared
+  `git_stats`, output non-identifying); window = 14 calendar days, "today" =
+  server UTC date; "vibing" copy (not "shipping"). Mockup:
+  `design/mockups/network-pulse.html` (concept A).
+- **Not built (deferred):** tap-to-expand pulse detail / dedicated history tab;
+  list footer variant; per-day timezone-accurate bucketing.
+
+---
+
+## Original proposal (ghost peers — still open)
+
 Status: proposed. Open product direction — see "Decision pending" below.
 
 ## Purpose

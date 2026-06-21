@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>vibes · network pulse — concepts</title>
+<style>
+  :root{
+    --ink:rgba(255,255,255,.94); --muted:rgba(255,255,255,.55); --faint:rgba(255,255,255,.30);
+    --plus:#4ade80; --minus:#fb7185; --slate:#7c8aa0;
+  }
+  *{margin:0;box-sizing:border-box}
+  body{
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    color:var(--ink); min-height:100vh; padding:44px 24px 64px;
+    display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-start; gap:30px;
+    background:
+      radial-gradient(1100px 750px at 18% 8%, #16324a 0%, transparent 60%),
+      radial-gradient(900px 700px at 88% 90%, #2c1d52 0%, transparent 60%),
+      #07090f;
+  }
+  .col{display:flex; flex-direction:column; align-items:center; gap:12px}
+  .caption{color:var(--faint); font-size:11.5px; letter-spacing:.03em; max-width:440px; text-align:center; line-height:1.5}
+  .caption b{color:var(--muted); font-weight:600}
+  h1.lead{width:100%; text-align:center; font-weight:300; font-size:22px; color:var(--ink); margin-bottom:4px; letter-spacing:.01em}
+  h1.lead small{display:block; font-size:12.5px; color:var(--faint); margin-top:6px; letter-spacing:.02em}
+
+  .window{
+    width:440px; height:600px; border-radius:18px; overflow:hidden; position:relative;
+    background:
+      radial-gradient(600px 400px at 70% -10%, rgba(64,141,255,.14), transparent 60%),
+      radial-gradient(500px 420px at 10% 110%, rgba(167,93,255,.12), transparent 60%),
+      rgba(12,14,24,.82);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 30px 80px rgba(0,0,0,.55);
+    display:flex; flex-direction:column;
+  }
+  .titlebar{display:flex; align-items:center; gap:8px; padding:13px 15px; position:relative; z-index:5}
+  .lights{display:flex; gap:7px; margin-right:6px}
+  .lights i{width:11px;height:11px;border-radius:50%;display:block}
+  .lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+  .wordmark{font-weight:300; font-size:16px}
+  .spacer{flex:1}
+  .count{font-size:11.5px; color:var(--muted)}
+  .count b{color:#34d399}
+
+  .sky{flex:1; position:relative; overflow:hidden}
+  .sky::before{content:""; position:absolute; inset:0;
+    background-image:
+      radial-gradient(1.5px 1.5px at 12% 24%, rgba(255,255,255,.35), transparent),
+      radial-gradient(1px 1px at 80% 14%, rgba(255,255,255,.3), transparent),
+      radial-gradient(1px 1px at 60% 64%, rgba(255,255,255,.22), transparent),
+      radial-gradient(1.5px 1.5px at 28% 82%, rgba(255,255,255,.25), transparent),
+      radial-gradient(1px 1px at 90% 52%, rgba(255,255,255,.3), transparent),
+      radial-gradient(1px 1px at 44% 40%, rgba(255,255,255,.18), transparent);
+  }
+
+  .orb{position:absolute; display:flex; flex-direction:column; align-items:center; gap:6px;
+       animation:float 7s ease-in-out infinite}
+  .orb:nth-child(2n){animation-duration:9s; animation-delay:-2s}
+  .orb:nth-child(3n){animation-duration:8s; animation-delay:-4s}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+
+  .globe{position:relative; width:var(--size); height:var(--size); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-weight:700; color:rgba(255,255,255,.95);
+    box-shadow:0 0 34px var(--glow), inset 0 -8px 18px rgba(0,0,0,.3);
+  }
+  .globe::before{content:""; position:absolute; inset:-7px; border-radius:50%;
+    background:conic-gradient(#4ade80 0 var(--g), #fb7185 var(--g) var(--p), rgba(255,255,255,.10) var(--p));
+    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+            mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  }
+  .tag{font-size:12px; font-weight:600; text-shadow:0 1px 6px rgba(0,0,0,.6); text-align:center}
+  .tag small{display:block; font-weight:500; font-size:10.5px; color:var(--muted); margin-top:1px}
+  .loc{font-family:ui-monospace,"SF Mono",monospace; font-size:10.5px; text-align:center}
+  .loc .p{color:var(--plus)} .loc .m{color:var(--minus)} .loc .c{color:var(--faint)}
+  .moon{position:absolute; padding:2px 7px; border-radius:99px; font-size:9.5px; color:var(--muted);
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.10); white-space:nowrap}
+  .moon::before{content:""; display:inline-block; width:5px; height:5px; border-radius:50%;
+    background:var(--mc,#9aa); margin-right:5px; vertical-align:1px}
+  .lap{position:absolute; top:-10px; right:-14px; padding:1px 6px; border-radius:99px;
+    background:rgba(251,191,36,.16); border:1px solid rgba(251,191,36,.45); color:#fbbf24;
+    font:600 9.5px ui-monospace,"SF Mono",monospace}
+
+  /* ── the pulse "core" — a distant, dim orb the others orbit ── */
+  .core{position:absolute; left:50%; top:48%; transform:translate(-50%,-50%);
+    display:flex; flex-direction:column; align-items:center; gap:9px;
+    animation:breathe 9s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.92}50%{opacity:1}}
+  .core .globe{
+    background:radial-gradient(circle at 50% 38%, rgba(150,170,200,.34), rgba(70,84,108,.14) 70%);
+    box-shadow:0 0 70px rgba(120,150,200,.22), inset 0 -10px 30px rgba(0,0,0,.35);
+    color:var(--faint); font-weight:500; letter-spacing:.04em; font-size:10px;
+    animation:pulseGlow 4.5s ease-in-out infinite;
+  }
+  @keyframes pulseGlow{0%,100%{box-shadow:0 0 60px rgba(120,150,200,.16), inset 0 -10px 30px rgba(0,0,0,.35)}
+    50%{box-shadow:0 0 96px rgba(120,150,200,.30), inset 0 -10px 30px rgba(0,0,0,.35)}}
+  .core .globe::before{background:conic-gradient(#4ade80 0 var(--g), #fb7185 var(--g) var(--p), rgba(255,255,255,.08) var(--p)); opacity:.7}
+  .core .kicker{font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); font-weight:600}
+  .core .figs{font-family:ui-monospace,"SF Mono",monospace; font-size:13px; letter-spacing:.01em}
+  .core .figs .p{color:var(--plus)} .core .figs .m{color:var(--minus)}
+  .core .sub{font-size:10.5px; color:var(--muted); margin-top:-2px}
+
+  /* tiny sparkline chip */
+  .spark{display:flex; align-items:center; gap:7px; padding:5px 10px; border-radius:99px;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08)}
+  .spark svg{display:block}
+  .spark .lbl{font-size:9.5px; color:var(--faint); letter-spacing:.02em}
+
+  /* ── status-strip variant ── */
+  .strip{position:relative; z-index:6; margin:0 12px 12px; padding:11px 14px;
+    border-radius:14px; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.09);
+    backdrop-filter:blur(14px); display:flex; align-items:center; gap:13px}
+  .strip .ring{width:34px; height:34px; flex:none; border-radius:50%; position:relative}
+  .strip .ring::before{content:""; position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(#4ade80 0 var(--g), #fb7185 var(--g) var(--p), rgba(255,255,255,.10) var(--p));
+    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+            mask:radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px))}
+  .strip .ring b{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font:600 9px ui-monospace,monospace; color:#fbbf24}
+  .strip .body{flex:1; min-width:0}
+  .strip .body .t{font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); font-weight:600}
+  .strip .body .v{font-family:ui-monospace,"SF Mono",monospace; font-size:12.5px; margin-top:2px}
+  .strip .body .v .p{color:var(--plus)} .strip .body .v .m{color:var(--minus)} .strip .body .v .c{color:var(--muted)}
+
+  /* drift dock */
+  .drift{position:relative; z-index:5; display:flex; align-items:center; gap:14px;
+    padding:11px 16px 14px; border-top:1px solid rgba(255,255,255,.07); background:rgba(0,0,0,.18)}
+  .drift .label{font-size:10px; letter-spacing:.14em; font-weight:600; color:var(--faint); margin-right:2px}
+  .drifter{display:flex; align-items:center; gap:7px; opacity:.55}
+  .drifter .mini{width:20px;height:20px;border-radius:50%;flex:none}
+  .drifter span{font-size:11.5px; color:var(--muted)}
+  .drifter em{font-style:normal; font-size:10px; color:var(--faint)}
+
+  /* ── list-view fragment ── */
+  .list{width:440px; border-radius:18px; overflow:hidden;
+    background:rgba(12,14,24,.82); border:1px solid rgba(255,255,255,.12); box-shadow:0 30px 80px rgba(0,0,0,.45)}
+  .row{display:flex; align-items:center; gap:12px; padding:13px 16px; border-bottom:1px solid rgba(255,255,255,.06)}
+  .row .av{width:34px;height:34px;border-radius:50%;flex:none}
+  .row .nm{font-weight:600; font-size:13px}
+  .row .nm small{display:block; font-weight:500; font-size:11px; color:var(--muted); margin-top:1px}
+  .row .rt{margin-left:auto; font-family:ui-monospace,"SF Mono",monospace; font-size:11px; text-align:right}
+  .row .rt .p{color:var(--plus)} .row .rt .m{color:var(--minus)} .row .rt .c{color:var(--faint)}
+  .footer{display:flex; align-items:center; gap:12px; padding:13px 16px; background:rgba(255,255,255,.03)}
+  .footer .ic{width:34px;height:34px;border-radius:50%;flex:none; display:flex; align-items:center; justify-content:center;
+    background:rgba(124,138,160,.16); border:1px solid rgba(255,255,255,.08); color:var(--slate); font-size:15px}
+  .footer .t{font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); font-weight:600}
+  .footer .v{font-family:ui-monospace,"SF Mono",monospace; font-size:12.5px; margin-top:2px}
+  .footer .v .p{color:var(--plus)} .footer .v .m{color:var(--minus)} .footer .v .c{color:var(--muted)}
+  .footer .spark2{margin-left:auto}
+
+  /* small-N fallback */
+  .fallback{display:flex; flex-direction:column; align-items:center; gap:6px; padding:22px}
+  .fallback .dots{display:flex; gap:9px}
+  .fallback .dots i{width:12px;height:12px;border-radius:50%; background:rgba(124,138,160,.4);
+    animation:twinkle 3s ease-in-out infinite}
+  .fallback .dots i:nth-child(2){animation-delay:-1s} .fallback .dots i:nth-child(3){animation-delay:-2s}
+  @keyframes twinkle{0%,100%{opacity:.3}50%{opacity:.7}}
+  .fallback p{font-size:12px; color:var(--muted)} .fallback small{font-size:10.5px; color:var(--faint)}
+</style>
+</head>
+<body>
+
+<h1 class="lead">vibes · the network pulse
+  <small>aggregate sign-of-life for the cold-start sky — three interpretations + list & fallback</small>
+</h1>
+
+<!-- ───────────── concept 1: the "core" orb ───────────── -->
+<div class="col">
+  <div class="window">
+    <div class="titlebar">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="wordmark">vibes</div>
+      <div class="spacer"></div>
+      <div class="count"><b>●</b> 2 in orbit</div>
+    </div>
+    <div class="sky">
+
+      <div class="core">
+        <div class="globe" style="--size:148px; --g:285deg; --p:360deg">
+          <span style="position:absolute;top:-9px;right:-2px" class="lap">1.3×</span>
+        </div>
+        <div class="kicker">across vibes · today</div>
+        <div class="figs"><span class="p">+128.4k</span> <span class="m">−34.2k</span></div>
+        <div class="sub">47 people shipping</div>
+        <div class="spark">
+          <svg width="76" height="22" viewBox="0 0 76 22">
+            <polyline points="2,16 8,15 14,12 20,11 26,18 32,19 38,9 44,8 50,6 56,7 62,17 68,18 74,5"
+              fill="none" stroke="rgba(150,170,200,.85)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="74" cy="5" r="2.2" fill="#9ab"/>
+          </svg>
+          <span class="lbl">14 days</span>
+        </div>
+      </div>
+
+      <div class="orb" style="left:64px; top:84px; --size:62px">
+        <div class="globe" style="background:linear-gradient(135deg,#4f8cff,#9b5cff); --glow:rgba(99,124,255,.45); --g:217deg; --p:274deg">M</div>
+        <div class="tag">you<small>shipping the titlebar ✨</small></div>
+        <div class="loc"><span class="p">+482</span> <span class="m">−127</span> <span class="c">· 9c</span></div>
+        <div class="moon" style="left:60px; top:2px; --mc:#4f8cff">vibes</div>
+      </div>
+
+      <div class="orb" style="left:278px; top:360px; --size:70px">
+        <div class="globe" style="background:linear-gradient(135deg,#ff7847,#ff4787); --glow:rgba(255,140,90,.55); --g:230deg; --p:300deg">D</div>
+        <div class="tag">dana<small>parser mines</small></div>
+        <div class="loc"><span class="p">+1,204</span> <span class="m">−688</span> <span class="c">· 14c</span></div>
+        <div class="moon" style="left:-30px; top:60px; --mc:#ff7847">perch</div>
+      </div>
+
+    </div>
+    <div class="drift">
+      <span class="label">DRIFTING</span>
+      <div class="drifter"><div class="mini" style="background:linear-gradient(135deg,#8a94a6,#5b6472)"></div><span>sam <em>2h</em></span></div>
+    </div>
+  </div>
+  <div class="caption"><b>A · the “core”</b> — the network is a dim, slow-breathing orb your real friends drift around. Same churn-ring + green/red vocabulary as a person, but neutral slate and no identity. Fills an empty sky without faking people.</div>
+</div>
+
+<!-- ───────────── concept 2: status strip ───────────── -->
+<div class="col">
+  <div class="window">
+    <div class="titlebar">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="wordmark">vibes</div>
+      <div class="spacer"></div>
+      <div class="count"><b>●</b> 2 in orbit</div>
+    </div>
+    <div class="sky">
+      <div class="orb" style="left:118px; top:120px; --size:66px">
+        <div class="globe" style="background:linear-gradient(135deg,#4f8cff,#9b5cff); --glow:rgba(99,124,255,.45); --g:217deg; --p:274deg">M</div>
+        <div class="tag">you<small>shipping the titlebar ✨</small></div>
+        <div class="loc"><span class="p">+482</span> <span class="m">−127</span> <span class="c">· 9c</span></div>
+        <div class="moon" style="left:64px; top:2px; --mc:#4f8cff">vibes</div>
+      </div>
+      <div class="orb" style="left:236px; top:300px; --size:74px">
+        <div class="globe" style="background:linear-gradient(135deg,#ff7847,#ff4787); --glow:rgba(255,140,90,.55); --g:230deg; --p:300deg">D</div>
+        <div class="tag">dana<small>parser mines</small></div>
+        <div class="loc"><span class="p">+1,204</span> <span class="m">−688</span> <span class="c">· 14c</span></div>
+        <div class="moon" style="left:-30px; top:62px; --mc:#ff7847">perch</div>
+      </div>
+    </div>
+    <div class="strip">
+      <div class="ring" style="--g:285deg; --p:360deg"><b>1.3×</b></div>
+      <div class="body">
+        <div class="t">across vibes · today</div>
+        <div class="v"><span class="p">+128.4k</span> <span class="m">−34.2k</span> <span class="c">· 47 shipping</span></div>
+      </div>
+      <div class="spark">
+        <svg width="64" height="20" viewBox="0 0 64 20">
+          <polyline points="2,14 7,13 12,10 17,9 22,15 27,16 32,8 37,7 42,5 47,6 52,14 57,15 62,4"
+            fill="none" stroke="rgba(150,170,200,.85)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="62" cy="4" r="2" fill="#9ab"/>
+        </svg>
+      </div>
+    </div>
+    <div class="drift">
+      <span class="label">DRIFTING</span>
+      <div class="drifter"><div class="mini" style="background:linear-gradient(135deg,#8a94a6,#5b6472)"></div><span>sam <em>2h</em></span></div>
+    </div>
+  </div>
+  <div class="caption"><b>B · the status strip</b> — a slim network bar pinned above the drift dock. Never competes with the orbs for slots; reads as ambient chrome. The mini churn-ring shows today vs the community’s typical day.</div>
+</div>
+
+<!-- ───────────── concept 3: pulse detail + list + fallback ───────────── -->
+<div class="col">
+  <!-- pulse detail card -->
+  <div class="list" style="padding:18px 18px 14px">
+    <div style="font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); font-weight:600; margin-bottom:10px">the pulse · last 14 days</div>
+    <svg width="404" height="118" viewBox="0 0 404 118" style="display:block">
+      <line x1="0" y1="96" x2="404" y2="96" stroke="rgba(255,255,255,.08)"/>
+      <!-- weekend shading -->
+      <rect x="46" y="0" width="56" height="96" fill="rgba(255,255,255,.025)"/>
+      <rect x="262" y="0" width="56" height="96" fill="rgba(255,255,255,.025)"/>
+      <!-- bars: churn per day, weekends visibly lower -->
+      <g fill="rgba(124,160,210,.5)">
+        <rect x="6"  y="40" width="16" height="56" rx="2"/>
+        <rect x="34" y="34" width="16" height="62" rx="2"/>
+        <rect x="62" y="72" width="16" height="24" rx="2"/>
+        <rect x="90" y="70" width="16" height="26" rx="2"/>
+        <rect x="118" y="30" width="16" height="66" rx="2"/>
+        <rect x="146" y="26" width="16" height="70" rx="2"/>
+        <rect x="174" y="22" width="16" height="74" rx="2"/>
+        <rect x="202" y="36" width="16" height="60" rx="2"/>
+        <rect x="230" y="32" width="16" height="64" rx="2"/>
+        <rect x="258" y="68" width="16" height="28" rx="2"/>
+        <rect x="286" y="74" width="16" height="22" rx="2"/>
+        <rect x="314" y="24" width="16" height="72" rx="2"/>
+        <rect x="342" y="18" width="16" height="78" rx="2"/>
+        <rect x="370" y="12" width="16" height="84" rx="2" fill="rgba(150,180,225,.85)"/>
+      </g>
+      <text x="74" y="110" fill="rgba(255,255,255,.3)" font-size="9" text-anchor="middle" font-family="-apple-system">weekend</text>
+      <text x="290" y="110" fill="rgba(255,255,255,.3)" font-size="9" text-anchor="middle" font-family="-apple-system">weekend</text>
+      <text x="378" y="110" fill="rgba(74,222,128,.8)" font-size="9" text-anchor="middle" font-family="ui-monospace">today</text>
+    </svg>
+    <div style="display:flex; align-items:baseline; gap:8px; margin-top:8px; padding-top:12px; border-top:1px solid rgba(255,255,255,.06)">
+      <span style="font-family:ui-monospace,monospace; font-size:16px"><span style="color:var(--plus)">+128.4k</span> <span style="color:var(--minus)">−34.2k</span></span>
+      <span style="font-size:11px; color:var(--muted)">· 47 shipping today · busiest day this fortnight</span>
+    </div>
+  </div>
+  <div class="caption"><b>C · the pulse, expanded</b> — the real retention hook: which days the whole network is alive. Weekend dips, weekday spikes, today highlighted. Tap the strip/core to open this.</div>
+
+  <!-- list view footer -->
+  <div class="list">
+    <div class="row">
+      <div class="av" style="background:linear-gradient(135deg,#4f8cff,#9b5cff)"></div>
+      <div class="nm">you<small>shipping the titlebar ✨</small></div>
+      <div class="rt"><span class="p">+482</span> <span class="m">−127</span> <span class="c">· 9c</span></div>
+    </div>
+    <div class="row">
+      <div class="av" style="background:linear-gradient(135deg,#ff7847,#ff4787)"></div>
+      <div class="nm">dana<small>parser mines</small></div>
+      <div class="rt"><span class="p">+1,204</span> <span class="m">−688</span> <span class="c">· 14c</span></div>
+    </div>
+    <div class="footer">
+      <div class="ic"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8h3l2 5 4-10 2 5h3"/></svg></div>
+      <div>
+        <div class="t">across vibes · today</div>
+        <div class="v"><span class="p">+128.4k</span> <span class="m">−34.2k</span> <span class="c">· 47 shipping</span></div>
+      </div>
+      <div class="spark2 spark">
+        <svg width="60" height="20" viewBox="0 0 64 20">
+          <polyline points="2,14 7,13 12,10 17,9 22,15 27,16 32,8 37,7 42,5 47,6 52,14 57,15 62,4"
+            fill="none" stroke="rgba(150,170,200,.85)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="62" cy="4" r="2" fill="#9ab"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <div class="caption"><b>D · list footer</b> — the same aggregate as a quiet bottom row, so list-mode users feel the population too.</div>
+
+  <!-- small-N fallback -->
+  <div class="list">
+    <div class="fallback">
+      <div class="dots"><i></i><i></i><i></i></div>
+      <p>people are shipping on vibes today</p>
+      <small>numbers appear once 3+ have committed · keeps tiny days anonymous</small>
+    </div>
+  </div>
+  <div class="caption"><b>E · the k&lt;3 fallback</b> — fewer than 3 contributors: a statless “sign of life,” no numbers, so nothing is re-identifiable on a quiet day.</div>
+</div>
+
+</body>
+</html>

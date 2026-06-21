@@ -36,6 +36,9 @@ extension EnvironmentValues {
 struct OrbitView: View {
   var you: MergedStatus
   var friends: [MergedStatus]
+  // The network pulse "core" — drawn dim and centered behind the friend orbs.
+  // nil (old server, or feature off) => no core layer at all.
+  var pulse: NetworkPulse?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -43,6 +46,16 @@ struct OrbitView: View {
         ZStack {
           let members = skyMembers
           let biggest = maxChurn(of: members)
+          // The pulse core is laid out as one more body in the same slot system
+          // as the orbs: the slots are sized for everyone at once, the core takes
+          // the most central one, and the churn-sorted members fill the rest. The
+          // sky self-arranges around it, so the core no longer overlaps anyone.
+          let layout = skyLayout(memberCount: members.count, hasCore: pulse != nil)
+          if let pulse, let coreUnit = layout.core {
+            PulseCore(pulse: pulse)
+              .position(point(coreUnit, in: geo.size))
+              .allowsHitTesting(false)
+          }
           ForEach(Array(members.enumerated()), id: \.element.id) { index, status in
             OrbView(
               status: status,
@@ -50,17 +63,23 @@ struct OrbitView: View {
               rank: index,
               maxChurn: biggest
             )
-            .position(slotPosition(index: index, count: members.count, in: geo.size))
+            .position(point(layout.members[index], in: geo.size))
           }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottom) {
           if friends.isEmpty {
-            Text("Just you up here so far. Invite a friend to fill the sky.")
-              .font(.callout)
-              .foregroundStyle(Color.secondary)
-              .multilineTextAlignment(.center)
-              .padding(.bottom, 24)
+            // With the pulse core filling the sky the nudge softens to a quiet
+            // invite line rather than a lonely "empty sky" message.
+            Text(
+              pulse != nil
+                ? "Invite a friend to share your orbit."
+                : "Just you up here so far. Invite a friend to fill the sky."
+            )
+            .font(.callout)
+            .foregroundStyle(Color.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.bottom, 24)
           }
         }
       }
@@ -109,25 +128,54 @@ struct OrbitView: View {
     ],
   ]
 
-  private func slotPosition(index: Int, count: Int, in size: CGSize) -> CGPoint {
-    let unit: CGPoint
+  // Unit-coordinate positions for `count` bodies — the hand-tuned constellation
+  // for small skies, a staggered grid beyond that.
+  private func slotUnits(count: Int) -> [CGPoint] {
+    guard count > 0 else { return [] }
     if count <= Self.slots.count {
-      unit = Self.slots[count - 1][index]
-    } else {
-      // Staggered grid for big skies: 3 columns, odd rows offset half a cell.
-      let columns = 3
-      let rows = (count + columns - 1) / columns
+      return Self.slots[count - 1]
+    }
+    // Staggered grid for big skies: 3 columns, odd rows offset half a cell.
+    let columns = 3
+    let rows = (count + columns - 1) / columns
+    return (0..<count).map { index in
       let row = index / columns
       let column = index % columns
       let xStep = 1.0 / Double(columns + 1)
       let yStep = 0.84 / Double(max(rows, 1))
       let stagger = row.isMultiple(of: 2) ? 0.0 : xStep * 0.4
-      unit = CGPoint(
+      return CGPoint(
         x: min(0.84, xStep * Double(column + 1) + stagger),
         y: 0.12 + yStep * (Double(row) + 0.5)
       )
     }
-    return CGPoint(x: unit.x * size.width, y: unit.y * size.height)
+  }
+
+  // Place the orbs and (optionally) the pulse core in one shared layout. The
+  // core counts as an extra body, so the slots are spaced for everyone; it then
+  // claims the most central slot — pinned to true center — while the churn-sorted
+  // members take the remaining outer slots. Centered when it can be, but always a
+  // slot the others arranged around, so nothing overlaps.
+  private func skyLayout(memberCount: Int, hasCore: Bool) -> (core: CGPoint?, members: [CGPoint]) {
+    guard hasCore else { return (nil, slotUnits(count: memberCount)) }
+    var units = slotUnits(count: memberCount + 1)
+    guard !units.isEmpty else { return (Self.skyCenter, []) }
+    units.remove(at: indexClosestToCenter(units))
+    return (Self.skyCenter, units)
+  }
+
+  private static let skyCenter = CGPoint(x: 0.5, y: 0.46)
+
+  private func indexClosestToCenter(_ units: [CGPoint]) -> Int {
+    units.indices.min { distanceToCenter(units[$0]) < distanceToCenter(units[$1]) } ?? 0
+  }
+
+  private func distanceToCenter(_ unit: CGPoint) -> CGFloat {
+    hypot(unit.x - Self.skyCenter.x, unit.y - Self.skyCenter.y)
+  }
+
+  private func point(_ unit: CGPoint, in size: CGSize) -> CGPoint {
+    CGPoint(x: unit.x * size.width, y: unit.y * size.height)
   }
 }
 
@@ -600,7 +648,26 @@ private struct DrifterItem: View {
       ),
       sample("sam", "Sam", mode: .offline, insertions: 210, deletions: 95, commits: 4, agoHours: 2),
       sample("kei", "Kei", mode: .offline, agoHours: 26),
-    ]
+    ],
+    pulse: {
+      let f = DateFormatter()
+      f.locale = Locale(identifier: "en_US_POSIX")
+      f.dateFormat = "yyyy-MM-dd"
+      let churns = [90_000, 96_000, 42_000, 38_000, 110_000, 118_000, 132_000,
+                    100_000, 108_000, 48_000, 36_000, 124_000, 140_000, 162_600]
+      let start = Calendar.current.date(byAdding: .day, value: -(churns.count - 1), to: Date())!
+      let history = churns.enumerated().map { i, c -> PulseDay in
+        let date = Calendar.current.date(byAdding: .day, value: i, to: start)!
+        let ins = Int(Double(c) * 0.79)
+        return PulseDay(day: f.string(from: date), churn: c, contributors: 30 + i,
+          insertions: ins, deletions: c - ins)
+      }
+      return NetworkPulse(
+        statless: false,
+        today: PulseToday(insertions: 128_400, deletions: 34_200, churn: 162_600,
+          contributors: 47, typicalChurn: 125_000, lap: 1.3),
+        history: history)
+    }()
   )
   .frame(width: 480, height: 600)
 }

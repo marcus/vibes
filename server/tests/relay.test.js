@@ -27,9 +27,11 @@ import {
   listInvites,
   listTokens,
   mintDeviceToken,
+  networkPulse,
   newShortId,
   registerUser,
   removeFriend,
+  resetNetworkPulseCache,
   revokeInvite,
   revokeToken,
   setUserAvatar,
@@ -60,6 +62,7 @@ let db;
 
 beforeEach(() => {
   db = openDb(":memory:");
+  resetNetworkPulseCache();
 });
 
 function fixture(name) {
@@ -1482,5 +1485,201 @@ describe("daily activity and typical churn", () => {
     const legacyFeed = getFeed(db, legacy, nowMs);
     expect(legacyFeed.you.day).toBe("2026-06-05");
     expect(legacyFeed.you.commit_streak).toEqual({ days: 1, through_day: "2026-06-05" });
+  });
+});
+
+describe("network pulse", () => {
+  // 2026-06-21 is server-today; the 14-day window spans 2026-06-08..2026-06-21.
+  const PULSE_NOW = Date.parse("2026-06-21T18:10:00.000Z");
+  const TODAY = "2026-06-21";
+
+  const insertActivity = (db, { userId, day, insertions, deletions, deviceId = "device-1" }) =>
+    db
+      .prepare(
+        `INSERT INTO daily_activity (user_id, device_id, client_day, insertions, deletions, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(userId, deviceId, day, insertions, deletions, `${day}T18:00:00.000Z`);
+
+  /** Create N distinct users and record activity for each on `day`. */
+  function vibe(db, day, count, { insertions = 100, deletions = 50, prefix = day.replace(/-/g, "") } = {}) {
+    for (let i = 0; i < count; i += 1) {
+      const user = createUser(db, { handle: `${prefix}u${i}`, displayName: `U${i}` });
+      insertActivity(db, { userId: user.id, day, insertions, deletions });
+    }
+  }
+
+  it("aggregates sums and distinct contributors per day across users and devices", () => {
+    const a = createUser(db, { handle: "a", displayName: "A" });
+    const b = createUser(db, { handle: "b", displayName: "B" });
+    const c = createUser(db, { handle: "c", displayName: "C" });
+    // a contributes from two devices the same day → still one contributor.
+    insertActivity(db, { userId: a.id, day: TODAY, insertions: 100, deletions: 10, deviceId: "laptop" });
+    insertActivity(db, { userId: a.id, day: TODAY, insertions: 200, deletions: 20, deviceId: "desktop" });
+    insertActivity(db, { userId: b.id, day: TODAY, insertions: 50, deletions: 5 });
+    insertActivity(db, { userId: c.id, day: TODAY, insertions: 50, deletions: 5 });
+
+    const pulse = networkPulse(db, PULSE_NOW);
+    expect(pulse.window_days).toBe(14);
+    expect(pulse.statless).toBe(false);
+    expect(pulse.today.contributors).toBe(3);
+    expect(pulse.today.insertions).toBe(400);
+    expect(pulse.today.deletions).toBe(40);
+    expect(pulse.today.churn).toBe(440);
+  });
+
+  it("is statless with null today when fewer than three contributors vibe today", () => {
+    vibe(db, TODAY, 2);
+    const pulse = networkPulse(db, PULSE_NOW);
+    expect(pulse.statless).toBe(true);
+    expect(pulse.today).toBeNull();
+    // History days under the floor are fully suppressed — including the
+    // contributor count, which would otherwise leak what the floor hides.
+    expect(pulse.history).toHaveLength(1);
+    expect(pulse.history[0]).toMatchObject({
+      day: TODAY,
+      churn: null,
+      contributors: null,
+      insertions: null,
+      deletions: null,
+    });
+  });
+
+  it("emits today numbers once three distinct contributors vibe", () => {
+    vibe(db, TODAY, 3, { insertions: 100, deletions: 50 });
+    const pulse = networkPulse(db, PULSE_NOW);
+    expect(pulse.statless).toBe(false);
+    expect(pulse.today.contributors).toBe(3);
+    expect(pulse.today.churn).toBe(450); // 3 × (100 + 50)
+  });
+
+  it("suppresses per-day history below the contributor floor but keeps eligible days", () => {
+    vibe(db, "2026-06-10", 5, { insertions: 100, deletions: 0, prefix: "d10" }); // churn 500
+    vibe(db, "2026-06-11", 2, { insertions: 999, deletions: 1, prefix: "d11" }); // suppressed
+    vibe(db, TODAY, 3, { insertions: 100, deletions: 0, prefix: "today" }); // churn 300
+
+    const pulse = networkPulse(db, PULSE_NOW);
+    const byDay = Object.fromEntries(pulse.history.map((row) => [row.day, row]));
+    expect(byDay["2026-06-10"]).toMatchObject({ churn: 500, insertions: 500, deletions: 0, contributors: 5 });
+    expect(byDay["2026-06-11"]).toMatchObject({ churn: null, insertions: null, deletions: null, contributors: null });
+    expect(byDay[TODAY]).toMatchObject({ churn: 300, contributors: 3 });
+  });
+
+  it("orders history oldest→newest with today last", () => {
+    vibe(db, "2026-06-09", 3, { prefix: "d09" });
+    vibe(db, "2026-06-15", 3, { prefix: "d15" });
+    vibe(db, TODAY, 3, { prefix: "today" });
+
+    const pulse = networkPulse(db, PULSE_NOW);
+    expect(pulse.history.map((row) => row.day)).toEqual(["2026-06-09", "2026-06-15", TODAY]);
+    expect(pulse.history.at(-1).day).toBe(TODAY);
+  });
+
+  it("excludes activity outside the 14-day window", () => {
+    vibe(db, "2026-06-07", 3, { prefix: "old" }); // one day before window start
+    vibe(db, TODAY, 3, { prefix: "today" });
+
+    const pulse = networkPulse(db, PULSE_NOW);
+    expect(pulse.history.map((row) => row.day)).toEqual([TODAY]);
+  });
+
+  it("computes lap from churn over the network median, null when not above 1.0", () => {
+    // Three eligible history days with churns 300/99/198 → median 198.
+    vibe(db, "2026-06-12", 3, { insertions: 100, deletions: 0, prefix: "h12" }); // 300
+    vibe(db, "2026-06-13", 3, { insertions: 33, deletions: 0, prefix: "h13" }); // 99 ≈ 100
+    vibe(db, "2026-06-14", 3, { insertions: 66, deletions: 0, prefix: "h14" }); // 198 ≈ 200
+
+    // A busy today (churn 600) → typical 198, lap = round(600/198,1) = 3.0.
+    vibe(db, TODAY, 3, { insertions: 200, deletions: 0, prefix: "today" });
+    const busy = networkPulse(db, PULSE_NOW);
+    expect(busy.today.typical_churn).toBe(198);
+    expect(busy.today.lap).toBe(3);
+
+    resetNetworkPulseCache();
+    db.prepare("DELETE FROM daily_activity WHERE client_day = ?").run(TODAY);
+    // A quiet today (churn 99 < typical) → lap null.
+    vibe(db, TODAY, 3, { insertions: 33, deletions: 0, prefix: "quiet" });
+    const quiet = networkPulse(db, PULSE_NOW);
+    expect(quiet.today.lap).toBeNull();
+  });
+
+  it("yields null typical_churn until enough eligible network history exists", () => {
+    vibe(db, "2026-06-19", 3, { prefix: "h19" });
+    vibe(db, "2026-06-20", 3, { prefix: "h20" });
+    vibe(db, TODAY, 3, { prefix: "today" });
+    const pulse = networkPulse(db, PULSE_NOW);
+    expect(pulse.today.typical_churn).toBeNull();
+    expect(pulse.today.lap).toBeNull();
+  });
+
+  it("caches within the TTL and recomputes after it expires", () => {
+    vibe(db, TODAY, 3, { insertions: 100, deletions: 0, prefix: "first" });
+    const first = networkPulse(db, PULSE_NOW);
+    expect(first.today.contributors).toBe(3);
+
+    // More contributors arrive, but within the 60s TTL the cached value holds.
+    vibe(db, TODAY, 2, { insertions: 100, deletions: 0, prefix: "more" });
+    const cached = networkPulse(db, PULSE_NOW + 30 * 1000);
+    expect(cached.today.contributors).toBe(3);
+
+    // Past the TTL it recomputes.
+    const fresh = networkPulse(db, PULSE_NOW + 61 * 1000);
+    expect(fresh.today.contributors).toBe(5);
+  });
+
+  it("treats a backward clock jump as cache expiry rather than pinning a stale value", () => {
+    vibe(db, TODAY, 3, { insertions: 100, deletions: 0, prefix: "first" });
+    expect(networkPulse(db, PULSE_NOW).today.contributors).toBe(3);
+
+    // Clock jumps backward (e.g. NTP). The cache age goes negative; without the
+    // guard this would stay "fresh" forever. It must recompute instead.
+    vibe(db, TODAY, 2, { insertions: 100, deletions: 0, prefix: "more" });
+    const rewound = networkPulse(db, PULSE_NOW - 5 * 60 * 1000);
+    expect(rewound.today.contributors).toBe(5);
+  });
+
+  it("surfaces pulse on the feed and never leaks identity in the serialized form", () => {
+    const viewer = createUser(db, { handle: "viewer", displayName: "Viewer" });
+    vibe(db, "2026-06-10", 4, { prefix: "h10" });
+    vibe(db, TODAY, 3, { prefix: "today" });
+
+    const feed = getFeed(db, viewer, PULSE_NOW);
+    expect(feed.pulse).toBeDefined();
+    expect(feed.pulse.window_days).toBe(14);
+
+    // Canary: the serialized pulse carries only numeric/null fields and
+    // YYYY-MM-DD day strings — no user_id, handle, avatar, or device.
+    const allowedTopKeys = new Set(["window_days", "statless", "today", "history"]);
+    const allowedTodayKeys = new Set([
+      "insertions",
+      "deletions",
+      "churn",
+      "contributors",
+      "typical_churn",
+      "lap",
+    ]);
+    const allowedHistoryKeys = new Set([
+      "day",
+      "churn",
+      "contributors",
+      "insertions",
+      "deletions",
+    ]);
+    const pulse = JSON.parse(JSON.stringify(feed.pulse));
+    expect(new Set(Object.keys(pulse))).toEqual(allowedTopKeys);
+    if (pulse.today) {
+      Object.keys(pulse.today).forEach((key) => expect(allowedTodayKeys.has(key)).toBe(true));
+      Object.values(pulse.today).forEach((value) =>
+        expect(value === null || typeof value === "number").toBe(true),
+      );
+    }
+    for (const row of pulse.history) {
+      Object.keys(row).forEach((key) => expect(allowedHistoryKeys.has(key)).toBe(true));
+      expect(/^\d{4}-\d{2}-\d{2}$/.test(row.day)).toBe(true);
+      expect(row.contributors === null || typeof row.contributors === "number").toBe(true);
+    }
+
+    const serialized = JSON.stringify(feed.pulse);
+    expect(serialized).not.toMatch(/user_id|handle|avatar|device|display_name/);
   });
 });

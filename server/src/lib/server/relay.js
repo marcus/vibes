@@ -35,6 +35,14 @@ const MODE_RANK = { offline: 0, online: 1 };
 // client falls back to its own cold-start scale.
 const TYPICAL_CHURN_WINDOW_DAYS = 14;
 const TYPICAL_CHURN_MIN_DAYS = 3;
+// Network Pulse: a global, privacy-safe aggregate of the whole network's daily
+// churn over a trailing window. Identical for every viewer, so it is computed
+// once and cached in-memory keyed on the server-today date string.
+const PULSE_WINDOW_DAYS = 14;
+// Below this many distinct contributors a day's numbers are suppressed (k-floor)
+// so a single person's activity can never be inferred from the aggregate.
+const PULSE_MIN_CONTRIBUTORS = 3;
+const PULSE_CACHE_TTL_MS = 60 * 1000;
 // A friend reports `online` only if they are sharing and have published within
 // this window; older online rows fall back to a last-seen "online … ago".
 const ONLINE_WINDOW_MS = 10 * 60 * 1000;
@@ -808,6 +816,135 @@ function previousDay(day) {
   return new Date(timestamp - DAY_MS).toISOString().slice(0, 10);
 }
 
+/** In-memory cache for the network pulse, keyed on the server-today UTC date. */
+let pulseCache = null;
+
+/** Drop the cached network pulse — for tests that reseed the DB within a day. */
+export function resetNetworkPulseCache() {
+  pulseCache = null;
+}
+
+/**
+ * Median network churn across all contributing days in the window — the
+ * "typical day" baseline the today ring is measured against. Mirrors
+ * {@link typicalChurn} but global (all users, not one) and over already-summed
+ * per-day churns. Returns null until PULSE_MIN_CONTRIBUTORS-eligible history
+ * exists. Today is excluded so an in-progress day cannot drag the baseline down.
+ * @param {Array<{ day: string, churn: number, contributors: number }>} days
+ *   Per-day aggregates oldest→newest, today last.
+ * @param {string} today
+ * @returns {number | null}
+ */
+function networkTypicalChurn(days, today) {
+  const churns = days
+    .filter(
+      (row) =>
+        row.day !== today && row.contributors >= PULSE_MIN_CONTRIBUTORS && row.churn > 0,
+    )
+    .map((row) => row.churn);
+  if (churns.length < TYPICAL_CHURN_MIN_DAYS) return null;
+  const sorted = churns.sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+/**
+ * Aggregate, privacy-safe "sign of life" for the whole network over the trailing
+ * PULSE_WINDOW_DAYS calendar days up to and including server-today (UTC). Source
+ * is the per-(user,device,day) `daily_activity` table; everything here is sums,
+ * distinct-user counts, and date strings — never identity.
+ *
+ * Today's headline numbers only emit when today has >= PULSE_MIN_CONTRIBUTORS
+ * distinct contributors; otherwise `statless` is true and `today` is null (the
+ * client shows "people are vibing today" with no numbers). In `history`, any day
+ * below the floor has its churn/insertions/deletions suppressed to null.
+ *
+ * The whole object is identical for every viewer, so it is cached in-memory with
+ * a ~60s TTL keyed on the server-today date string; it recomputes when the date
+ * rolls over or the TTL expires.
+ * @param {import('better-sqlite3').Database} db
+ * @param {number} [nowMs] Reference clock, injectable for tests.
+ * @returns {{ window_days: number, statless: boolean, today: object | null, history: Array<object> }}
+ */
+export function networkPulse(db, nowMs = Date.now()) {
+  const today = new Date(nowMs).toISOString().slice(0, 10);
+  // A backward wall-clock jump (e.g. NTP correction) makes the age negative; treat
+  // that as expired so a stale entry can't be pinned alive indefinitely.
+  const cacheAge = pulseCache ? nowMs - pulseCache.computedAt : Infinity;
+  if (pulseCache && pulseCache.today === today && cacheAge >= 0 && cacheAge < PULSE_CACHE_TTL_MS) {
+    return pulseCache.pulse;
+  }
+
+  const windowStart = new Date(Date.parse(`${today}T00:00:00.000Z`) - (PULSE_WINDOW_DAYS - 1) * DAY_MS)
+    .toISOString()
+    .slice(0, 10);
+  const rows = db
+    .prepare(
+      `SELECT client_day AS day,
+              SUM(insertions) AS insertions,
+              SUM(deletions) AS deletions,
+              COUNT(DISTINCT user_id) AS contributors
+       FROM daily_activity
+       WHERE client_day >= ? AND client_day <= ?
+       GROUP BY client_day
+       ORDER BY client_day ASC`,
+    )
+    .all(windowStart, today)
+    .map((row) => ({
+      day: row.day,
+      insertions: row.insertions,
+      deletions: row.deletions,
+      churn: row.insertions + row.deletions,
+      contributors: row.contributors,
+    }));
+
+  const typicalChurnValue = networkTypicalChurn(rows, today);
+  const history = rows.map((row) =>
+    row.contributors >= PULSE_MIN_CONTRIBUTORS
+      ? {
+          day: row.day,
+          churn: row.churn,
+          contributors: row.contributors,
+          insertions: row.insertions,
+          deletions: row.deletions,
+        }
+      : {
+          // Below the floor, even the contributor count is withheld — emitting
+          // it would leak exactly what the k-floor exists to hide (e.g. "1").
+          day: row.day,
+          churn: null,
+          contributors: null,
+          insertions: null,
+          deletions: null,
+        },
+  );
+
+  const todayRow = rows.find((row) => row.day === today) ?? null;
+  const statless = !todayRow || todayRow.contributors < PULSE_MIN_CONTRIBUTORS;
+  const todayPulse = statless
+    ? null
+    : {
+        insertions: todayRow.insertions,
+        deletions: todayRow.deletions,
+        churn: todayRow.churn,
+        contributors: todayRow.contributors,
+        typical_churn: typicalChurnValue,
+        lap:
+          typicalChurnValue && todayRow.churn / typicalChurnValue > 1
+            ? Math.round((todayRow.churn / typicalChurnValue) * 10) / 10
+            : null,
+      };
+
+  const pulse = {
+    window_days: PULSE_WINDOW_DAYS,
+    statless,
+    today: todayPulse,
+    history,
+  };
+  pulseCache = { today, computedAt: nowMs, pulse };
+  return pulse;
+}
+
 /**
  * Current commit streak, summed across devices and capped at the user's current
  * Vibes day. Returns only the aggregate summary safe for feed responses.
@@ -1079,7 +1216,7 @@ export function getFeed(db, viewer, nowMs = Date.now()) {
     status.commit_streak = hasVisibleGitStats ? commitStreak(db, user.id, currentDay) : null;
     return status;
   });
-  return { you: merged[0], friends: merged.slice(1) };
+  return { you: merged[0], friends: merged.slice(1), pulse: networkPulse(db, nowMs) };
 }
 
 /**
