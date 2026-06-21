@@ -33,18 +33,18 @@ func abbreviateCount(_ value: Int) -> String {
 
 // MARK: - Core gradient background
 
-// The animated backdrop inside the pulse core: a dark base with a slowly
-// rotating "rainbow minus green" sheen (the Vibes palette), kept dim and
-// non-distracting so a glowing sparkline reads cleanly on top. Self-contained
-// and tunable — adjust `palette`, `rotationPeriod`, `sheenOpacity`, or `base`
-// to retune the look without touching PulseCore.
+// The animated backdrop inside the pulse core: a slowly rotating "rainbow minus
+// green" sheen (the Vibes palette), kept quiet so a sparkline reads cleanly on
+// top. Self-contained and tunable without touching PulseCore.
 struct CoreGradientBackground: View {
   var date: Date
   var reduceMotion: Bool
 
+  @Environment(\.colorScheme) private var colorScheme
+
   // The Vibes spectrum: red → orange → amber → blue → indigo → violet → pink.
   // (Rainbow minus green, matching the logo.) Wraps for a seamless rotation.
-  static let palette: [Color] = [
+  static let darkPalette: [Color] = [
     Color(red: 0.95, green: 0.27, blue: 0.23),
     Color(red: 0.98, green: 0.49, blue: 0.16),
     Color(red: 0.98, green: 0.78, blue: 0.24),
@@ -53,9 +53,30 @@ struct CoreGradientBackground: View {
     Color(red: 0.66, green: 0.31, blue: 0.92),
     Color(red: 0.96, green: 0.36, blue: 0.66),
   ]
-  static let base = Color(red: 0.06, green: 0.07, blue: 0.11)  // dark canvas
+  static let lightPalette: [Color] = [
+    Color(red: 1.00, green: 0.55, blue: 0.50),
+    Color(red: 1.00, green: 0.70, blue: 0.42),
+    Color(red: 1.00, green: 0.88, blue: 0.48),
+    Color(red: 0.42, green: 0.74, blue: 1.00),
+    Color(red: 0.58, green: 0.64, blue: 1.00),
+    Color(red: 0.76, green: 0.60, blue: 1.00),
+    Color(red: 1.00, green: 0.62, blue: 0.78),
+  ]
+  static let darkBase = Color(red: 0.06, green: 0.07, blue: 0.11)
+  static let lightBase = Color(red: 0.90, green: 0.95, blue: 1.0)
   static let rotationPeriod: Double = 30  // seconds per full turn — deliberately slow
-  static let sheenOpacity: Double = 0.55  // how vivid the rainbow reads over the base
+
+  private var palette: [Color] {
+    colorScheme == .dark ? Self.darkPalette : Self.lightPalette
+  }
+
+  private var base: Color {
+    colorScheme == .dark ? Self.darkBase : Self.lightBase
+  }
+
+  private var sheenOpacity: Double {
+    colorScheme == .dark ? 0.55 : 0.64
+  }
 
   private var angle: Double {
     guard !reduceMotion else { return 210 }  // a fixed, pleasant slice when motion is off
@@ -65,17 +86,17 @@ struct CoreGradientBackground: View {
 
   var body: some View {
     ZStack {
-      Self.base
+      base
       AngularGradient(
-        gradient: Gradient(colors: Self.palette + [Self.palette[0]]),
+        gradient: Gradient(colors: palette + [palette[0]]),
         center: .center,
         angle: .degrees(angle)
       )
-      .opacity(Self.sheenOpacity)
+      .opacity(sheenOpacity)
       .blur(radius: 9)
-      // Vignette: edges fall back to the dark base, center stays luminous.
+      // Vignette: edges fall back to the base, center stays luminous.
       RadialGradient(
-        colors: [.clear, Self.base.opacity(0.65)],
+        colors: [.clear, base.opacity(colorScheme == .dark ? 0.65 : 0.50)],
         center: .center, startRadius: 6, endRadius: 70
       )
     }
@@ -91,6 +112,7 @@ struct PulseCore: View {
   var pulse: NetworkPulse
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.colorScheme) private var colorScheme
   @Environment(\.feedTextScale) private var textScale
 
   // Conservative so it never crowds the friend orbits' edge slots.
@@ -125,9 +147,8 @@ struct PulseCore: View {
   private func globe(at date: Date) -> some View {
     let d = Self.diameter
     ZStack {
-      // Animated multi-color gradient core (see CoreGradientBackground): a dark,
-      // slowly-shifting rainbow-minus-green sheen so the sparkline reads as a
-      // glowing line on top. Clipped to the circle, with a soft rim + outer glow.
+      // Animated multi-color gradient core (see CoreGradientBackground): a
+      // slowly-shifting rainbow-minus-green sheen tuned per color scheme.
       CoreGradientBackground(date: date, reduceMotion: reduceMotion)
         .frame(width: d, height: d)
         .clipShape(Circle())
@@ -146,7 +167,7 @@ struct PulseCore: View {
             .frame(width: d, height: d * 0.34)
           Text("14 days")
             .font(.system(size: 9 * textScale, weight: .medium))
-            .foregroundStyle(Color.white.opacity(0.6))
+            .foregroundStyle(sparklineCaptionColor)
             .offset(y: d * 0.22)
         }
         .frame(width: d, height: d)
@@ -230,6 +251,12 @@ struct PulseCore: View {
     return 0.3 + 0.4 * (sin(t * 2 * .pi / 3.0 + phase) * 0.5 + 0.5)
   }
 
+  private var sparklineCaptionColor: Color {
+    colorScheme == .dark
+      ? Color.white.opacity(0.6)
+      : Color(red: 0.22, green: 0.31, blue: 0.45).opacity(0.82)
+  }
+
   private var accessibilityLabel: String {
     if pulse.statless {
       return "People are vibing on the network today"
@@ -253,13 +280,31 @@ struct PulseCore: View {
 struct PulseSparkline: View {
   var history: [PulseDay]
 
+  @Environment(\.colorScheme) private var colorScheme
+
   // Glow styling, tunable in one place.
-  static let glow = Color(red: 0.62, green: 0.80, blue: 1.0).opacity(0.9)
-  static let lineColors: [Color] = [
-    Color(red: 0.80, green: 0.92, blue: 1.0),
-    Color.white,
-    Color(red: 1.0, green: 0.90, blue: 0.82),
-  ]
+  private var glow: Color {
+    Color(red: 0.62, green: 0.80, blue: 1.0).opacity(colorScheme == .dark ? 0.9 : 0.5)
+  }
+
+  private var lineColors: [Color] {
+    if colorScheme == .dark {
+      return [
+        Color(red: 0.80, green: 0.92, blue: 1.0),
+        Color.white,
+        Color(red: 1.0, green: 0.90, blue: 0.82),
+      ]
+    }
+    return [
+      Color(red: 0.22, green: 0.47, blue: 0.74),
+      Color(red: 0.42, green: 0.66, blue: 0.94),
+      Color(red: 0.72, green: 0.47, blue: 0.72),
+    ]
+  }
+
+  private var endpointFill: Color {
+    colorScheme == .dark ? .white : Color(red: 0.27, green: 0.52, blue: 0.86)
+  }
 
   var body: some View {
     GeometryReader { geo in
@@ -271,20 +316,20 @@ struct PulseSparkline: View {
             for p in points.dropFirst() { path.addLine(to: p) }
           }
           // Soft wide halo under a bright near-white stroke = a glowing line.
-          line.stroke(Self.glow,
+          line.stroke(glow,
             style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
             .blur(radius: 4)
           line.stroke(
-            LinearGradient(colors: Self.lineColors, startPoint: .leading, endPoint: .trailing),
+            LinearGradient(colors: lineColors, startPoint: .leading, endPoint: .trailing),
             style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
           )
-          .shadow(color: Self.glow, radius: 2.5)
+          .shadow(color: glow, radius: 2.5)
         }
         if let last = points.last {
           Circle()
-            .fill(Color.white)
+            .fill(endpointFill)
             .frame(width: 4.6, height: 4.6)
-            .shadow(color: Self.glow, radius: 4)
+            .shadow(color: glow, radius: 4)
             .position(last)
         }
       }
