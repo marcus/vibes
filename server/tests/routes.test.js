@@ -12,6 +12,7 @@ process.env.VIBES_AVATAR_BASE_URL = "https://vibes.test/avatars";
 const [
   { getDb },
   registerRoute,
+  statusRoute,
   meRoute,
   invitesRoute,
   inviteAcceptRoute,
@@ -28,6 +29,7 @@ const [
 ] = await Promise.all([
   import("../src/lib/server/db.js"),
   import("../src/routes/api/register/+server.js"),
+  import("../src/routes/api/status/+server.js"),
   import("../src/routes/api/me/+server.js"),
   import("../src/routes/api/invites/+server.js"),
   import("../src/routes/api/invites/[code]/accept/+server.js"),
@@ -331,6 +333,50 @@ describe("devices and token minting", () => {
       routeEvent("/api/tokens", { body: { label: "x" }, ip: "203.0.113.43" }),
     );
     expect((await responseJson(mint)).status).toBe(401);
+  });
+});
+
+describe("POST /api/status", () => {
+  it("accepts status bodies above the old 32 KB cap", async () => {
+    const { token } = registerUser(db, {
+      displayName: "Dana Scully",
+      deviceLabel: "Dana MacBook",
+    });
+
+    const response = await statusRoute.POST(
+      routeEvent("/api/status", {
+        token: token.token,
+        body: {
+          device_id: "device-dana",
+          device_label: "Dana MacBook",
+          mode: "online",
+          day: "2026-06-21",
+          updated_at: "2026-06-21T18:00:00.000Z",
+          cards: [
+            {
+              type: "git_stats",
+              enabled: true,
+              summary: "1 repo touched - 1 commit - +10 / -1 LOC",
+              data: {
+                commits: 1,
+                files_changed: 1,
+                insertions: 10,
+                deletions: 1,
+                repos_touched: 1,
+              },
+            },
+            {
+              type: "disabled_diagnostic",
+              enabled: false,
+              summary: "ignored",
+              data: { text: "x".repeat(40_000) },
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(await responseJson(response)).toMatchObject({ status: 200, body: { ok: true } });
   });
 });
 

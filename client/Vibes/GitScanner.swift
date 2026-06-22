@@ -554,6 +554,8 @@ private extension URL {
 }
 
 enum StatusBuilder {
+  private static let maxDetailedCommits = 150
+
   static func payload(
     config: VibesConfig,
     mode: PresenceMode,
@@ -593,7 +595,7 @@ enum StatusBuilder {
         "deletions": .int(stats.deletions),
         "repos_touched": .int(stats.reposTouched)
       ]
-      if !stats.commitDetails.isEmpty {
+      if !stats.commitDetails.isEmpty && stats.commitDetails.count <= maxDetailedCommits {
         gitData["commit_details"] = .array(stats.commitDetails.map { commit in
           .object([
             "id": .string(commit.id),

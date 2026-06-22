@@ -874,7 +874,7 @@ describe("statuses and feed", () => {
     expect(getFeed(db, ken).friends).toHaveLength(0);
   });
 
-  it("rejects status payloads over 32 KB", () => {
+  it("rejects status payloads over the configured status limit", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
     expect(() =>
       upsertStatus(db, user, {
@@ -884,7 +884,7 @@ describe("statuses and feed", () => {
             type: "git_stats",
             enabled: true,
             summary: "large",
-            data: { text: "x".repeat(40_000) },
+            data: { text: "x".repeat(300_000) },
           },
         ],
       }),
@@ -902,7 +902,7 @@ describe("statuses and feed", () => {
             type: "disabled_blob",
             enabled: false,
             summary: "hidden",
-            data: { text: "x".repeat(40_000) },
+            data: { text: "x".repeat(300_000) },
           },
         ],
       }),

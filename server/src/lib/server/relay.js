@@ -4,7 +4,7 @@ import { getAvatarStore } from "./avatarStore.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_HANDLE_LENGTH = 32;
-const MAX_STATUS_BYTES = 32 * 1024;
+export const MAX_STATUS_BYTES = 256 * 1024;
 // Avatar uploads are 512px PNGs; cap raw bytes and dimensions defensively.
 const MAX_AVATAR_BYTES = 1_500_000;
 const MAX_AVATAR_DIMENSION = 1024;
