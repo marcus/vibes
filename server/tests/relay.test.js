@@ -1545,6 +1545,49 @@ describe("network pulse", () => {
     });
   });
 
+  it("anchors today on the latest reported day so a US-evening UTC rollover stays statful", () => {
+    // 2026-06-21 19:10 MDT is 2026-06-22 01:10 UTC — UTC has advanced to a day no
+    // US contributor has reported yet. The five who vibed on their local 06-21
+    // must still surface as today, not collapse to statless on the empty UTC day.
+    const eveningRollover = Date.parse("2026-06-22T01:10:00.000Z");
+    vibe(db, TODAY, 5, { insertions: 100, deletions: 50, prefix: "rollover" });
+
+    const pulse = networkPulse(db, eveningRollover);
+    expect(pulse.statless).toBe(false);
+    expect(pulse.today.contributors).toBe(5);
+    expect(pulse.history.at(-1).day).toBe(TODAY);
+  });
+
+  it("excludes the anchored in-progress day from typical churn during a UTC rollover", () => {
+    // At evening rollover the anchor is the latest local day (06-21), not UTC
+    // today (06-22). The in-progress anchor day must be excluded from the typical
+    // baseline exactly as it is at non-rollover times — otherwise a busy day drags
+    // its own baseline up and understates the lap.
+    const eveningRollover = Date.parse("2026-06-22T01:10:00.000Z");
+    vibe(db, "2026-06-12", 3, { insertions: 100, deletions: 0, prefix: "h12" }); // 300
+    vibe(db, "2026-06-13", 3, { insertions: 33, deletions: 0, prefix: "h13" }); // 99
+    vibe(db, "2026-06-14", 3, { insertions: 66, deletions: 0, prefix: "h14" }); // 198
+    vibe(db, TODAY, 3, { insertions: 200, deletions: 0, prefix: "anchor" }); // 600, excluded
+
+    const pulse = networkPulse(db, eveningRollover);
+    // Median of 300/99/198 (anchor's 600 excluded) = 198; lap = round(600/198) = 3.0.
+    // Were the anchor day included, the median would be 249 and lap 2.4.
+    expect(pulse.today.typical_churn).toBe(198);
+    expect(pulse.today.lap).toBe(3);
+  });
+
+  it("does not resurrect an earlier busy day once a newer thin day is reported", () => {
+    // Anchor is the latest reported day, not the latest *busy* day: once a new
+    // local day genuinely begins with too few contributors, it is statless even
+    // though an earlier day cleared the floor.
+    vibe(db, "2026-06-20", 5, { prefix: "busy" });
+    vibe(db, TODAY, 1, { prefix: "thin" });
+
+    const pulse = networkPulse(db, PULSE_NOW);
+    expect(pulse.statless).toBe(true);
+    expect(pulse.today).toBeNull();
+  });
+
   it("emits today numbers once three distinct contributors vibe", () => {
     vibe(db, TODAY, 3, { insertions: 100, deletions: 50 });
     const pulse = networkPulse(db, PULSE_NOW);

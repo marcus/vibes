@@ -854,7 +854,13 @@ function networkTypicalChurn(days, today) {
  * is the per-(user,device,day) `daily_activity` table; everything here is sums,
  * distinct-user counts, and date strings — never identity.
  *
- * Today's headline numbers only emit when today has >= PULSE_MIN_CONTRIBUTORS
+ * "Today's" headline is anchored on the latest reported `client_day` in the
+ * window, NOT the UTC date. Contributors stamp activity with their own local day,
+ * so in the US evening UTC has already advanced to a date nobody has reported yet
+ * (19:00 MDT is 01:00 UTC the next day); keying on the UTC date would blank a busy
+ * day for those hours. See the `anchorDay` note below.
+ *
+ * Today's headline numbers only emit when that day has >= PULSE_MIN_CONTRIBUTORS
  * distinct contributors; otherwise `statless` is true and `today` is null (the
  * client shows "people are vibing today" with no numbers). In `history`, any day
  * below the floor has its churn/insertions/deletions suppressed to null.
@@ -898,7 +904,16 @@ export function networkPulse(db, nowMs = Date.now()) {
       contributors: row.contributors,
     }));
 
-  const typicalChurnValue = networkTypicalChurn(rows, today);
+  // The day whose numbers become the headline. Rows are ordered oldest→newest, so
+  // the last is the most recent reported `client_day` — always <= the UTC window
+  // end. Anchoring here (rather than the UTC `today`) keeps a busy day statful
+  // through the US-evening hours when UTC has rolled over but no contributor has
+  // started their next local day. Falls back to the UTC date when the network has
+  // no activity at all. The window bounds and cache key stay on the UTC date so
+  // the 14-day span and ~60s cache rollover remain stable. (td-30cdb2)
+  const anchorDay = rows.length ? rows[rows.length - 1].day : today;
+
+  const typicalChurnValue = networkTypicalChurn(rows, anchorDay);
   const history = rows.map((row) =>
     row.contributors >= PULSE_MIN_CONTRIBUTORS
       ? {
@@ -919,7 +934,7 @@ export function networkPulse(db, nowMs = Date.now()) {
         },
   );
 
-  const todayRow = rows.find((row) => row.day === today) ?? null;
+  const todayRow = rows.find((row) => row.day === anchorDay) ?? null;
   const statless = !todayRow || todayRow.contributors < PULSE_MIN_CONTRIBUTORS;
   const todayPulse = statless
     ? null

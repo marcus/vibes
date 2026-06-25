@@ -367,6 +367,15 @@ device's totals for the day. `daily_activity.commits` powers the derived
 when the merged row has visible `git_stats`. If Git stats sharing is off, the
 feed returns no streak.
 
+The network pulse (the center-orb aggregate, `networkPulse` in `relay.js`)
+derives its "today" headline from the **latest reported `client_day`** in the
+14-day window, not the server's UTC date. Contributors stamp `daily_activity`
+with their own local day, so in the US evening UTC has already rolled to a date
+nobody has reported yet (19:00 MDT = 01:00 UTC next day); keying "today" on the
+raw UTC date previously blanked a busy day to `statless` for those hours even
+with five active contributors. The 14-day window bounds and the ~60s cache key
+still track the UTC date, so only the headline-day selection changed.
+
 Upgraded clients also send one-way `commit_details` fingerprints inside the
 status blob. The relay deduplicates those fingerprints across a user's devices
 for the selected Vibes day, stores unique entries in `daily_commits`, and
