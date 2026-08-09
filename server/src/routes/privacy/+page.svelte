@@ -66,11 +66,11 @@
               <tr>
                 <td data-label="What leaves your machine">
                   <strong>Git activity</strong>
-                  Commits, files changed, insertions, deletions, repositories touched, shared repo
-                  names or aliases. The relay uses those aggregates to derive your streak and
-                  baseline. On days with up to 150 commits, pseudonymous commit fingerprints,
-                  times, and counts are also sent. Commit subjects, descriptions, and messages are
-                  never sent.
+                  Commit counts, files changed, insertions, deletions, repositories touched, and
+                  shared repo names or aliases. The relay uses those aggregates to derive your
+                  streak and baseline. On days with up to 150 commits, pseudonymous fingerprints
+                  derived from commit hashes, times, and counts are also sent. Raw commit hashes,
+                  subjects, descriptions, and messages are never sent.
                 </td>
                 <td data-label="Who can see it">
                   Accepted friends see the activity summary, repo names or aliases, streak, and
