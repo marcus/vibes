@@ -69,7 +69,8 @@
                   Commits, files changed, insertions, deletions, repositories touched, shared repo
                   names or aliases. The relay uses those aggregates to derive your streak and
                   baseline. On days with up to 150 commits, pseudonymous commit fingerprints,
-                  times, and counts are also sent.
+                  times, and counts are also sent. Commit subjects, descriptions, and messages are
+                  never sent.
                 </td>
                 <td data-label="Who can see it">
                   Accepted friends see the activity summary, repo names or aliases, streak, and
