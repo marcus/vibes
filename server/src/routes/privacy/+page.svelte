@@ -25,45 +25,129 @@
       <p class="effective">Effective August 8, 2026</p>
 
       <section>
-        <h2>The short version</h2>
+        <h2>At a glance</h2>
         <p>
-          Vibes sends your identity, presence, optional status, repository names or aliases,
-          and aggregate Git activity to the Vibes relay. Friends can see the parts intended for
-          the friend feed. The relay also produces a Network Pulse without names or handles from
-          aggregate activity across the service.
+          This table is the practical version of the policy. The sections below explain retention,
+          defaults, and the less obvious edge cases.
         </p>
+        <div class="table-wrap">
+          <table>
+            <caption>Vibes data sharing at a glance</caption>
+            <thead>
+              <tr>
+                <th scope="col">What leaves your machine</th>
+                <th scope="col">Who can see it</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="What leaves your machine">
+                  <strong>Identity and account</strong>
+                  Display name, timezone, and device label. The relay assigns your user ID and
+                  handle.
+                </td>
+                <td data-label="Who can see it">
+                  Accepted friends see your ID, handle, and display name. The relay operator sees
+                  the account and device records. Anyone with an open invite link can see the
+                  inviter's display name.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="What leaves your machine">
+                  <strong>Presence and status</strong>
+                  Online or Offline mode, update time, local-day metadata, and your optional
+                  manual status.
+                </td>
+                <td data-label="Who can see it">
+                  Accepted friends and the relay operator. Offline hides the online indicator but
+                  does not stop periodic sharing while Vibes is running.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="What leaves your machine">
+                  <strong>Git activity</strong>
+                  Commits, files changed, insertions, deletions, repositories touched, shared repo
+                  names or aliases. The relay uses those aggregates to derive your streak and
+                  baseline. On days with up to 150 commits, pseudonymous commit fingerprints,
+                  times, and counts are also sent.
+                </td>
+                <td data-label="Who can see it">
+                  Accepted friends see the activity summary, repo names or aliases, streak, and
+                  baseline. The relay operator can also access the per-commit details used for
+                  cross-device deduplication.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="What leaves your machine">
+                  <strong>Optional music</strong>
+                  Player, track, artist, playback state, and capture time when enabled.
+                </td>
+                <td data-label="Who can see it">Accepted friends and the relay operator.</td>
+              </tr>
+              <tr>
+                <td data-label="What leaves your machine">
+                  <strong>Optional weather</strong>
+                  Your city or coordinates go to Open-Meteo. Conditions and temperature go to the
+                  relay; the city is included only when Share City is enabled.
+                </td>
+                <td data-label="Who can see it">
+                  Open-Meteo receives the lookup and ordinary network data such as your IP address.
+                  Accepted friends and the relay operator see the resulting weather card.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="What leaves your machine">
+                  <strong>Profile icon</strong>
+                  The generated PNG, your avatar prompt, and its style when you save it.
+                </td>
+                <td data-label="Who can see it">
+                  Accepted friends and the relay operator. Anyone who obtains the public,
+                  hard-to-guess image URL can view the PNG.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="What leaves your machine">
+                  <strong>Network Pulse contribution</strong>
+                  Your aggregate daily Git totals contribute to a 14-day service-wide summary.
+                </td>
+                <td data-label="Who can see it">
+                  Every signed-in relay user sees the same aggregate without names or handles. The
+                  relay operator can access the underlying account-level activity records.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="What leaves your machine">
+                  <strong>Account sync credential</strong>
+                  Relay address, handle, display name, and a bearer credential are placed in iCloud
+                  Keychain.
+                </td>
+                <td data-label="Who can see it">
+                  Your other Macs connected to the same iCloud Keychain account can use the
+                  credential to authenticate the Vibes account and mint a device token.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="What leaves your machine">
+                  <strong>Website and relay requests</strong>
+                  IP address, timestamp, requested path, response status, referrer, and user agent.
+                </td>
+                <td data-label="Who can see it">The relay operator through server access logs.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="local-only">
+        <h2>What stays on your Mac</h2>
         <p>
           Vibes does not intentionally upload source code, file contents, raw repository paths,
           branch names, commit messages, filenames, your local Git name or email, editor or
-          process history, AI-assistant attribution, or agent transcripts. Text you enter yourself
-          — such as a status, repository alias, or avatar prompt — is sent as entered, so do not
-          put secrets in those fields.
+          process history, coding-tool attribution, AI-assistant prompts, or agent transcripts.
+          The profile-icon prompt and other text you enter yourself — such as a status or
+          repository alias — are sent as entered, so do not put secrets in those fields.
         </p>
       </section>
-
-      <div class="cols">
-        <section class="card">
-          <h2>Shared with friends</h2>
-          <ul>
-            <li>Your relay user ID, handle, display name, profile icon, and presence</li>
-            <li>Your optional manual status</li>
-            <li>Commits, files changed, insertions, deletions, and repositories touched</li>
-            <li>Repository names or aliases when repository sharing is enabled</li>
-            <li>Your latest activity day and time, commit streak, and typical churn baseline</li>
-            <li>Optional music and weather cards when you enable them</li>
-          </ul>
-        </section>
-        <section class="card">
-          <h2>Kept on your Mac</h2>
-          <ul>
-            <li>Source code and file contents</li>
-            <li>Raw repository paths, branch names, commit messages, and filenames</li>
-            <li>Your local Git name and email</li>
-            <li>Editor activity, process history, and coding-tool attribution</li>
-            <li>AI-assistant prompts and transcripts, except a profile-icon prompt you save</li>
-          </ul>
-        </section>
-      </div>
 
       <section>
         <h2>Account and device data</h2>
@@ -255,26 +339,92 @@
   section p + p { margin-top: var(--s-4); }
   section a { color: var(--accent-default); }
 
-  .cols {
-    display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4);
-    margin-top: var(--s-9);
-  }
-  .card {
-    margin-top: 0;
-    padding: var(--s-6);
-    background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+  .table-wrap {
+    margin-top: var(--s-5);
+    overflow: hidden;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--r-lg);
   }
-  .card h2 { font-size: var(--t-base); margin-bottom: var(--s-4); }
-  .card ul { margin: 0; padding-left: 1.1rem; display: grid; gap: var(--s-3); }
-  .card li {
-    padding-left: var(--s-1);
-    font-size: var(--t-md); color: var(--text-secondary); line-height: 1.4;
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  caption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  th, td {
+    width: 50%;
+    padding: var(--s-5);
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    font-size: var(--t-sm);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  th + th, td + td { border-left: 1px solid var(--border-subtle); }
+  tbody tr { border-top: 1px solid var(--border-subtle); }
+  td {
+    color: var(--text-secondary);
+    font-size: var(--t-sm);
+    line-height: 1.55;
+  }
+  td strong {
+    display: block;
+    margin-bottom: var(--s-1);
+    color: var(--text-primary);
+    font-size: var(--t-base);
+    font-weight: 650;
+  }
+  .local-only {
+    padding: var(--s-6);
+    background: var(--bg-secondary);
+    border-radius: var(--r-lg);
   }
 
   .foot-cta { margin-top: var(--s-10); }
 
   @media (max-width: 640px) {
-    .cols { grid-template-columns: 1fr; }
+    .table-wrap { background: transparent; border: 0; border-radius: 0; }
+    table, thead, tbody, tr, th, td { display: block; width: 100%; }
+    thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+    tbody { display: grid; gap: var(--s-4); }
+    tbody tr {
+      overflow: hidden;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-lg);
+    }
+    td { padding: var(--s-5); }
+    td + td { border-top: 1px solid var(--border-subtle); border-left: 0; }
+    td::before {
+      display: block;
+      margin-bottom: var(--s-2);
+      color: var(--text-tertiary);
+      content: attr(data-label);
+      font-size: var(--t-xs);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
   }
 </style>
