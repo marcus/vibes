@@ -3,7 +3,7 @@
   import SocialMeta from '$lib/components/SocialMeta.svelte';
 
   const description =
-    "Vibes shares aggregate coding activity only. No repo paths, branches, commit messages, filenames, editor activity, process history, or transcripts.";
+    "What Vibes collects, shares with friends, sends to service providers, and keeps on the relay.";
 </script>
 
 <svelte:head>
@@ -15,40 +15,187 @@
 
 <MarketingShell>
   {#snippet children()}
-    <section class="privacy-page shell">
-      <div class="eyebrow"><span class="lockpip"></span> Privacy</div>
-      <h1>Private <span class="spectrum-text">by design.</span></h1>
+    <article class="privacy-page shell">
+      <div class="eyebrow"><span class="lockpip"></span> Privacy notice</div>
+      <h1>Sharing, without sharing <span class="spectrum-text">your code.</span></h1>
       <p class="lede">
-        Vibes turns your local Git activity into a simple friend feed for a small group.
-        It shares <b>aggregate activity only</b> — just enough to show who's coding and how much.
+        Vibes is an ambient presence app for coding friends. Sharing activity is the point of
+        the app, so this notice describes exactly what leaves your Mac and what does not.
       </p>
+      <p class="effective">Effective August 8, 2026</p>
+
+      <section>
+        <h2>The short version</h2>
+        <p>
+          Vibes sends your identity, presence, optional status, repository names or aliases,
+          and aggregate Git activity to the Vibes relay. Friends can see the parts intended for
+          the friend feed. The relay also produces a Network Pulse without names or handles from
+          aggregate activity across the service.
+        </p>
+        <p>
+          Vibes does not intentionally upload source code, file contents, raw repository paths,
+          branch names, commit messages, filenames, your local Git name or email, editor or
+          process history, AI-assistant attribution, or agent transcripts. Text you enter yourself
+          — such as a status, repository alias, or avatar prompt — is sent as entered, so do not
+          put secrets in those fields.
+        </p>
+      </section>
 
       <div class="cols">
-        <div class="card good">
-          <h2>What friends see</h2>
+        <section class="card">
+          <h2>Shared with friends</h2>
           <ul>
-            <li>Whether you're online right now</li>
-            <li>Minutes coded today</li>
-            <li>Lines added and removed, in total</li>
-            <li>A commit count and your display name</li>
+            <li>Your relay user ID, handle, display name, profile icon, and presence</li>
+            <li>Your optional manual status</li>
+            <li>Commits, files changed, insertions, deletions, and repositories touched</li>
+            <li>Repository names or aliases when repository sharing is enabled</li>
+            <li>Your latest activity day and time, commit streak, and typical churn baseline</li>
+            <li>Optional music and weather cards when you enable them</li>
           </ul>
-        </div>
-        <div class="card bad">
-          <h2>What never leaves your Mac</h2>
+        </section>
+        <section class="card">
+          <h2>Kept on your Mac</h2>
           <ul>
-            <li>Repo paths and names</li>
-            <li>Branches and commit messages</li>
-            <li>Filenames and file contents</li>
-            <li>Editor activity and process history</li>
-            <li>AI transcripts or prompts</li>
+            <li>Source code and file contents</li>
+            <li>Raw repository paths, branch names, commit messages, and filenames</li>
+            <li>Your local Git name and email</li>
+            <li>Editor activity, process history, and coding-tool attribution</li>
+            <li>AI-assistant prompts and transcripts, except a profile-icon prompt you save</li>
           </ul>
-        </div>
+        </section>
       </div>
 
-      <div class="notes">
-        <p><b>Your group only.</b> Activity is shared with the friends you've added by one-time invite — nobody else. You're online only while you're actively coding, and one tap takes you offline.</p>
-        <p><b>No tracking, no accounts.</b> Vibes isn't an ad product. There's no analytics SDK, no third-party trackers, and no sign-up — it's a direct download for Apple Silicon.</p>
-      </div>
+      <section>
+        <h2>Account and device data</h2>
+        <p>
+          Signing up creates a Vibes account and a bearer token. No email address or password is
+          required. The relay stores your handle, display name, timezone, account timestamps,
+          device identifiers and labels, hashed token records and last-used times, invitations,
+          friend relationships, and administrative audit records. Invite and device-link codes
+          are stored as hashes.
+        </p>
+        <p>
+          Release builds store the working token in macOS Keychain. Vibes also places the relay
+          address, handle, display name, and a bearer credential in iCloud Keychain so your other
+          Macs can offer to join the same account. That credential can authenticate the account
+          and mint a new device token. Apple handles the synchronization; it may not occur when
+          iCloud Keychain is disabled.
+        </p>
+      </section>
+
+      <section>
+        <h2>Presence and activity</h2>
+        <p>
+          While Vibes is running, it scans configured Git repositories and normally publishes
+          your selected presence mode and enabled activity cards about every three minutes. The
+          relay considers the newest Online publication online for ten minutes. This indicates
+          that Vibes is online on your Mac; it does not prove that you were actively typing
+          throughout that period.
+        </p>
+        <p>
+          Selecting Offline hides your online indicator, but it is not a pause-sharing control.
+          The running app continues its periodic scans and can publish updated Git, music, and
+          weather cards with an offline presence. To stop those publications, quit Vibes or
+          disable the relevant cards or repositories.
+        </p>
+        <p>
+          A status includes your local day and timezone boundaries, update time, manual status,
+          and enabled cards. Git cards can include commit counts, files changed, insertions,
+          deletions, repositories touched, and shared repository names or aliases. Repository
+          name sharing and aggregate Git cards are enabled by default; individual repositories
+          can be hidden or have alias sharing disabled.
+        </p>
+        <p>
+          For cross-device counting on days with up to 150 commits, the app sends a deterministic
+          SHA-256 fingerprint derived from each commit hash, plus its time and aggregate change
+          counts. On a day with more than 150 commits, it sends no per-commit details. The raw
+          commit hash is not sent and these details are not returned in friend feeds. The
+          fingerprint is pseudonymous, not anonymous: someone who already knows a commit hash can
+          calculate its fingerprint and compare it with relay data they can access.
+        </p>
+      </section>
+
+      <section>
+        <h2>Optional features and other services</h2>
+        <p>
+          Music and weather sharing are off by default. When music sharing is enabled, Vibes reads
+          the current Spotify or Apple Music track locally and sends the player, track, artist,
+          playback state, and capture time to the relay for your friends. Vibes does not send
+          listening credentials to the relay.
+        </p>
+        <p>
+          Weather uses Open-Meteo. If you enter a city, that city is sent to Open-Meteo's geocoding
+          service. If you use Location Services, coordinates are sent to Open-Meteo's forecast
+          service. The relay receives the resulting conditions and temperature; it receives the
+          city only when you enable Share City. Open-Meteo receives ordinary network information,
+          including your IP address, under its own privacy terms.
+        </p>
+        <p>
+          Profile icons are generated on your Mac. When you save one, Vibes uploads the PNG, your
+          profile-icon prompt, and the selected style to the relay. Friends receive the current
+          image URL. Avatar files use public, hard-to-guess URLs rather than authenticated image
+          requests, so anyone who obtains a URL can view that image.
+        </p>
+      </section>
+
+      <section>
+        <h2>Network Pulse</h2>
+        <p>
+          Every signed-in user receives the same Network Pulse: totals and trends computed from
+          aggregate Git activity across all users of that relay, not just their friends. It covers
+          a trailing 14-day window. Names, handles, devices, avatars, and repository names are not
+          included. Numeric activity and contributor counts are suppressed on days with fewer
+          than three contributors, although the app may still say that people are active. Like
+          any small-group aggregate, the Pulse may still support inferences when someone already
+          knows other contributors' activity.
+        </p>
+      </section>
+
+      <section>
+        <h2>Relay access, security, and logs</h2>
+        <p>
+          Friend-feed data is visible to accepted friends. Anyone holding a still-open invite link
+          can retrieve the inviter's display name without signing in. Network Pulse aggregates are
+          visible to signed-in users. The relay operator can access stored account, relationship,
+          status, activity, avatar, prompt, and operational data to run and support the service.
+          Vibes uses HTTPS in transit and stores bearer tokens as hashes on the relay, but friend
+          data is not end-to-end encrypted and the relay can read it.
+        </p>
+        <p>
+          The web server records ordinary access logs, including IP address, timestamp, requested
+          path, response status, referrer, and user agent. Those logs are currently retained in up
+          to 14 daily rotations. Requested paths can contain invite codes, so treat an invite link
+          as a secret until it is accepted, revoked, or expires. Vibes does not run an advertising
+          or product-analytics SDK on the website or in the app.
+        </p>
+      </section>
+
+      <section>
+        <h2>Retention and deletion</h2>
+        <p>
+          The relay keeps the latest status for each device and retains daily activity and commit
+          fingerprints for streaks, baselines, and cross-device deduplication. Account, device,
+          friendship, invitation, and administrative records remain until they are deleted by the
+          operator. Vibes does not currently apply an automatic expiry period to those records.
+        </p>
+        <p>
+          Saving a new profile icon or clearing the current one does not delete older avatar rows
+          or image files. Their immutable URLs may continue to work if someone retained a link.
+          There is not yet a self-service account export or deletion control. An operator can
+          delete the account-linked database records, but a deletion audit entry containing the
+          handle remains and the current deletion path does not remove historical avatar files.
+        </p>
+      </section>
+
+      <section>
+        <h2>Questions and requests</h2>
+        <p>
+          For a privacy question, correction, or account deletion request, email
+          <a href="mailto:marcus@vorwaller.net">marcus@vorwaller.net</a>. You can also inspect the
+          <a href="https://github.com/marcus/vibes">source code</a>. Do not send bearer tokens,
+          invite codes, or other secrets by email or in a public issue.
+        </p>
+      </section>
 
       <div class="foot-cta">
         <a class="btn btn-primary" href="/download">
@@ -56,7 +203,7 @@
           Download for Mac
         </a>
       </div>
-    </section>
+    </article>
   {/snippet}
 </MarketingShell>
 
@@ -80,44 +227,50 @@
     font-weight: 800; letter-spacing: -0.04em; line-height: 1.0;
   }
   .lede {
-    max-width: 620px; margin: var(--s-5) 0 0;
+    max-width: 660px; margin: var(--s-5) 0 0;
     font-size: clamp(16px, 2vw, var(--t-lg));
     color: var(--text-secondary); line-height: 1.5;
   }
-  .lede b { color: var(--text-primary); font-weight: 600; }
+  .effective {
+    margin-top: var(--s-3);
+    color: var(--text-tertiary);
+    font-size: var(--t-sm);
+  }
+
+  section {
+    margin-top: var(--s-9);
+  }
+  section h2 {
+    margin-bottom: var(--s-3);
+    color: var(--text-primary);
+    font-size: var(--t-lg);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  section p {
+    color: var(--text-secondary);
+    font-size: var(--t-base);
+    line-height: 1.6;
+  }
+  section p + p { margin-top: var(--s-4); }
+  section a { color: var(--accent-default); }
 
   .cols {
     display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4);
     margin-top: var(--s-9);
   }
   .card {
+    margin-top: 0;
     padding: var(--s-6);
     background: var(--bg-secondary); border: 1px solid var(--border-subtle);
     border-radius: var(--r-lg);
   }
-  .card h2 {
-    font-size: var(--t-base); font-weight: 700; letter-spacing: -0.01em;
-    margin-bottom: var(--s-4); color: var(--text-primary);
-  }
-  .card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-3); }
+  .card h2 { font-size: var(--t-base); margin-bottom: var(--s-4); }
+  .card ul { margin: 0; padding-left: 1.1rem; display: grid; gap: var(--s-3); }
   .card li {
-    position: relative; padding-left: var(--s-6);
-    font-size: var(--t-md); color: var(--text-secondary); line-height: 1.35;
+    padding-left: var(--s-1);
+    font-size: var(--t-md); color: var(--text-secondary); line-height: 1.4;
   }
-  .card li::before {
-    position: absolute; left: 0; top: 0;
-    font-weight: 700;
-  }
-  .card.good li::before { content: "✓"; color: var(--status-online); }
-  .card.bad li::before { content: "✕"; color: var(--v-pink); }
-
-  .notes {
-    display: grid; gap: var(--s-4);
-    margin-top: var(--s-8);
-    max-width: 720px;
-  }
-  .notes p { font-size: var(--t-base); color: var(--text-secondary); line-height: 1.55; }
-  .notes b { color: var(--text-primary); font-weight: 600; }
 
   .foot-cta { margin-top: var(--s-10); }
 
