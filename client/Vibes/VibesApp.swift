@@ -122,7 +122,13 @@ struct VibesApp: App {
   )
 
   var body: some Scene {
-    WindowGroup("Vibes", id: "main") {
+    // A single, unique main window. This was a WindowGroup, which let every
+    // openWindow(id: "main") — the menu bar's Show Vibes / Invite items, ⌘N,
+    // an invite link — stack up another copy of the app UI. Duplicates all
+    // shared the same invite state, so one click opened a sheet on each of
+    // them and activation raised the whole pile. Window reuses the one
+    // window instead, and drops File ▸ New Window along with it.
+    Window("Vibes", id: "main") {
       ContentView(showInviteFriend: $showInviteFriend)
         .environmentObject(model)
         // Resizable main window (macOS 26): anchor the top-left during resizes
