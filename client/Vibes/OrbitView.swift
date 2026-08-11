@@ -99,10 +99,10 @@ struct OrbitView: View {
           DriftDock(drifters: drifters)
         }
       }
-      .background {
-        WindowAnimationVisibilityReader(allowsAnimation: $windowAllowsAnimation)
-          .frame(width: 0, height: 0)
-      }
+    }
+    .background {
+      WindowAnimationVisibilityReader(allowsAnimation: $windowAllowsAnimation)
+        .frame(width: 0, height: 0)
     }
   }
 
