@@ -40,51 +40,155 @@ struct OrbitView: View {
   // nil (old server, or feature off) => no core layer at all.
   var pulse: NetworkPulse?
 
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var windowAllowsAnimation = false
+
+  private static let animationInterval = 1.0 / 12.0
+
   var body: some View {
-    VStack(spacing: 0) {
-      GeometryReader { geo in
-        ZStack {
-          let members = skyMembers
-          let biggest = maxChurn(of: members)
-          // The pulse core is laid out as one more body in the same slot system
-          // as the orbs: the slots are sized for everyone at once, the core takes
-          // the most central one, and the churn-sorted members fill the rest. The
-          // sky self-arranges around it, so the core no longer overlaps anyone.
-          let layout = skyLayout(memberCount: members.count, hasCore: pulse != nil)
-          if let pulse, let coreUnit = layout.core {
-            PulseCore(pulse: pulse)
-              .position(point(coreUnit, in: geo.size))
-              .allowsHitTesting(false)
+    TimelineView(
+      .animation(
+        minimumInterval: Self.animationInterval,
+        paused: reduceMotion || !windowAllowsAnimation
+      )
+    ) { context in
+      VStack(spacing: 0) {
+        GeometryReader { geo in
+          ZStack {
+            let members = skyMembers
+            let biggest = maxChurn(of: members)
+            // The pulse core is laid out as one more body in the same slot system
+            // as the orbs: the slots are sized for everyone at once, the core takes
+            // the most central one, and the churn-sorted members fill the rest. The
+            // sky self-arranges around it, so the core no longer overlaps anyone.
+            let layout = skyLayout(memberCount: members.count, hasCore: pulse != nil)
+            if let pulse, let coreUnit = layout.core {
+              PulseCore(pulse: pulse, animationDate: context.date)
+                .position(point(coreUnit, in: geo.size))
+                .allowsHitTesting(false)
+            }
+            ForEach(Array(members.enumerated()), id: \.element.id) { index, status in
+              OrbView(
+                status: status,
+                isYou: status.user.handle == you.user.handle,
+                rank: index,
+                maxChurn: biggest,
+                animationDate: context.date
+              )
+              .position(point(layout.members[index], in: geo.size))
+            }
           }
-          ForEach(Array(members.enumerated()), id: \.element.id) { index, status in
-            OrbView(
-              status: status,
-              isYou: status.user.handle == you.user.handle,
-              rank: index,
-              maxChurn: biggest
-            )
-            .position(point(layout.members[index], in: geo.size))
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .overlay(alignment: .bottom) {
+            if friends.isEmpty {
+              // With the pulse core filling the sky the nudge softens to a quiet
+              // invite line rather than a lonely "empty sky" message.
+              Text(
+                pulse != nil
+                  ? "Invite a friend to share your orbit."
+                  : "Just you up here so far. Invite a friend to fill the sky."
+              )
+              .font(.callout)
+              .foregroundStyle(Color.secondary)
+              .multilineTextAlignment(.center)
+              .padding(.bottom, 24)
+            }
           }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .bottom) {
-          if friends.isEmpty {
-            // With the pulse core filling the sky the nudge softens to a quiet
-            // invite line rather than a lonely "empty sky" message.
-            Text(
-              pulse != nil
-                ? "Invite a friend to share your orbit."
-                : "Just you up here so far. Invite a friend to fill the sky."
-            )
-            .font(.callout)
-            .foregroundStyle(Color.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.bottom, 24)
+        if !drifters.isEmpty {
+          DriftDock(drifters: drifters)
+        }
+      }
+      .background {
+        WindowAnimationVisibilityReader(allowsAnimation: $windowAllowsAnimation)
+          .frame(width: 0, height: 0)
+      }
+    }
+  }
+
+  // Reports whether drawing another animation frame could produce a visible
+  // result. AppKit's occlusion state covers a fully covered window, while the
+  // other flags cover close/hide and minimization explicitly.
+  private struct WindowAnimationVisibilityReader: NSViewRepresentable {
+    @Binding var allowsAnimation: Bool
+
+    func makeNSView(context: Context) -> VisibilityNSView {
+      VisibilityNSView { value in
+        DispatchQueue.main.async {
+          if allowsAnimation != value {
+            allowsAnimation = value
           }
         }
       }
-      if !drifters.isEmpty {
-        DriftDock(drifters: drifters)
+    }
+
+    func updateNSView(_ nsView: VisibilityNSView, context: Context) {
+      nsView.report = { value in
+        DispatchQueue.main.async {
+          if allowsAnimation != value {
+            allowsAnimation = value
+          }
+        }
+      }
+      nsView.refresh()
+    }
+
+    final class VisibilityNSView: NSView {
+      var report: (Bool) -> Void
+      private var observations: [NSObjectProtocol] = []
+
+      init(report: @escaping (Bool) -> Void) {
+        self.report = report
+        super.init(frame: .zero)
+      }
+
+      @available(*, unavailable)
+      required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+      }
+
+      deinit {
+        observations.forEach(NotificationCenter.default.removeObserver)
+      }
+
+      override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        observeWindow()
+        refresh()
+      }
+
+      func refresh() {
+        guard let window else {
+          report(false)
+          return
+        }
+        report(
+          window.isVisible
+            && !window.isMiniaturized
+            && window.occlusionState.contains(.visible)
+        )
+      }
+
+      private func observeWindow() {
+        observations.forEach(NotificationCenter.default.removeObserver)
+        observations.removeAll()
+        guard let window else { return }
+
+        let names: [Notification.Name] = [
+          NSWindow.didChangeOcclusionStateNotification,
+          NSWindow.didMiniaturizeNotification,
+          NSWindow.didDeminiaturizeNotification,
+          NSWindow.willCloseNotification,
+        ]
+        observations = names.map { name in
+          NotificationCenter.default.addObserver(
+            forName: name,
+            object: window,
+            queue: .main
+          ) { [weak self] _ in
+            self?.refresh()
+          }
+        }
       }
     }
   }
@@ -266,6 +370,7 @@ private struct OrbView: View {
   var isYou: Bool
   var rank: Int
   var maxChurn: Int
+  var animationDate: Date
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.feedTextScale) private var textScale
@@ -284,14 +389,12 @@ private struct OrbView: View {
   }
 
   var body: some View {
-    TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
-      VStack(spacing: 7) {
-        globe
-        labels
-      }
-      .frame(width: 168)
-      .offset(y: floatOffset(at: context.date))
+    VStack(spacing: 7) {
+      globe
+      labels
     }
+    .frame(width: 168)
+    .offset(y: floatOffset(at: animationDate))
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilitySummary)
   }

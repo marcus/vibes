@@ -110,6 +110,7 @@ struct CoreGradientBackground: View {
 // breathing presence so it reads as ambient population rather than a person.
 struct PulseCore: View {
   var pulse: NetworkPulse
+  var animationDate: Date
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
@@ -130,13 +131,11 @@ struct PulseCore: View {
   }
 
   var body: some View {
-    TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
-      VStack(spacing: 9) {
-        globe(at: context.date)
-        if !pulse.statless { caption }
-      }
-      .opacity(breathOpacity(at: context.date))
+    VStack(spacing: 9) {
+      globe(at: animationDate)
+      if !pulse.statless { caption }
     }
+    .opacity(breathOpacity(at: animationDate))
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilityLabel)
   }
@@ -527,13 +526,13 @@ private func previewPulse(
 }
 
 #Preview("PulseCore — lapped") {
-  PulseCore(pulse: previewPulse())
+  PulseCore(pulse: previewPulse(), animationDate: .now)
     .frame(width: 280, height: 280)
     .background(Color.black)
 }
 
 #Preview("PulseCore — statless") {
-  PulseCore(pulse: previewPulse(statless: true))
+  PulseCore(pulse: previewPulse(statless: true), animationDate: .now)
     .frame(width: 280, height: 280)
     .background(Color.black)
 }
