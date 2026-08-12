@@ -85,11 +85,6 @@ struct PulseCore: View {
   var body: some View {
     VStack(spacing: 9) {
       ZStack {
-        // Soft static halo (animated shadows are expensive).
-        Circle()
-          .fill(Self.glowColor.opacity(0.11))
-          .frame(width: Self.diameter * 1.45, height: Self.diameter * 1.45)
-
         CoreGradientBackground(allowsMotion: allowsMotion)
           .frame(width: Self.diameter, height: Self.diameter)
           .clipShape(Circle())
