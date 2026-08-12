@@ -300,6 +300,8 @@ private struct MainPanel: View {
             openInviteFriend: { showInviteFriend = true },
             openSettings: { openSettings() }
           )
+          .padding(.trailing, 8)
+          .padding(.bottom, 5)
         }
     }
     .padding(.horizontal, 22)

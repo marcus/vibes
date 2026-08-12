@@ -630,7 +630,8 @@ private struct DriftDock: View {
             DrifterItem(status: status)
           }
         }
-        .padding(.horizontal, 8)
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
         .padding(.vertical, 11)
       }
     }
