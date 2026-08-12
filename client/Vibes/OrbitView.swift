@@ -43,61 +43,62 @@ struct OrbitView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var windowAllowsAnimation = false
 
-  private static let animationInterval = 1.0 / 12.0
+  // Motion is Core Animation (AmbientMotion), not a TimelineView clock.
+  private var allowsMotion: Bool {
+    windowAllowsAnimation && !reduceMotion
+  }
 
   var body: some View {
-    TimelineView(
-      .animation(
-        minimumInterval: Self.animationInterval,
-        paused: reduceMotion || !windowAllowsAnimation
-      )
-    ) { context in
-      VStack(spacing: 0) {
-        GeometryReader { geo in
-          ZStack {
-            let members = skyMembers
-            let biggest = maxChurn(of: members)
-            // The pulse core is laid out as one more body in the same slot system
-            // as the orbs: the slots are sized for everyone at once, the core takes
-            // the most central one, and the churn-sorted members fill the rest. The
-            // sky self-arranges around it, so the core no longer overlaps anyone.
-            let layout = skyLayout(memberCount: members.count, hasCore: pulse != nil)
-            if let pulse, let coreUnit = layout.core {
-              PulseCore(pulse: pulse, animationDate: context.date)
-                .position(point(coreUnit, in: geo.size))
-                .allowsHitTesting(false)
-            }
-            ForEach(Array(members.enumerated()), id: \.element.id) { index, status in
-              OrbView(
-                status: status,
-                isYou: status.user.handle == you.user.handle,
-                rank: index,
-                maxChurn: biggest,
-                animationDate: context.date
+    VStack(spacing: 0) {
+      GeometryReader { geo in
+        ZStack {
+          let members = skyMembers
+          let biggest = maxChurn(of: members)
+          // The pulse core is laid out as one more body in the same slot system
+          // as the orbs: the slots are sized for everyone at once, the core takes
+          // the most central one, and the churn-sorted members fill the rest. The
+          // sky self-arranges around it, so the core no longer overlaps anyone.
+          let layout = skyLayout(memberCount: members.count, hasCore: pulse != nil)
+          if let pulse, let coreUnit = layout.core {
+            PulseCore(pulse: pulse, allowsMotion: allowsMotion)
+              .ambientOpacityBreath(
+                enabled: allowsMotion,
+                period: 9,
+                from: 0.92,
+                to: 0.98
               )
-              .position(point(layout.members[index], in: geo.size))
-            }
+              .position(point(coreUnit, in: geo.size))
+              .allowsHitTesting(false)
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .overlay(alignment: .bottom) {
-            if friends.isEmpty {
-              // With the pulse core filling the sky the nudge softens to a quiet
-              // invite line rather than a lonely "empty sky" message.
-              Text(
-                pulse != nil
-                  ? "Invite a friend to share your orbit."
-                  : "Just you up here so far. Invite a friend to fill the sky."
-              )
-              .font(.callout)
-              .foregroundStyle(Color.secondary)
-              .multilineTextAlignment(.center)
-              .padding(.bottom, 24)
-            }
+          ForEach(Array(members.enumerated()), id: \.element.id) { index, status in
+            OrbView(
+              status: status,
+              isYou: status.user.handle == you.user.handle,
+              maxChurn: biggest,
+              allowsMotion: allowsMotion
+            )
+            .position(point(layout.members[index], in: geo.size))
           }
         }
-        if !drifters.isEmpty {
-          DriftDock(drifters: drifters)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+          if friends.isEmpty {
+            // With the pulse core filling the sky the nudge softens to a quiet
+            // invite line rather than a lonely "empty sky" message.
+            Text(
+              pulse != nil
+                ? "Invite a friend to share your orbit."
+                : "Just you up here so far. Invite a friend to fill the sky."
+            )
+            .font(.callout)
+            .foregroundStyle(Color.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.bottom, 24)
+          }
         }
+      }
+      if !drifters.isEmpty {
+        DriftDock(drifters: drifters)
       }
     }
     .background {
@@ -368,11 +369,40 @@ struct ChurnRing: View {
 private struct OrbView: View {
   var status: MergedStatus
   var isYou: Bool
-  var rank: Int
   var maxChurn: Int
-  var animationDate: Date
+  var allowsMotion: Bool
 
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  // Period and phase are both keyed to handle so churn re-sorts
+  // don't tear down and restart the CA bob.
+  private var handleHash: UInt64 {
+    var hash: UInt64 = 5381
+    for scalar in status.user.handle.unicodeScalars {
+      hash = hash &* 33 &+ UInt64(scalar.value)
+    }
+    return hash
+  }
+  private var floatPeriod: TimeInterval { 12.0 + Double(handleHash % 3) * 2.6 }
+  private var floatPhase: TimeInterval {
+    Double(handleHash % 1000) / 1000.0 * floatPeriod
+  }
+
+  var body: some View {
+    OrbContent(status: status, isYou: isYou, maxChurn: maxChurn)
+      .equatable()
+      .ambientBob(
+        enabled: allowsMotion,
+        period: floatPeriod,
+        amplitude: 5,
+        phase: floatPhase
+      )
+  }
+}
+
+private struct OrbContent: View, Equatable {
+  var status: MergedStatus
+  var isYou: Bool
+  var maxChurn: Int
+
   @Environment(\.feedTextScale) private var textScale
   @State private var musicHovered = false
 
@@ -388,27 +418,18 @@ private struct OrbView: View {
     return Self.minDiameter + (Self.maxDiameter - Self.minDiameter) * CGFloat(share)
   }
 
+  static func == (lhs: OrbContent, rhs: OrbContent) -> Bool {
+    lhs.status == rhs.status && lhs.isYou == rhs.isYou && lhs.maxChurn == rhs.maxChurn
+  }
+
   var body: some View {
     VStack(spacing: 7) {
       globe
       labels
     }
     .frame(width: 168)
-    .offset(y: floatOffset(at: animationDate))
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilitySummary)
-  }
-
-  // Gentle bob, period and phase staggered by rank so the orbs don't move in
-  // lockstep. Driven by TimelineView (a committed offset each frame) rather
-  // than a repeatForever animation: the avatar PNG loads async, and content
-  // inserted under an in-flight persistent animation can end up out of phase
-  // with its clip circle, showing the bitmap's cropped edges as the orb floats.
-  private func floatOffset(at date: Date) -> CGFloat {
-    guard !reduceMotion else { return 0 }
-    let period = 12.0 + Double(rank % 3) * 2.6
-    let phase = Double(rank) * 0.9
-    return CGFloat(sin(date.timeIntervalSinceReferenceDate * 2 * .pi / period + phase) * 5)
   }
 
   private var globe: some View {
@@ -609,7 +630,8 @@ private struct DriftDock: View {
             DrifterItem(status: status)
           }
         }
-        .padding(.horizontal, 8)
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
         .padding(.vertical, 11)
       }
     }
