@@ -100,11 +100,18 @@ final class SheenDiskView: NSView {
   }
 
   func apply(isDark: Bool, enabled: Bool, period: TimeInterval, startDegrees: Double) {
+    let changed =
+      self.isDark != isDark
+      || self.enabled != enabled
+      || self.period != period
+      || self.startDegrees != startDegrees
     self.isDark = isDark
     self.enabled = enabled
     self.period = period
     self.startDegrees = startDegrees
-    needsLayout = true
+    if changed {
+      needsLayout = true
+    }
     syncRotation()
   }
 
@@ -267,7 +274,10 @@ private struct AmbientBobHost<Content: View>: NSViewRepresentable {
     anim.autoreverses = true
     anim.repeatCount = .infinity
     anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-    anim.beginTime = CACurrentMediaTime() - phase
+    // Keep wall-clock continuity so re-arms after rootView updates don't hitch.
+    let media = layer.convertTime(CACurrentMediaTime(), from: nil)
+    let cycle = max(period, 0.2)
+    anim.beginTime = media - fmod(media + phase, cycle)
     anim.isRemovedOnCompletion = false
     anim.fillMode = .forwards
     layer.add(anim, forKey: key)
@@ -329,7 +339,8 @@ private struct AmbientOpacityHost<Content: View>: NSViewRepresentable {
     let signature = String(format: "%.3f-%.3f-%.3f-%d", period, from, to, enabled ? 1 : 0)
     if !enabled {
       layer.removeAnimation(forKey: key)
-      layer.opacity = 1
+      // Mid-range matches the old reduceMotion rest (~0.96 for 0.92…0.98).
+      layer.opacity = (from + to) / 2
       coordinator.animationSignature = signature
       return
     }
@@ -346,6 +357,9 @@ private struct AmbientOpacityHost<Content: View>: NSViewRepresentable {
     anim.autoreverses = true
     anim.repeatCount = .infinity
     anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+    let media = layer.convertTime(CACurrentMediaTime(), from: nil)
+    let cycle = max(period, 0.2)
+    anim.beginTime = media - fmod(media, cycle)
     anim.isRemovedOnCompletion = false
     anim.fillMode = .forwards
     layer.add(anim, forKey: key)
@@ -360,7 +374,7 @@ private struct AmbientOpacityHost<Content: View>: NSViewRepresentable {
 
 // MARK: - Shared container
 
-final class MeasuringContainer: NSView {
+private final class MeasuringContainer: NSView {
   var measure: (() -> NSSize)?
 
   override var intrinsicContentSize: NSSize {

@@ -38,7 +38,7 @@ func abbreviateCount(_ value: Int) -> String {
 // Sheen is baked once and rotated with Core Animation under a circular mask
 // (see AmbientSheenDisk) so rotation stays cheap and clipped.
 struct CoreGradientBackground: View {
-  var allowsMotion: Bool = true
+  var allowsMotion: Bool = false
 
   @Environment(\.colorScheme) private var colorScheme
 
@@ -76,7 +76,7 @@ struct CoreGradientBackground: View {
 // Opacity breath is applied by the caller via ambientOpacityBreath.
 struct PulseCore: View {
   var pulse: NetworkPulse
-  var allowsMotion: Bool = true
+  var allowsMotion: Bool = false
 
   // Conservative so it never crowds the friend orbits' edge slots.
   private static let diameter: CGFloat = 120
@@ -87,7 +87,7 @@ struct PulseCore: View {
       ZStack {
         // Soft static halo (animated shadows are expensive).
         Circle()
-          .fill(Self.glowColor.opacity(0.20 * 0.55))
+          .fill(Self.glowColor.opacity(0.11))
           .frame(width: Self.diameter * 1.45, height: Self.diameter * 1.45)
 
         CoreGradientBackground(allowsMotion: allowsMotion)

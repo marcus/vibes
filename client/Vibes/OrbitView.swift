@@ -74,7 +74,6 @@ struct OrbitView: View {
             OrbView(
               status: status,
               isYou: status.user.handle == you.user.handle,
-              rank: index,
               maxChurn: biggest,
               allowsMotion: allowsMotion
             )
@@ -370,19 +369,21 @@ struct ChurnRing: View {
 private struct OrbView: View {
   var status: MergedStatus
   var isYou: Bool
-  var rank: Int
   var maxChurn: Int
   var allowsMotion: Bool
 
-  // Period still varies slightly by rank so the sky doesn't feel metronomic;
-  // phase is keyed to handle so churn re-sorts don't restart mid-bob.
-  private var floatPeriod: TimeInterval { 12.0 + Double(rank % 3) * 2.6 }
-  private var floatPhase: TimeInterval {
+  // Period and phase are both keyed to handle so churn re-sorts
+  // don't tear down and restart the CA bob.
+  private var handleHash: UInt64 {
     var hash: UInt64 = 5381
     for scalar in status.user.handle.unicodeScalars {
       hash = hash &* 33 &+ UInt64(scalar.value)
     }
-    return Double(hash % 1000) / 1000.0 * floatPeriod
+    return hash
+  }
+  private var floatPeriod: TimeInterval { 12.0 + Double(handleHash % 3) * 2.6 }
+  private var floatPhase: TimeInterval {
+    Double(handleHash % 1000) / 1000.0 * floatPeriod
   }
 
   var body: some View {
