@@ -216,12 +216,16 @@ private struct AmbientBobHost<Content: View>: NSViewRepresentable {
   var phase: TimeInterval
   var content: Content
 
+  @Environment(\.feedTextScale) private var feedTextScale
+
   func makeCoordinator() -> Coordinator { Coordinator() }
 
   func makeNSView(context: Context) -> MeasuringContainer {
     let container = MeasuringContainer()
     container.wantsLayer = true
-    let hosting = NSHostingView(rootView: content)
+    let hosting = NSHostingView(
+      rootView: AmbientHostedContent(content: content, feedTextScale: feedTextScale)
+    )
     hosting.wantsLayer = true
     hosting.translatesAutoresizingMaskIntoConstraints = false
     container.addSubview(hosting)
@@ -240,7 +244,7 @@ private struct AmbientBobHost<Content: View>: NSViewRepresentable {
 
   func updateNSView(_ nsView: MeasuringContainer, context: Context) {
     guard let hosting = context.coordinator.hosting else { return }
-    hosting.rootView = content
+    hosting.rootView = AmbientHostedContent(content: content, feedTextScale: feedTextScale)
     let fitted = hosting.fittingSize
     if fitted != context.coordinator.lastFittingSize {
       context.coordinator.lastFittingSize = fitted
@@ -249,7 +253,10 @@ private struct AmbientBobHost<Content: View>: NSViewRepresentable {
     syncBob(on: hosting, coordinator: context.coordinator)
   }
 
-  private func syncBob(on hosting: NSHostingView<Content>, coordinator: Coordinator) {
+  private func syncBob(
+    on hosting: NSHostingView<AmbientHostedContent<Content>>,
+    coordinator: Coordinator
+  ) {
     hosting.wantsLayer = true
     guard let layer = hosting.layer else { return }
     let key = "vibes.ambientBob"
@@ -284,7 +291,7 @@ private struct AmbientBobHost<Content: View>: NSViewRepresentable {
   }
 
   final class Coordinator {
-    var hosting: NSHostingView<Content>?
+    var hosting: NSHostingView<AmbientHostedContent<Content>>?
     var animationSignature = ""
     var lastFittingSize: NSSize = .zero
   }
@@ -299,12 +306,16 @@ private struct AmbientOpacityHost<Content: View>: NSViewRepresentable {
   var to: Float
   var content: Content
 
+  @Environment(\.feedTextScale) private var feedTextScale
+
   func makeCoordinator() -> Coordinator { Coordinator() }
 
   func makeNSView(context: Context) -> MeasuringContainer {
     let container = MeasuringContainer()
     container.wantsLayer = true
-    let hosting = NSHostingView(rootView: content)
+    let hosting = NSHostingView(
+      rootView: AmbientHostedContent(content: content, feedTextScale: feedTextScale)
+    )
     hosting.wantsLayer = true
     hosting.translatesAutoresizingMaskIntoConstraints = false
     container.addSubview(hosting)
@@ -323,7 +334,7 @@ private struct AmbientOpacityHost<Content: View>: NSViewRepresentable {
 
   func updateNSView(_ nsView: MeasuringContainer, context: Context) {
     guard let hosting = context.coordinator.hosting else { return }
-    hosting.rootView = content
+    hosting.rootView = AmbientHostedContent(content: content, feedTextScale: feedTextScale)
     let fitted = hosting.fittingSize
     if fitted != context.coordinator.lastFittingSize {
       context.coordinator.lastFittingSize = fitted
@@ -332,7 +343,10 @@ private struct AmbientOpacityHost<Content: View>: NSViewRepresentable {
     syncOpacity(on: hosting, coordinator: context.coordinator)
   }
 
-  private func syncOpacity(on hosting: NSHostingView<Content>, coordinator: Coordinator) {
+  private func syncOpacity(
+    on hosting: NSHostingView<AmbientHostedContent<Content>>,
+    coordinator: Coordinator
+  ) {
     hosting.wantsLayer = true
     guard let layer = hosting.layer else { return }
     let key = "vibes.ambientOpacity"
@@ -366,13 +380,25 @@ private struct AmbientOpacityHost<Content: View>: NSViewRepresentable {
   }
 
   final class Coordinator {
-    var hosting: NSHostingView<Content>?
+    var hosting: NSHostingView<AmbientHostedContent<Content>>?
     var animationSignature = ""
     var lastFittingSize: NSSize = .zero
   }
 }
 
 // MARK: - Shared container
+
+/// A fresh NSHostingView gets a fresh SwiftUI environment. Bridge the custom
+/// feed scale that Orbit content relies on; AppKit supplies system environment
+/// values such as appearance and accessibility to the hosting view itself.
+private struct AmbientHostedContent<Content: View>: View {
+  var content: Content
+  var feedTextScale: CGFloat
+
+  var body: some View {
+    content.environment(\.feedTextScale, feedTextScale)
+  }
+}
 
 private final class MeasuringContainer: NSView {
   var measure: (() -> NSSize)?
