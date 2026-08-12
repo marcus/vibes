@@ -33,73 +33,38 @@ func abbreviateCount(_ value: Int) -> String {
 
 // MARK: - Core gradient background
 
-// The animated backdrop inside the pulse core: a slowly rotating "rainbow minus
-// green" sheen (the Vibes palette), kept quiet so a sparkline reads cleanly on
-// top. Self-contained and tunable without touching PulseCore.
+// The animated backdrop inside the pulse core: a "rainbow minus green" sheen
+// (the Vibes palette), kept quiet so a sparkline reads cleanly on top.
+// Sheen is baked once and rotated with Core Animation under a circular mask
+// (see AmbientSheenDisk) so rotation stays cheap and clipped.
 struct CoreGradientBackground: View {
-  var date: Date
-  var reduceMotion: Bool
+  var allowsMotion: Bool = true
 
   @Environment(\.colorScheme) private var colorScheme
 
-  // The Vibes spectrum: red → orange → amber → blue → indigo → violet → pink.
-  // (Rainbow minus green, matching the logo.) Wraps for a seamless rotation.
-  static let darkPalette: [Color] = [
-    Color(red: 0.95, green: 0.27, blue: 0.23),
-    Color(red: 0.98, green: 0.49, blue: 0.16),
-    Color(red: 0.98, green: 0.78, blue: 0.24),
-    Color(red: 0.22, green: 0.56, blue: 0.97),
-    Color(red: 0.40, green: 0.33, blue: 0.93),
-    Color(red: 0.66, green: 0.31, blue: 0.92),
-    Color(red: 0.96, green: 0.36, blue: 0.66),
-  ]
-  static let lightPalette: [Color] = [
-    Color(red: 1.00, green: 0.55, blue: 0.50),
-    Color(red: 1.00, green: 0.70, blue: 0.42),
-    Color(red: 1.00, green: 0.88, blue: 0.48),
-    Color(red: 0.42, green: 0.74, blue: 1.00),
-    Color(red: 0.58, green: 0.64, blue: 1.00),
-    Color(red: 0.76, green: 0.60, blue: 1.00),
-    Color(red: 1.00, green: 0.62, blue: 0.78),
-  ]
+  static let restingAngle: Double = 210
+  static let rotationPeriod: TimeInterval = 30
   static let darkBase = Color(red: 0.06, green: 0.07, blue: 0.11)
   static let lightBase = Color(red: 0.90, green: 0.95, blue: 1.0)
-  static let rotationPeriod: Double = 30  // seconds per full turn — deliberately slow
-
-  private var palette: [Color] {
-    colorScheme == .dark ? Self.darkPalette : Self.lightPalette
-  }
-
-  private var base: Color {
-    colorScheme == .dark ? Self.darkBase : Self.lightBase
-  }
-
-  private var sheenOpacity: Double {
-    colorScheme == .dark ? 0.55 : 0.64
-  }
-
-  private var angle: Double {
-    guard !reduceMotion else { return 210 }  // a fixed, pleasant slice when motion is off
-    let t = date.timeIntervalSinceReferenceDate
-    return t.truncatingRemainder(dividingBy: Self.rotationPeriod) / Self.rotationPeriod * 360
-  }
 
   var body: some View {
+    let isDark = colorScheme == .dark
+    let base = isDark ? Self.darkBase : Self.lightBase
     ZStack {
       base
-      AngularGradient(
-        gradient: Gradient(colors: palette + [palette[0]]),
-        center: .center,
-        angle: .degrees(angle)
+      AmbientSheenDisk(
+        isDark: isDark,
+        enabled: allowsMotion,
+        period: Self.rotationPeriod,
+        startDegrees: Self.restingAngle
       )
-      .opacity(sheenOpacity)
-      .blur(radius: 9)
-      // Vignette: edges fall back to the base, center stays luminous.
+      // Vignette stays fixed so the center remains the luminous reading area.
       RadialGradient(
-        colors: [.clear, base.opacity(colorScheme == .dark ? 0.65 : 0.50)],
+        colors: [.clear, base.opacity(isDark ? 0.65 : 0.50)],
         center: .center, startRadius: 6, endRadius: 70
       )
     }
+    .clipShape(Circle())
   }
 }
 
@@ -108,16 +73,73 @@ struct CoreGradientBackground: View {
 // The neutral-slate core. Reuses the ChurnMeter/ChurnRing vocabulary from
 // OrbitView for the today-vs-typical ring, but with no identity and a dim,
 // breathing presence so it reads as ambient population rather than a person.
+// Opacity breath is applied by the caller via ambientOpacityBreath.
 struct PulseCore: View {
   var pulse: NetworkPulse
-  var animationDate: Date
-
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.colorScheme) private var colorScheme
-  @Environment(\.feedTextScale) private var textScale
+  var allowsMotion: Bool = true
 
   // Conservative so it never crowds the friend orbits' edge slots.
   private static let diameter: CGFloat = 120
+  private static let glowColor = Color(red: 0.47, green: 0.55, blue: 0.85)
+
+  var body: some View {
+    VStack(spacing: 9) {
+      ZStack {
+        // Soft static halo (animated shadows are expensive).
+        Circle()
+          .fill(Self.glowColor.opacity(0.20 * 0.55))
+          .frame(width: Self.diameter * 1.45, height: Self.diameter * 1.45)
+
+        CoreGradientBackground(allowsMotion: allowsMotion)
+          .frame(width: Self.diameter, height: Self.diameter)
+          .clipShape(Circle())
+          .overlay(Circle().strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
+          .shadow(color: Self.glowColor.opacity(0.18), radius: Self.diameter * 0.45)
+
+        PulseCoreStaticForeground(pulse: pulse)
+          .equatable()
+        if pulse.statless {
+          PulseCoreTwinkle()
+        }
+      }
+      if !pulse.statless {
+        PulseCoreCaption(pulse: pulse)
+          .equatable()
+      }
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(accessibilityLabel)
+  }
+
+  private var accessibilityLabel: String {
+    if pulse.statless {
+      return "People are vibing on the network today"
+    }
+    guard let today = pulse.today else {
+      return "Network pulse"
+    }
+    var parts = ["Across the network today"]
+    parts.append("plus \(today.insertions), minus \(today.deletions) lines")
+    parts.append("\(today.contributors) people vibing")
+    if let lap = today.lap, lap > 1.0 {
+      parts.append(String(format: "%.1f× the network's typical day", lap))
+    }
+    return parts.joined(separator: ", ")
+  }
+}
+
+// Disk chrome that does not depend on the animation clock.
+private struct PulseCoreStaticForeground: View, Equatable {
+  var pulse: NetworkPulse
+
+  @Environment(\.feedTextScale) private var textScale
+  @Environment(\.colorScheme) private var colorScheme
+
+  private static let diameter: CGFloat = 120
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.pulse == rhs.pulse
+  }
 
   private var meter: ChurnMeter? {
     guard let today = pulse.today else { return nil }
@@ -131,36 +153,9 @@ struct PulseCore: View {
   }
 
   var body: some View {
-    VStack(spacing: 9) {
-      globe(at: animationDate)
-      if !pulse.statless { caption }
-    }
-    .opacity(breathOpacity(at: animationDate))
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(accessibilityLabel)
-  }
-
-  // MARK: globe
-
-  @ViewBuilder
-  private func globe(at date: Date) -> some View {
     let d = Self.diameter
     ZStack {
-      // Animated multi-color gradient core (see CoreGradientBackground): a
-      // slowly-shifting rainbow-minus-green sheen tuned per color scheme.
-      CoreGradientBackground(date: date, reduceMotion: reduceMotion)
-        .frame(width: d, height: d)
-        .clipShape(Circle())
-        .overlay(Circle().strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
-        .shadow(color: Color(red: 0.47, green: 0.55, blue: 0.85).opacity(glowOpacity(at: date)),
-          radius: d * 0.5)
-
-      if pulse.statless {
-        twinklingDots(at: date)
-      } else if pulse.history.count >= 2 {
-        // Sparkline spans the full width at the circle's widest point, so the
-        // ends taper into the curve; "14 days" sits just below it. Needs >= 2
-        // points or the line (and its label) would float over blank space.
+      if !pulse.statless, pulse.history.count >= 2 {
         ZStack {
           PulseSparkline(history: pulse.history)
             .frame(width: d, height: d * 0.34)
@@ -194,21 +189,36 @@ struct PulseCore: View {
     }
   }
 
-  // A few slow-twinkling slate dots — the statless sign of life, no numbers.
-  private func twinklingDots(at date: Date) -> some View {
+  private var sparklineCaptionColor: Color {
+    colorScheme == .dark
+      ? Color.white.opacity(0.6)
+      : Color(red: 0.22, green: 0.31, blue: 0.45).opacity(0.82)
+  }
+}
+
+// Sign-of-life dots when the network is too small for stats.
+private struct PulseCoreTwinkle: View {
+  var body: some View {
     HStack(spacing: 9) {
-      ForEach(0..<3, id: \.self) { i in
+      ForEach(0..<3, id: \.self) { _ in
         Circle()
-          .fill(Color(red: 0.49, green: 0.54, blue: 0.63))
+          .fill(Color(red: 0.49, green: 0.54, blue: 0.63).opacity(0.5))
           .frame(width: 11, height: 11)
-          .opacity(twinkle(at: date, phase: Double(i)))
       }
     }
   }
+}
 
-  // MARK: caption
+private struct PulseCoreCaption: View, Equatable {
+  var pulse: NetworkPulse
 
-  private var caption: some View {
+  @Environment(\.feedTextScale) private var textScale
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.pulse == rhs.pulse
+  }
+
+  var body: some View {
     VStack(spacing: 2) {
       Text("across vibes · today")
         .font(.system(size: 9.5 * textScale, weight: .semibold))
@@ -228,48 +238,6 @@ struct PulseCore: View {
           .foregroundStyle(Color.secondary)
       }
     }
-  }
-
-  // MARK: motion (all paused under reduceMotion)
-
-  private func breathOpacity(at date: Date) -> Double {
-    guard !reduceMotion else { return 0.96 }
-    let t = date.timeIntervalSinceReferenceDate
-    return 0.92 + 0.06 * (sin(t * 2 * .pi / 9.0) * 0.5 + 0.5)
-  }
-
-  private func glowOpacity(at date: Date) -> Double {
-    guard !reduceMotion else { return 0.20 }
-    let t = date.timeIntervalSinceReferenceDate
-    return 0.16 + 0.14 * (sin(t * 2 * .pi / 4.5) * 0.5 + 0.5)
-  }
-
-  private func twinkle(at date: Date, phase: Double) -> Double {
-    guard !reduceMotion else { return 0.5 }
-    let t = date.timeIntervalSinceReferenceDate
-    return 0.3 + 0.4 * (sin(t * 2 * .pi / 3.0 + phase) * 0.5 + 0.5)
-  }
-
-  private var sparklineCaptionColor: Color {
-    colorScheme == .dark
-      ? Color.white.opacity(0.6)
-      : Color(red: 0.22, green: 0.31, blue: 0.45).opacity(0.82)
-  }
-
-  private var accessibilityLabel: String {
-    if pulse.statless {
-      return "People are vibing on the network today"
-    }
-    guard let today = pulse.today else {
-      return "Network pulse"
-    }
-    var parts = ["Across the network today"]
-    parts.append("plus \(today.insertions), minus \(today.deletions) lines")
-    parts.append("\(today.contributors) people vibing")
-    if let lapLabel {
-      parts.append("\(lapLabel) the network's typical day")
-    }
-    return parts.joined(separator: ", ")
   }
 }
 
@@ -526,13 +494,13 @@ private func previewPulse(
 }
 
 #Preview("PulseCore — lapped") {
-  PulseCore(pulse: previewPulse(), animationDate: .now)
+  PulseCore(pulse: previewPulse())
     .frame(width: 280, height: 280)
     .background(Color.black)
 }
 
 #Preview("PulseCore — statless") {
-  PulseCore(pulse: previewPulse(statless: true), animationDate: .now)
+  PulseCore(pulse: previewPulse(statless: true))
     .frame(width: 280, height: 280)
     .background(Color.black)
 }
