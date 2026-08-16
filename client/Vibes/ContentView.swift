@@ -60,6 +60,22 @@ private struct SetupPanel: View {
     VStack(alignment: .leading, spacing: 24) {
       Header(title: "vibes")
 
+      // Not a fresh install: there's a config on disk this build can't read
+      // (most often an older Vibes binary launched by mistake). Say so, since
+      // otherwise setup looks like a first launch and quietly replaces it.
+      if model.configUnreadable {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Your settings couldn't be read.")
+            .font(.title3.weight(.light))
+          Text(
+            "Vibes found an existing config it can't open — check you're running the latest version before setting up again. Your old file is kept as config.json.bak-1 next to it."
+          )
+            .font(.subheadline)
+            .foregroundStyle(Color.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+
       // An invite arrived before sign-in — via the clipboard handoff from the
       // invite page or a vibes://invite deep link. Registration below accepts
       // it automatically (AppModel.install), so the banner promises that.

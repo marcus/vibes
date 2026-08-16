@@ -10,10 +10,21 @@ struct ConfigStore {
     configURL = base.appendingPathComponent("Vibes", isDirectory: true).appendingPathComponent("config.json")
   }
 
+  // Escape hatch for exercising load/save/backup against a scratch directory.
+  init(configURL: URL) {
+    self.configURL = configURL
+  }
+
   func load() throws -> VibesConfig? {
     guard FileManager.default.fileExists(atPath: configURL.path) else { return nil }
     let data = try Data(contentsOf: configURL)
-    return try JSONCoding.decoder.decode(VibesConfig.self, from: data)
+    do {
+      return try JSONCoding.decoder.decode(VibesConfig.self, from: data)
+    } catch {
+      // A bare DecodingError.localizedDescription is "The data couldn't be read
+      // because it is missing." — true and useless. Name the file and the key.
+      throw ConfigStoreError.unreadable(url: configURL, underlying: error)
+    }
   }
 
   func save(_ config: VibesConfig) throws {
@@ -21,8 +32,29 @@ struct ConfigStore {
       at: configURL.deletingLastPathComponent(),
       withIntermediateDirectories: true
     )
+    // An unreadable config still holds the user's repos and sharing settings.
+    // Setting up again would overwrite it with first-launch defaults, so keep a
+    // copy first: an old binary or a truncated write becomes recoverable
+    // instead of silent data loss.
+    backupUnreadableConfig()
     let data = try JSONCoding.encoder.encode(config)
     try data.write(to: configURL, options: [.atomic])
+  }
+
+  // Returns the backup path when one was made. Best-effort by contract: a
+  // failure here must not block the user from finishing setup.
+  @discardableResult
+  func backupUnreadableConfig() -> URL? {
+    guard FileManager.default.fileExists(atPath: configURL.path) else { return nil }
+    guard (try? load()) == nil else { return nil }
+    let base = configURL.deletingLastPathComponent()
+    for index in 1...99 {
+      let candidate = base.appendingPathComponent("config.json.bak-\(index)")
+      guard !FileManager.default.fileExists(atPath: candidate.path) else { continue }
+      guard (try? FileManager.default.moveItem(at: configURL, to: candidate)) != nil else { return nil }
+      return candidate
+    }
+    return nil
   }
 
   func importConfig(from url: URL) throws -> ImportedConfig {
@@ -36,6 +68,48 @@ struct ConfigStore {
       config.device.label = Host.current().localizedName ?? "Mac"
     }
     return ImportedConfig(config: config, token: imported.token)
+  }
+}
+
+// Config on disk exists but won't decode — usually an older Vibes binary
+// reading a newer config, or a partial write. Distinct from "no config yet" so
+// the UI can say so instead of looking like a fresh install.
+enum ConfigStoreError: LocalizedError {
+  case unreadable(url: URL, underlying: Error)
+
+  var errorDescription: String? {
+    switch self {
+    case let .unreadable(url, underlying):
+      "Couldn't read config at \(url.path): \(Self.detail(underlying))"
+    }
+  }
+
+  private static func detail(_ error: Error) -> String {
+    guard let decoding = error as? DecodingError else { return error.localizedDescription }
+    switch decoding {
+    case let .keyNotFound(key, context):
+      return "missing key \"\(key.stringValue)\"\(Self.at(context))"
+    case let .valueNotFound(_, context):
+      return "null value\(Self.at(context))"
+    case let .typeMismatch(type, context):
+      return "expected \(type)\(Self.at(context))"
+    case let .dataCorrupted(context):
+      return "\(context.debugDescription)\(Self.at(context))"
+    @unknown default:
+      return error.localizedDescription
+    }
+  }
+
+  // "repos[0].id" rather than Foundation's "repos.Index 0.id".
+  private static func at(_ context: DecodingError.Context) -> String {
+    let path = context.codingPath.reduce(into: "") { path, key in
+      if let index = key.intValue {
+        path += "[\(index)]"
+      } else {
+        path += path.isEmpty ? key.stringValue : ".\(key.stringValue)"
+      }
+    }
+    return path.isEmpty ? "" : " at \(path)"
   }
 }
 

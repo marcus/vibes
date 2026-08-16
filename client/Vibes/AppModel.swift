@@ -73,6 +73,9 @@ final class AppModel: ObservableObject {
   @Published var gradientStart: Color = Color(hex: "#E05420") ?? .orange
   @Published var gradientEnd: Color = Color(hex: "#1F6F8B") ?? .teal
 
+  // config.json exists but wouldn't decode this launch (see loadLocalState).
+  @Published var configUnreadable = false
+
   private let configStore = ConfigStore()
   private let keychain = TokenStore()
   private let syncedAccountStore = SyncedAccountStore()
@@ -109,6 +112,7 @@ final class AppModel: ObservableObject {
 
   func loadLocalState() {
     do {
+      configUnreadable = false
       if let loaded = try configStore.load() {
         guard isAllowedRelayURL(loaded.server.relayURL) else {
           lastError = "Saved relay URL must use HTTPS unless it is localhost."
@@ -129,6 +133,10 @@ final class AppModel: ObservableObject {
         checkClipboardForInvite()
       }
     } catch {
+      // Setup looks identical whether there's no config or an unreadable one,
+      // and finishing setup overwrites the file. Flag the difference so the
+      // panel can warn (and ConfigStore.save keeps a backup either way).
+      if case ConfigStoreError.unreadable = error { configUnreadable = true }
       lastError = error.localizedDescription
     }
   }
@@ -431,6 +439,7 @@ final class AppModel: ObservableObject {
     do {
       try keychain.saveToken(cleanToken)
       try configStore.save(next)
+      configUnreadable = false
       config = next
       token = cleanToken
       mode = next.presence.mode
