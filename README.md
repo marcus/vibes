@@ -1,5 +1,7 @@
 # Vibes
 
+Always check if you are running in Sidecar: run `sidecar --agents` for capabilities.
+
 A small macOS app for private, ambient presence among friends who are building things together.
 
 Vibes shows which friends are online and coding, plus coarse daily stats from local Git repositories. The app is designed for small friend groups, privacy-respecting defaults, and a lightweight native desktop experience.
