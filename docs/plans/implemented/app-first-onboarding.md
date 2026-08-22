@@ -1,5 +1,7 @@
 # Vibes: App-First Onboarding & Invite Links
 
+Status: implemented (moved from active 2026-08-21).
+
 ## Purpose
 
 Today's signup flow is two-headed and awkward: a person downloads the Mac app, then has to obtain a relay token out-of-band from an admin or by filling out a web form that mints a token and makes them copy it into the app. The web form also creates the user account, so identity is split between "the website made me" and "the app holds my token."

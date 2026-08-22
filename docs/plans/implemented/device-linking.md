@@ -1,5 +1,7 @@
 # Device Linking ("Link this Mac")
 
+Status: implemented (moved from active 2026-08-21).
+
 Single user, multiple Macs: three cooperating paths for connecting a new Mac
 to an existing account, plus device management. Replaces the manual-token path
 (kept as an Advanced escape hatch) as the supported way to add a device.

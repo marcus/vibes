@@ -1,5 +1,7 @@
 # Vibes: Server Admin Plan v1
 
+Status: implemented (moved from active 2026-08-21).
+
 ## Purpose
 
 The relay can create users, invites, tokens, statuses, and friendships through the API and a small CLI, but there is no way to *operate* it from a browser: no way to see who exists, watch open invites, hand someone an initial invite link, or clean up a bad account. This plan adds a password-gated admin area to the SvelteKit relay for a single superuser, plus the session plumbing it needs.

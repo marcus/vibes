@@ -1,6 +1,12 @@
 # macOS 26 + Liquid Glass Migration
 
-**Status:** Active — not started
+**Status:** Mostly implemented (2026-08-21). Phases 0–3 and 5 are done:
+deployment target is 26.0, Aurora II (`VibeColor`, custom button styles) is
+fully retired, glass controls / resizable window / scroll edges are in, and
+release plumbing emits `minimumSystemVersion` 26.0 with an SDK ≥ 26 preflight
+check. The only open item is **Phase 4 (Icon Composer `.icon`)**, which this
+plan itself marks deferrable — the app still ships the build-time generated
+appiconset. Phase 6 verification was performed for shipped releases (0.10.x).
 **Created:** 2026-06-10
 **Targets:** `client/` (Vibes.xcodeproj), release scripts, appcast, web download page
 

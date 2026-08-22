@@ -1,5 +1,7 @@
 # Native Settings Window and Friend Invite UI
 
+Status: implemented (moved from active 2026-08-21).
+
 ## Goal
 
 Make Vibes feel like a normal, well-behaved Mac app:

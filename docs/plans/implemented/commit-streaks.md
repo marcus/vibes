@@ -1,6 +1,10 @@
 # Vibes: Commit Streaks
 
-Status: proposed.
+Status: implemented (moved from active 2026-08-21). Migration 8 added
+`daily_activity.commits`; `commitStreak` feeds the gated top-level
+`commit_streak` field; the contract fixture, client model, and the
+`FriendCard` "N day streak" label are all live. The optional `OrbitView`
+rendering path was not needed and was not built.
 
 ## Purpose
 

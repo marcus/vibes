@@ -7,6 +7,14 @@ and ordinary server access data is intentional. This is a point-in-time review
 of the public repository, shipping macOS artifact, live relay at
 `vibes.opentangle.com`, and host configuration.
 
+**Status update 2026-08-21:** still open — no launch-gate work has landed
+since the audit. Repository-verifiable evidence: `server/package-lock.json`
+still pins `@sveltejs/kit` 2.63.0 (P0.4), `POST /api/users` still exists and
+creates users unauthenticated (P0.3), and no backup tooling appears in
+`scripts/deploy-server.sh` or `deploy/` (P0.2). P0.1 (host OS / non-root /
+permissions) is not verifiable from the repository. Only privacy-copy commits
+(`f1fcc01`, `1aec6f6`, `e9bf310`, `3b9719e`) and release/perf work have landed.
+
 ## Recommendation
 
 Do not send broad public traffic yet. The privacy mismatch found in the original

@@ -1,6 +1,6 @@
 # Vibes: Multi-Device Aggregation & Timezones
 
-Status: implemented.
+Status: implemented (moved from active 2026-08-21; migration 3 `user_timezone`).
 
 ## Purpose
 

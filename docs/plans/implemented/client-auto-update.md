@@ -1,5 +1,7 @@
 # Vibes macOS auto-update plan
 
+Status: implemented (moved from active 2026-08-21).
+
 ## Decision
 
 Use Sparkle 2 for the Vibes macOS app. Vibes will never ship through the Mac App Store, and Sparkle is the standard path for a native macOS app distributed directly from a website or GitHub Releases. It gives Vibes a familiar "Check for Updates..." flow, optional background checks, EdDSA-signed update archives, appcast feeds, delta updates, and compatibility with Developer ID signed/notarized apps.
