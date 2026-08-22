@@ -82,6 +82,18 @@ final class AppModel: ObservableObject {
   private let scanner = GitScanner()
   private var loopTask: Task<Void, Never>?
 
+  // DEMO MODE (DEBUG only, VIBES_DEMO_FEED=1): a configured-looking app fed
+  // entirely by SampleFeed so a demo instance can run beside production
+  // without touching the real account. Skips config.json and Keychain reads,
+  // never writes either, makes every relay path a no-op, and never starts the
+  // background loop. Strip-out point alongside SampleFeed.swift.
+  #if DEBUG
+  private let isDemoFeed =
+    ProcessInfo.processInfo.environment["VIBES_DEMO_FEED"] == "1"
+  #else
+  private let isDemoFeed = false
+  #endif
+
   // Sender-side providers for the optional cards. Internal (not private) so
   // the sharing settings pane can observe provider problems (e.g. a denied
   // location prompt) next to the toggles.
@@ -99,7 +111,7 @@ final class AppModel: ObservableObject {
   static let defaultRelayURL = URL(string: "https://vibes.opentangle.com")!
 
   var isConfigured: Bool {
-    config != nil && !token.isEmpty
+    isDemoFeed || (config != nil && !token.isEmpty)
   }
 
   var configPath: String {
@@ -107,6 +119,16 @@ final class AppModel: ObservableObject {
   }
 
   init() {
+    // DEMO MODE: skip loadLocalState entirely — no config.json read, no
+    // Keychain read, no iCloud-account recheck, no clipboard invite sniffing,
+    // no background loop. Just the sample sky.
+    if isDemoFeed {
+      mode = .online
+      #if DEBUG
+      feed = SampleFeed.feedResponse()
+      #endif
+      return
+    }
     loadLocalState()
   }
 
@@ -568,6 +590,11 @@ final class AppModel: ObservableObject {
 
     switch host {
     case "invite":
+      // Repeat delivery of an already-pending invite is a no-op: one event
+      // can reach both scene receivers (WidgetModeCoordinator.deliverDeepLink),
+      // and re-setting pendingInvite would blank the presented sheet's
+      // inviter name while its lookup re-fires.
+      guard pendingInvite?.code != code else { break }
       pendingInvite = PendingInvite(code: code)
       inviteCodeInput = code
       successMessage = nil
@@ -643,6 +670,8 @@ final class AppModel: ObservableObject {
   }
 
   func scanPublishAndFetch() async {
+    // DEMO MODE: never scan, publish, or fetch.
+    if isDemoFeed { return }
     guard let config, isConfigured else { return }
     isBusy = true
     lastError = nil
@@ -1063,6 +1092,8 @@ final class AppModel: ObservableObject {
   }
 
   func publishOfflineForQuit() async {
+    // DEMO MODE: quit is silent, like the rest of the relay path.
+    if isDemoFeed { return }
     guard let config, isConfigured else { return }
     do {
       let payload = currentSnapshotPayload(config: config, mode: .offline, now: Date())

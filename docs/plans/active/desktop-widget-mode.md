@@ -84,17 +84,16 @@ plan matches reality:
   under opaque windows reports `.visible` occlusion — and thus what
   `WindowAnimationVisibilityReader` would decide on its own — is not worth
   depending on either way; widget mode overrides it explicitly.)
-- **Click-through widget with a fixed v1 frame.** The widget window sets
-  `ignoresMouseEvents = true`: clicks fall through to whatever is beneath
-  (wallpaper, desktop icons). All interaction — restore, settings, mode
-  toggle — happens through the Dock, the menu bar extra, or the restored
-  main window. The frame defaults to centered in the main display at the
-  current default window size and is remembered via
-  `setFrameAutosaveName("widget")`; placement UX (dragging a click-through
-  window needs an affordance that doesn't exist yet) is deferred as a
-  follow-up. Verify SwiftUI's own per-scene frame restoration doesn't
-  clobber the autosave name — pick whichever persistence wins and drop the
-  other.
+- **Drag-anywhere widget (supersedes the v1 click-through decision).**
+  Originally the window set `ignoresMouseEvents = true` (clicks fell through
+  to whatever was beneath) with a fixed frame; after hands-on use the user
+  asked to reposition it instead. The window is now `isMovableByWindowBackground
+  = true` and receives events, so clicking any part of the sky — orbs and
+  labels included; none are interactive in widget mode — drags the whole
+  window. The sky has no buttons or gestures (orb-label hover/tooltip
+  affordances install no mouse-down handlers), so nothing blocks background
+  drags. The frame still persists via `setFrameAutosaveName("widget")`, so a
+  dragged position survives relaunches.
 - **Restore semantics — one entry point, many triggers.** Dock icon click
   (via `applicationShouldHandleReopen`), the dock menu's "Show Main
   Window", the menu bar's items, and the *existing* "Show Vibes" /
@@ -153,13 +152,18 @@ plan matches reality:
    full-bleed with no chrome, no sheets, no invite line.
 2. **Widget window scene + backmost configuration.**
    `Window(id: "widget")` in `VibesApp.body`, sharing the model. A small
-   `NSViewRepresentable` (sibling of `TrafficLightAligner`) configures the
-   backing `NSWindow` when it appears: `isOpaque = false`,
-   `backgroundColor = .clear`, `hasShadow = false`, level +
-   `collectionBehavior` per the layer decision, `ignoresMouseEvents`,
-   `setFrameAutosaveName("widget")`, `standardWindowButton` visibility
-   moot (no titlebar). Reapply on `updateNSView` since AppKit resets
-   properties on style changes.
+    `NSViewRepresentable` (sibling of `TrafficLightAligner`) configures the
+    backing `NSWindow` when it appears: `isOpaque = false`,
+    `backgroundColor = .clear`, `hasShadow = false`, level +
+    `collectionBehavior` per the layer decision, drag-anywhere via
+    `isMovableByWindowBackground` (supersedes the original
+    `ignoresMouseEvents`; see the settled decisions), and lightless chrome —
+    `.hiddenTitleBar` alone still leaves macOS 26 floating traffic lights and
+    a hairline titlebar backdrop, so also hide all three
+    `standardWindowButton`s, set `titlebarAppearsTransparent`, and
+    `titlebarSeparatorStyle = .none`. Plus `setFrameAutosaveName("widget")`
+    for position persistence. Reapply on `updateNSView` since AppKit resets
+    properties on style changes.
 3. **Mode state machine.** `widgetMode` preference + enter/exit transitions
    owned by a small coordinator object shared by both scenes and
    AppDelegate (same pattern as `AppDelegate.model`). Programmatic closing:
