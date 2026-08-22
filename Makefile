@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: check client server server-dev server-build server-check app-icon deploy mac-preflight mac-release mac-publish
+.PHONY: check client server server-dev server-build server-check app-icon deploy mac-bump mac-preflight mac-release mac-publish mac-finish
 
 check: server-check client
 
@@ -26,8 +26,15 @@ app-icon:
 deploy:
 	./scripts/deploy-server.sh
 
-# Cheap readiness check (credentials, version sync, EdDSA↔SUPublicEDKey match).
-# Run any time without building anything.
+# Step 1: bump the version everywhere it lives (project.pbxproj x4, .env.release)
+# and scaffold the release notes. BUILD defaults to last published + 1.
+#   make mac-bump VERSION=0.12.0 [BUILD=30]
+mac-bump:
+	@test -n "$(VERSION)" || (echo "usage: make mac-bump VERSION=0.12.0 [BUILD=30]" >&2; exit 1)
+	./scripts/bump-version.sh "$(VERSION)" $(BUILD)
+
+# Cheap readiness check (credentials, version sync, build-number advance,
+# EdDSA↔SUPublicEDKey match). Run any time without building anything.
 mac-preflight:
 	scripts/preflight-release.sh
 
@@ -43,3 +50,8 @@ mac-release:
 mac-publish:
 	scripts/generate-appcast.sh
 	VIBES_BUILD_DMG=1 scripts/publish-mac-release.sh
+
+# Final step, after a successful mac-release: commit the regenerated appcast,
+# tag the commit that shipped as v<version>, and push both.
+mac-finish:
+	scripts/finish-release.sh

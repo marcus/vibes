@@ -8,6 +8,8 @@ set -euo pipefail
 # Checks, in order of how expensive the failure is to discover late:
 #   1. Required release env vars are set.
 #   2. VIBES_RELEASE_VERSION matches the project's MARKETING_VERSION.
+#   2a. VIBES_BUILD_NUMBER exceeds every already-published build, and the
+#       version is not one that has already shipped.
 #   2b. The active macOS SDK is >= 26 (the app's deployment target).
 #   3. Release notes exist for the version.
 #   4. Developer ID code-signing identity is in the keychain.
@@ -66,6 +68,36 @@ project_mv="$(xcodebuild -project "${PROJECT}" -scheme "${SCHEME}" \
   "VIBES_RELEASE_VERSION (${VIBES_RELEASE_VERSION}) != project MARKETING_VERSION (${project_mv}). Bump the project first."
 [[ "${VIBES_BUILD_NUMBER}" =~ ^[0-9]+$ ]] || die "VIBES_BUILD_NUMBER must be a positive integer."
 ok "version ${VIBES_RELEASE_VERSION} (build ${VIBES_BUILD_NUMBER}) matches the project"
+
+# --- 2a. Build number advances past everything published --------------------
+# Sparkle offers an update only when <sparkle:version> (the BUILD number, not
+# the marketing version) is greater than the installed one. Ship a build number
+# that does not advance and every step below still passes, the upload succeeds,
+# the smoke checks pass — and no user is ever offered the update. Nothing else
+# in the pipeline can detect that, so it is caught here.
+last_build="$("${SCRIPT_DIR}/last-published-build.sh" 2>/dev/null || echo 0)"
+if [[ "${last_build}" =~ ^[0-9]+$ ]] && (( last_build > 0 )); then
+  if (( VIBES_BUILD_NUMBER <= last_build )); then
+    die "VIBES_BUILD_NUMBER (${VIBES_BUILD_NUMBER}) does not exceed the last published build (${last_build}).
+Sparkle compares build numbers, so this release would publish successfully and
+then be offered to nobody. Bump to $(( last_build + 1 )) or higher:
+  scripts/bump-version.sh ${VIBES_RELEASE_VERSION} $(( last_build + 1 ))"
+  fi
+  ok "build ${VIBES_BUILD_NUMBER} exceeds last published build (${last_build})"
+else
+  ok "build ${VIBES_BUILD_NUMBER} (no prior published build found)"
+fi
+
+# A marketing version that already shipped cannot be re-released: the server
+# refuses to overwrite immutable versioned artifacts, so this would fail late,
+# after the archive and both notarizations.
+LOCAL_APPCAST="release/appcast/appcast.xml"
+if [[ -f "${LOCAL_APPCAST}" ]] && \
+   grep -qF "<sparkle:shortVersionString>${VIBES_RELEASE_VERSION}</sparkle:shortVersionString>" "${LOCAL_APPCAST}"; then
+  die "version ${VIBES_RELEASE_VERSION} already appears in ${LOCAL_APPCAST}.
+Published versioned artifacts are immutable on the server — pick a new version:
+  scripts/bump-version.sh <next-version>"
+fi
 
 # --- 2b. Build SDK is recent enough ----------------------------------------
 # The app deploys to macOS 26.0, so it must be built against the macOS 26 SDK
@@ -146,5 +178,20 @@ if [[ "${derived_pub}" != "${expected_pub}" ]]; then
 Use the original key whose public half is ${expected_pub}. If lost, you cannot ship verifiable updates to existing users."
 fi
 ok "EdDSA key matches SUPublicEDKey (${key_source})"
+
+# --- 7. Provenance: the shipped binary should match a commit ----------------
+# A warning, not a failure: a dirty tree still builds a correct app, but the
+# release tag will not describe what users actually run, which is exactly the
+# thing you need when a released build misbehaves.
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  dirty="$(git status --porcelain -- client/ release/release-notes/ 2>/dev/null || true)"
+  if [[ -n "${dirty}" ]]; then
+    echo "  ! uncommitted changes under client/ or release/release-notes/ — the release tag will not match the shipped binary:" >&2
+    printf '%s\n' "${dirty}" | sed 's/^/      /' >&2
+    echo "    Commit before releasing (scripts/bump-version.sh prints the prepare commit)." >&2
+  else
+    ok "working tree clean (client/, release notes)"
+  fi
+fi
 
 note "Preflight passed — safe to build and publish ${VIBES_RELEASE_VERSION} (build ${VIBES_BUILD_NUMBER})."

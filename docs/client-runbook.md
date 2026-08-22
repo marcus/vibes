@@ -163,22 +163,23 @@ Copy `.env.release.example` to `.env.release` (gitignored) and fill it in. Team 
 
 ### Local release sequence
 
+First time on a machine: `cp .env.release.example .env.release` and fill it in (gitignored).
+
 ```bash
-open client/Vibes.xcodeproj
-# Bump MARKETING_VERSION and CURRENT_PROJECT_VERSION in the Vibes target.
+make mac-bump VERSION=0.12.0    # or: make mac-bump VERSION=0.12.0 BUILD=30
+$EDITOR release/release-notes/0.12.0.md
+git add client/Vibes.xcodeproj/project.pbxproj release/release-notes/0.12.0.md
+git commit -m "chore: prepare Vibes 0.12.0 release"
 
-$EDITOR release/release-notes/<version>.md
-
-cp .env.release.example .env.release
-$EDITOR .env.release
-# Set VIBES_RELEASE_VERSION=<version>
-# Set VIBES_BUILD_NUMBER=<integer greater than the previous public build>
-# Confirm VIBES_APPCAST_BASE_URL=https://vibes.opentangle.com/downloads
-
-make mac-release
+make mac-release                # build, sign, notarize, publish
+make mac-finish                 # commit the appcast, tag v0.12.0, push
 ```
 
-Before building anything, `release-mac.sh` runs **`scripts/preflight-release.sh`**, which fails fast (milliseconds) if any of these are wrong: required env vars, `VIBES_RELEASE_VERSION` vs the project's `MARKETING_VERSION`, the release-notes file, the Developer ID signing identity in the keychain, the notarytool profile, and — critically — that the EdDSA signing key's public half equals the app's `SUPublicEDKey` (signing with the wrong key ships an update every installed app rejects). Run `make mac-preflight` any time to check readiness without building.
+`make mac-bump` sets the version in all four places it lives — `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in *both* project configurations, plus `VIBES_RELEASE_VERSION`/`VIBES_BUILD_NUMBER` in `.env.release` — and scaffolds the release-notes file. Omit `BUILD` and it uses the last published build + 1. Editing those by hand is what a partial bump is made of; use the target.
+
+Before building anything, `release-mac.sh` runs **`scripts/preflight-release.sh`**, which fails fast (milliseconds) if any of these are wrong: required env vars, `VIBES_RELEASE_VERSION` vs the project's `MARKETING_VERSION`, **that `VIBES_BUILD_NUMBER` exceeds every published build and the version has not already shipped**, the macOS SDK, the release-notes file, the Developer ID signing identity in the keychain, the notarytool profile, and — critically — that the EdDSA signing key's public half equals the app's `SUPublicEDKey` (signing with the wrong key ships an update every installed app rejects). It also warns if `client/` has uncommitted changes, since the release tag would then not describe the shipped binary. Run `make mac-preflight` any time to check readiness without building.
+
+The build-number gate matters more than it looks: **Sparkle compares `<sparkle:version>` (the build number), not the marketing version.** A release whose build number does not advance builds, notarizes, uploads, and passes every smoke check — and is then offered to nobody. `scripts/last-published-build.sh` is the oracle (local appcast + the live feed); run it standalone any time.
 
 If a step *after* the build fails (e.g. appcast signing or upload), don't rerun the whole thing — the build artifacts are already notarized. Resume with **`make mac-publish`**, which only signs the staged appcast and publishes.
 
@@ -188,11 +189,14 @@ If a step *after* the build fails (e.g. appcast signing or upload), don't rerun 
 
 `scripts/publish-mac-release.sh` requires `.env.deploy` plus `.env.release`, including an explicit `DEPLOY_USER`. It uploads to `${DEPLOY_PATH}/releases`, refuses to overwrite existing versioned artifacts with different content, atomically repoints `/downloads/Vibes.dmg`, writes and uploads `build/latest.json` to `/downloads/latest.json`, uploads `/downloads/SHA256SUMS`, and smoke-checks the public URLs.
 
+`scripts/finish-release.sh` (`make mac-finish`) closes the loop: it verifies the live appcast really lists the version, commits the regenerated `release/appcast/appcast.xml`, tags the shipping commit `v<version>`, and pushes both. Every shipped version is tagged — `git tag --sort=v:refname` lists them, and `git show v0.10.5` gets you the exact source a user is running. It refuses to move an existing tag: released versions are immutable.
+
 After `make mac-release` succeeds:
 
-1. Open `https://vibes.opentangle.com/download`.
-2. Download and install the DMG into `/Applications`.
-3. Run old-version-to-new-version Sparkle QA before announcing the release.
+1. `make mac-finish` to commit the appcast and tag the release.
+2. Open `https://vibes.opentangle.com/download`.
+3. Download and install the DMG into `/Applications`.
+4. Run old-version-to-new-version Sparkle QA before announcing the release.
 
 See [release/README.md](../release/README.md) and the [server runbook](server-runbook.md#auto-update-channel) for the public URL model, remote layout, and rollback commands.
 
