@@ -106,17 +106,19 @@
 
 <div class="panel" id="panel">
   <div class="row"><span class="title">Hero flow</span><span class="fps" id="fps">— fps</span></div>
-  <label>Speed<input type="range" id="r-speed" min="0" max="200" value="1" /><span class="val" id="v-speed">0.01</span></label>
-  <label>Turbulence<input type="range" id="r-turb" min="0" max="200" value="42" /><span class="val" id="v-turb">0.42</span></label>
-  <label>Parallax<input type="range" id="r-par" min="0" max="200" value="25" /><span class="val" id="v-par">0.25</span></label>
-  <label>Glow<input type="range" id="r-glow" min="30" max="220" value="61" /><span class="val" id="v-glow">0.61</span></label>
-  <label>Warmth<input type="range" id="r-warm" min="0" max="200" value="50" /><span class="val" id="v-warm">0.50</span></label>
-  <label>Edge soft<input type="range" id="r-soft" min="40" max="180" value="85" /><span class="val" id="v-soft">0.85</span></label>
-  <label>Mgn top<input type="range" id="r-mtop" min="0" max="45" value="10" /><span class="val" id="v-mtop">0.10</span></label>
-  <label>Mgn bot<input type="range" id="r-mbot" min="0" max="45" value="10" /><span class="val" id="v-mbot">0.10</span></label>
-  <label>Band min<input type="range" id="r-wmin" min="10" max="150" value="60" /><span class="val" id="v-wmin">0.60</span></label>
-  <label>Band max<input type="range" id="r-wmax" min="50" max="300" value="160" /><span class="val" id="v-wmax">1.60</span></label>
-  <label>Band curve<input type="range" id="r-wbias" min="20" max="300" value="100" /><span class="val" id="v-wbias">1.00</span></label>
+  <label>Speed<input type="range" id="r-speed" min="0" max="200" value="5" /><span class="val" id="v-speed">0.05</span></label>
+  <label>Turbulence<input type="range" id="r-turb" min="0" max="200" value="36" /><span class="val" id="v-turb">0.36</span></label>
+  <label>Parallax<input type="range" id="r-par" min="0" max="200" value="57" /><span class="val" id="v-par">0.57</span></label>
+  <label>Glow<input type="range" id="r-glow" min="30" max="220" value="69" /><span class="val" id="v-glow">0.69</span></label>
+  <label>Opacity<input type="range" id="r-op" min="0" max="200" value="100" /><span class="val" id="v-op">1.00</span></label>
+  <label>Warmth<input type="range" id="r-warm" min="0" max="200" value="175" /><span class="val" id="v-warm">1.75</span></label>
+  <label>Edge soft<input type="range" id="r-soft" min="0" max="180" value="40" /><span class="val" id="v-soft">0.40</span></label>
+  <label>Bands<input type="range" id="r-count" min="1" max="14" step="1" value="7" /><span class="val" id="v-count">7</span></label>
+  <label>Mgn top<input type="range" id="r-mtop" min="0" max="45" value="40" /><span class="val" id="v-mtop">0.40</span></label>
+  <label>Mgn bot<input type="range" id="r-mbot" min="0" max="45" value="40" /><span class="val" id="v-mbot">0.40</span></label>
+  <label>Band min<input type="range" id="r-wmin" min="10" max="150" value="50" /><span class="val" id="v-wmin">0.50</span></label>
+  <label>Band max<input type="range" id="r-wmax" min="50" max="300" value="300" /><span class="val" id="v-wmax">3.00</span></label>
+  <label>Band curve<input type="range" id="r-wbias" min="20" max="300" value="72" /><span class="val" id="v-wbias">0.72</span></label>
   <div class="btns">
     <button type="button" id="b-theme">Theme</button>
     <button type="button" id="b-seed">Reseed</button>
@@ -144,17 +146,19 @@
   function onReducedChange(e) { reduced = e.matches; dirty = true; }
 
   const params = {
-    speed: num(store.speed, 0.01, 0, 2),
-    turb: num(store.turb, 0.42, 0, 2),
-    par: num(store.par, 0.25, 0, 2),
-    glow: num(store.glow, 0.61, 0.3, 2.2),
-    warm: num(store.warm, 0.5, 0, 2),
-    soft: num(store.soft, 0.85, 0.4, 1.8),
-    mtop: num(store.mtop, 0.10, 0, 0.45),
-    mbot: num(store.mbot, 0.10, 0, 0.45),
-    wmin: num(store.wmin, 0.60, 0.10, 1.50),
-    wmax: num(store.wmax, 1.60, 0.50, 3.00),
-    wbias: num(store.wbias, 1.00, 0.20, 3.00),
+    speed: num(store.speed, 0.05, 0, 2),
+    turb: num(store.turb, 0.36, 0, 2),
+    par: num(store.par, 0.57, 0, 2),
+    glow: num(store.glow, 0.69, 0.3, 2.2),
+    op: num(store.op, 1.00, 0, 2),
+    warm: num(store.warm, 1.75, 0, 2),
+    soft: num(store.soft, 0.40, 0, 1.8),
+    count: Math.round(num(store.count, 7, 1, 14)),
+    mtop: num(store.mtop, 0.40, 0, 0.45),
+    mbot: num(store.mbot, 0.40, 0, 0.45),
+    wmin: num(store.wmin, 0.50, 0.10, 1.50),
+    wmax: num(store.wmax, 3.00, 0.50, 3.00),
+    wbias: num(store.wbias, 0.72, 0.20, 3.00),
     light: qs.has('theme') ? qs.get('theme').toLowerCase() === 'light' : (store.light === true),
     paused: false,
     seed: num(store.seed, 7.31, 0, 100),
@@ -175,8 +179,10 @@ uniform float uTime;
 uniform vec2 uPar;
 uniform float uTurb;
 uniform float uGlow;
+uniform float uOp;
 uniform float uWarm;
 uniform float uSoft;
+uniform float uCount;
 uniform float uMT;
 uniform float uMB;
 uniform float uWMn;
@@ -185,7 +191,7 @@ uniform float uWB;
 uniform float uSeed;
 uniform float uLight;
 
-const int LAYERS = 7;
+const int MAX_LAYERS = 14;
 
 float hash(vec2 p){
   p = fract(p * vec2(127.1, 311.7) + uSeed);
@@ -245,9 +251,10 @@ void main(){
   vec3 wsum = vec3(0.0);
   float cov = 0.0;
 
-  for (int li = 0; li < LAYERS; li++) {
+  for (int li = 0; li < MAX_LAYERS; li++) {
+    if (float(li) >= uCount) break;
     float fi = float(li);
-    float dn = fi / float(LAYERS - 1);
+    float dn = fi / max(uCount - 1.0, 1.0);
 
     float seed = fi * 0.618 + floor(uSeed) * 0.113;
     float lt = t * mix(1.0, 0.42, dn);
@@ -283,8 +290,10 @@ void main(){
                 - cos(px * k2 - lt * 0.42 + seed * 27.3) * k2;
 
     float taper = 0.55 + 0.95 * vnoise(vec2(px * 1.7 + seed * 9.0, lt * 0.18));
-    float coreW = 0.0072 * bandW * mix(0.95, 1.65, dn) * taper * (0.7 + 0.6 * uTurb) * uSoft;
-    float haloW = coreW * mix(8.0, 13.0, dn) * mix(1.0, uSoft, 0.65);
+    // Epsilon floors keep gaussians well-defined when uSoft reaches 0
+    // (sharpest setting): thinnest possible cores, halos nearly gone.
+    float coreW = max(0.0072 * bandW * mix(0.95, 1.65, dn) * taper * (0.7 + 0.6 * uTurb) * uSoft, 1e-4);
+    float haloW = max(coreW * mix(8.0, 13.0, dn) * mix(1.0, uSoft, 0.65), 1e-4);
 
     float d = py - c;
     float gCore = exp(-d * d / (coreW * coreW));
@@ -298,16 +307,16 @@ void main(){
     float rl = dot(rc, vec3(0.299, 0.587, 0.114));
     rc = mix(vec3(rl), rc, 1.0 + 0.6 * uWarm);
 
-    float edgeComp = pow(clamp(uSoft, 0.4, 1.8), -0.3);
+    float edgeComp = pow(clamp(uSoft, 0.12, 1.8), -0.3);
     float haloGain = mix(0.185, 0.068, dn) * edgeComp;
     float coreGain = mix(0.80, 0.38, dn) * edgeComp;
 
     vec3 haloCol = rc * gHalo * haloGain * shimmer * spec * uGlow;
     vec3 coreCol = mix(rc, vec3(1.0), 0.24) * gCore * coreGain * shimmer * uGlow;
 
-    emissive += haloCol + coreCol;
+    emissive += (haloCol + coreCol) * uOp;
 
-    float wgt = gHalo * haloGain + gCore * coreGain;
+    float wgt = (gHalo * haloGain + gCore * coreGain) * uOp;
     vec3 inkCol = mix(rc * mix(0.9, 0.55, dn), mix(rc, vec3(1.0), 0.35), gCore * 0.6);
     wsum += inkCol * wgt * (shimmer * 0.6 + 0.5);
     cov += wgt * mix(1.0, 0.8, dn);
@@ -371,7 +380,7 @@ void main(){
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
   const U = {};
-  ['uRes', 'uTime', 'uPar', 'uTurb', 'uGlow', 'uWarm', 'uSoft', 'uMT', 'uMB', 'uWMn', 'uWMx', 'uWB', 'uSeed', 'uLight'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+  ['uRes', 'uTime', 'uPar', 'uTurb', 'uGlow', 'uOp', 'uWarm', 'uSoft', 'uCount', 'uMT', 'uMB', 'uWMn', 'uWMx', 'uWB', 'uSeed', 'uLight'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
 
   const SCALES = [1, 0.85, 0.7, 0.55];
   let scaleIdx = 1;
@@ -410,6 +419,7 @@ void main(){
   let tAnim = 0, lastT = perfNow(), dirty = true, frame = 0;
   let emaDt = 1 / 60, lastScaleChange = 0;
   let curTurb = params.turb, curGlow = params.glow, curPar = params.par;
+  let curOp = params.op;
   let curWarm = params.warm, curSoft = params.soft;
   let curMT = params.mtop, curMB = params.mbot;
   let curWMn = params.wmin, curWMx = params.wmax, curWB = params.wbias;
@@ -428,6 +438,7 @@ void main(){
     const ease = 1 - Math.exp(-dt * 3.2);
     curTurb += (params.turb - curTurb) * ease;
     curGlow += (params.glow - curGlow) * ease;
+    curOp += (params.op - curOp) * ease;
     curPar += (params.par - curPar) * ease;
     curWarm += (params.warm - curWarm) * ease;
     curSoft += (params.soft - curSoft) * ease;
@@ -447,6 +458,7 @@ void main(){
     if (reduced || params.paused) {
       const settling = Math.abs(mx - ax) + Math.abs(my - ay)
         + Math.abs(params.turb - curTurb) + Math.abs(params.glow - curGlow) + Math.abs(params.par - curPar)
+        + Math.abs(params.op - curOp)
         + Math.abs(params.warm - curWarm) + Math.abs(params.soft - curSoft)
         + Math.abs(params.mtop - curMT) + Math.abs(params.mbot - curMB)
         + Math.abs(params.wmin - curWMn) + Math.abs(params.wmax - curWMx)
@@ -465,8 +477,10 @@ void main(){
     gl.uniform2f(U.uPar, mx * curPar, my * curPar);
     gl.uniform1f(U.uTurb, curTurb);
     gl.uniform1f(U.uGlow, curGlow);
+    gl.uniform1f(U.uOp, curOp);
     gl.uniform1f(U.uWarm, curWarm);
     gl.uniform1f(U.uSoft, curSoft);
+    gl.uniform1f(U.uCount, params.count);
     gl.uniform1f(U.uMT, curMT);
     gl.uniform1f(U.uMB, curMB);
     gl.uniform1f(U.uWMn, curWMn);
@@ -505,8 +519,18 @@ void main(){
   bindSlider('turb', 'v-turb', 'turb', f2);
   bindSlider('par', 'v-par', 'par', f2);
   bindSlider('glow', 'v-glow', 'glow', f2);
+  bindSlider('op', 'v-op', 'op', f2);
   bindSlider('warm', 'v-warm', 'warm', f2);
   bindSlider('soft', 'v-soft', 'soft', f2);
+  (function () {
+    const r = document.getElementById('r-count'), v = document.getElementById('v-count');
+    r.value = String(params.count);
+    v.textContent = String(params.count);
+    r.addEventListener('input', () => {
+      const n = parseInt(r.value, 10);
+      if (Number.isFinite(n)) { params.count = clamp(n, 1, 14); v.textContent = String(params.count); persist(); dirty = true; }
+    });
+  })();
   bindSlider('mtop', 'v-mtop', 'mtop', f2);
   bindSlider('mbot', 'v-mbot', 'mbot', f2);
   bindSlider('wmin', 'v-wmin', 'wmin', f2);
@@ -517,7 +541,7 @@ void main(){
   function persist() {
     clearTimeout(persistTimer);
     persistTimer = setTimeout(function () {
-      try { localStorage.setItem('hero-flow', JSON.stringify({ speed: params.speed, turb: params.turb, par: params.par, glow: params.glow, warm: params.warm, soft: params.soft, mtop: params.mtop, mbot: params.mbot, wmin: params.wmin, wmax: params.wmax, wbias: params.wbias, light: params.light, seed: params.seed })); } catch (e) {}
+      try { localStorage.setItem('hero-flow', JSON.stringify({ speed: params.speed, turb: params.turb, par: params.par, glow: params.glow, op: params.op, warm: params.warm, soft: params.soft, count: params.count, mtop: params.mtop, mbot: params.mbot, wmin: params.wmin, wmax: params.wmax, wbias: params.wbias, light: params.light, seed: params.seed })); } catch (e) {}
     }, 250);
   }
 
