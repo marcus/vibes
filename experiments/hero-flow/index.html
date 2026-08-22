@@ -117,7 +117,7 @@
   <label>Mgn top<input type="range" id="r-mtop" min="0" max="45" value="40" /><span class="val" id="v-mtop">0.40</span></label>
   <label>Mgn bot<input type="range" id="r-mbot" min="0" max="45" value="40" /><span class="val" id="v-mbot">0.40</span></label>
   <label>Band min<input type="range" id="r-wmin" min="10" max="150" value="50" /><span class="val" id="v-wmin">0.50</span></label>
-  <label>Band max<input type="range" id="r-wmax" min="50" max="300" value="300" /><span class="val" id="v-wmax">3.00</span></label>
+  <label>Band max<input type="range" id="r-wmax" min="50" max="1500" value="300" /><span class="val" id="v-wmax">3.00</span></label>
   <label>Band curve<input type="range" id="r-wbias" min="20" max="300" value="72" /><span class="val" id="v-wbias">0.72</span></label>
   <div class="btns">
     <button type="button" id="b-theme">Theme</button>
@@ -157,7 +157,7 @@
     mtop: num(store.mtop, 0.40, 0, 0.45),
     mbot: num(store.mbot, 0.40, 0, 0.45),
     wmin: num(store.wmin, 0.50, 0.10, 1.50),
-    wmax: num(store.wmax, 3.00, 0.50, 3.00),
+    wmax: num(store.wmax, 3.00, 0.50, 15.00),
     wbias: num(store.wbias, 0.72, 0.20, 3.00),
     light: qs.has('theme') ? qs.get('theme').toLowerCase() === 'light' : (store.light === true),
     paused: false,
