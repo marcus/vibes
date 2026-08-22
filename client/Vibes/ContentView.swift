@@ -2,6 +2,9 @@ import SwiftUI
 
 struct ContentView: View {
   @EnvironmentObject private var model: AppModel
+  @EnvironmentObject private var widgetModes: WidgetModeCoordinator
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.openWindow) private var openWindow
   @Binding var showInviteFriend: Bool
 
   var body: some View {
@@ -17,6 +20,23 @@ struct ContentView: View {
     // edge-to-edge on wide windows.
     .frame(minWidth: 460, maxWidth: .infinity, minHeight: 520, maxHeight: .infinity)
     .background(TrafficLightAligner())
+    .onAppear {
+      AppDelegate.model = model
+      widgetModes.registerMainScene(
+        dismiss: { dismiss() },
+        openWidget: { openWindow(id: WidgetModeCoordinator.widgetWindowID) }
+      )
+      // Boot restoration, and the one-surface invariant in general: a main
+      // window materializing while widget mode is stored-on/active (relaunch,
+      // a stray reopen) removes itself before it can stack over the widget.
+      if widgetModes.isActive {
+        dismiss()
+      } else if widgetModes.pendingExit {
+        // A pending-exit recovery just landed here: main being open IS the
+        // completed transition, so only disarm the flag.
+        widgetModes.consumePendingExit()
+      }
+    }
   }
 }
 
@@ -1781,4 +1801,5 @@ private struct EmptyState: View {
 #Preview {
   ContentView(showInviteFriend: .constant(false))
     .environmentObject(AppModel())
+    .environmentObject(WidgetModeCoordinator.shared)
 }

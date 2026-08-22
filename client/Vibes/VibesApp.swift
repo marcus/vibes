@@ -4,6 +4,9 @@ import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
   static var model: AppModel?
+  /// Widget-mode state machine; assigned by whichever scene root runs first
+  /// (the main scene may never appear when booting straight into widget mode).
+  static var widgetModes = WidgetModeCoordinator.shared
   private var isTerminatingAfterOfflinePublish = false
   /// Set when another copy of Vibes was already running at launch. This
   /// instance is then a duplicate: it forwards its launch URLs to the
@@ -47,6 +50,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
     AppAppearance.applyCurrent()
+    #if DEBUG
+    // DEMO MODE (VIBES_DEMO_WIDGET=1): enter widget mode ~2s after launch so
+    // an unattended script can screenshot the widget without UI interaction.
+    // Requires the main scene's onAppear to have run first — it opens at
+    // launch, so +2s is comfortably late. Writes the widgetMode defaults key
+    // by design of enter() (shared with production; see client-runbook.md).
+    if ProcessInfo.processInfo.environment["VIBES_DEMO_WIDGET"] == "1" {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+        WidgetModeCoordinator.shared.enter()
+      }
+    }
+    #endif
   }
 
   @objc private func captureURLEvent(
@@ -84,6 +99,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  /// Dock-icon click. In widget mode the click means "restore": run the exit
+  /// transition (closes the widget, reopens `id: "main"`, activates) and
+  /// return false so AppKit/SwiftUI default reopen handling doesn't also
+  /// unarchive the main scene in a race. A stale-session exit (widget window
+  /// never restored this session, so no live opener exists) arms `pendingExit`
+  /// instead: return true there and let default reopen put some window back —
+  /// whichever scene root appears consumes pendingExit and finishes the swap.
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool)
+    -> Bool
+  {
+    guard Self.widgetModes.isActive else { return true }
+    Self.widgetModes.exit()
+    return Self.widgetModes.pendingExit
+  }
+
+  /// Dock right-click menu — present only while widget mode is active, where
+  /// both items are exits from it ("Turn Off Widget Mode" does exactly what
+  /// "Show Main Window" does; both wordings are offered because either may be
+  /// the one a user reaches for). Returning nil leaves the normal-mode dock
+  /// menu untouched, per plan step 4.
+  func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+    guard Self.widgetModes.isActive else { return nil }
+    let showItem = NSMenuItem(
+      title: "Show Main Window",
+      action: #selector(dockShowMainWindow),
+      keyEquivalent: "")
+    let offItem = NSMenuItem(
+      title: "Turn Off Widget Mode",
+      action: #selector(dockTurnOffWidgetMode),
+      keyEquivalent: "")
+    // Explicit targets, not the responder-chain fallback: with every app
+    // window closed (the normal widget-mode state) there is no key window to
+    // trust routing a nil-target action back here. NSMenuItem retains its
+    // target and the delegate lives for the app's lifetime.
+    showItem.target = self
+    offItem.target = self
+    let menu = NSMenu()
+    menu.addItem(showItem)
+    menu.addItem(offItem)
+    return menu
+  }
+
+  @objc private func dockShowMainWindow() {
+    Self.widgetModes.exit()
+  }
+
+  @objc private func dockTurnOffWidgetMode() {
+    Self.widgetModes.exit()
+  }
+
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     // The duplicate must not publish offline presence on its way out — the
     // primary instance is still online.
@@ -107,6 +172,11 @@ struct VibesApp: App {
   @Environment(\.openWindow) private var openWindow
   @Environment(\.openSettings) private var openSettings
   @StateObject private var model = AppModel()
+  // Process-wide widget-mode state machine; scenes receive it via
+  // environmentObject, AppKit-side handlers reach it through AppDelegate.
+  // Menus read `widgetModes.isActive` directly — it is published precisely so
+  // menu surfaces observe flips made through any path.
+  @ObservedObject private var widgetModes = WidgetModeCoordinator.shared
   @State private var showInviteFriend = false
   // Mirrors the views' shared "feedViewMode" key so the ⌘L command can flip it;
   // @AppStorage works in an App struct, and MainPanel/HomeView re-render off the
@@ -115,11 +185,26 @@ struct VibesApp: App {
 
   // Owns the Sparkle updater for the app's lifetime; starts it immediately so
   // background checks run and `canCheckForUpdates` is observable.
-  private let updaterController = SPUStandardUpdaterController(
-    startingUpdater: true,
-    updaterDelegate: nil,
-    userDriverDelegate: nil
-  )
+  // DEMO MODE (DEBUG only, VIBES_DEMO_FEED=1): no updater at all — unattended
+  // screenshot runs must never trip update prompts or Sparkle's prefs writes.
+  // Optional in BOTH configurations so call sites stay uniform.
+  #if DEBUG
+  private let updaterController: SPUStandardUpdaterController? =
+    ProcessInfo.processInfo.environment["VIBES_DEMO_FEED"] == "1"
+      ? nil
+      : SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+      )
+  #else
+  private let updaterController: SPUStandardUpdaterController? =
+    SPUStandardUpdaterController(
+      startingUpdater: true,
+      updaterDelegate: nil,
+      userDriverDelegate: nil
+    )
+  #endif
 
   var body: some Scene {
     // A single, unique main window. This was a WindowGroup, which let every
@@ -131,15 +216,12 @@ struct VibesApp: App {
     Window("Vibes", id: "main") {
       ContentView(showInviteFriend: $showInviteFriend)
         .environmentObject(model)
+        .environmentObject(widgetModes)
         // Resizable main window (macOS 26): anchor the top-left during resizes
         // so the header stays put and the window grows down/right.
         .windowResizeAnchor(.topLeading)
-        .onAppear {
-          AppDelegate.model = model
-        }
         .onOpenURL { url in
-          NSApp.activate(ignoringOtherApps: true)
-          model.handleIncomingURL(url)
+          widgetModes.deliverDeepLink(url, to: model)
         }
     }
     // Seamless macOS 26 Liquid Glass titlebar: hide the titlebar chrome so the
@@ -152,7 +234,10 @@ struct VibesApp: App {
     .defaultSize(width: 460, height: 620)
     .commands {
       CommandGroup(after: .appInfo) {
-        CheckForUpdatesView(updater: updaterController.updater)
+        // DEMO MODE: no updater, so no check-for-updates item either.
+        if let updaterController {
+          CheckForUpdatesView(updater: updaterController.updater)
+        }
       }
       CommandMenu("Friends") {
         Button("Invite a Friend…") { showInviteFriend = true }
@@ -174,6 +259,21 @@ struct VibesApp: App {
       }
     }
 
+    // Widget mode: the same sky, chrome-less, as a transparent backmost
+    // desktop window. Shares the AppModel so feed/presence updates flow with
+    // zero extra plumbing; the mode state machine guarantees only one content
+    // surface is open at a time.
+    Window("Vibes Widget", id: "widget") {
+      WidgetSkyView()
+        .environmentObject(model)
+        .environmentObject(widgetModes)
+    }
+    .windowStyle(.hiddenTitleBar)
+    // First appearance matches the main window's default proportions, centered
+    // by the system; the frame is then remembered via setFrameAutosaveName
+    // ("widget") in WidgetWindowConfigurator.
+    .defaultSize(width: 460, height: 620)
+
     Settings {
       SettingsView()
         .environmentObject(model)
@@ -185,16 +285,25 @@ struct VibesApp: App {
 
     MenuBarExtra("Vibes", systemImage: "dot.radiowaves.left.and.right") {
       Button("Show Vibes") {
-        NSApp.activate(ignoringOtherApps: true)
-        openWindow(id: "main")
+        restoreMainWindow()
       }
       Button("Invite a Friend...") {
-        NSApp.activate(ignoringOtherApps: true)
-        openWindow(id: "main")
+        restoreMainWindow()
         showInviteFriend = true
       }
       .keyboardShortcut(Shortcuts.invite)
-      CheckForUpdatesView(updater: updaterController.updater)
+      // Widget mode hides every window, and a hidden Dock icon (accessory
+      // policy) removes dock-based restore too — this explicit item keeps the
+      // menu bar carrying the full restore path on its own.
+      if widgetModes.isActive {
+        Button("Show Main Window") {
+          widgetModes.exit()
+        }
+      }
+      // DEMO MODE: no updater, so no check-for-updates item here either.
+      if let updaterController {
+        CheckForUpdatesView(updater: updaterController.updater)
+      }
       Divider()
       // Menu counterpart of the in-app PresenceLight (ContentView.swift). The
       // one-dot toggle reads poorly as a menu item, so the menu keeps explicit
@@ -210,6 +319,22 @@ struct VibesApp: App {
       } label: {
         Label("Offline", systemImage: model.mode == .offline ? "largecircle.fill.circle" : "circle")
       }
+      // Widget-mode toggle in the same filled/at-rest circle language. Only
+      // offered once configured — the setup screen must never end up hidden
+      // behind a desktop widget.
+      if model.isConfigured {
+        Button {
+          if widgetModes.isActive {
+            widgetModes.exit()
+          } else {
+            widgetModes.enter()
+          }
+        } label: {
+          Label(
+            "Widget Mode",
+            systemImage: widgetModes.isActive ? "largecircle.fill.circle" : "circle")
+        }
+      }
       Button("Scan Now") {
         Task { await model.scanPublishAndFetch() }
       }
@@ -224,6 +349,18 @@ struct VibesApp: App {
       Button("Quit") {
         NSApp.terminate(nil)
       }
+    }
+  }
+
+  /// Menu-bar route to the main window. While widget mode is active every
+  /// such route goes through the coordinator's exit transition — openWindow
+  /// alone would stack main over the widget; exit() closes the widget first.
+  private func restoreMainWindow() {
+    if widgetModes.isActive {
+      widgetModes.exit()  // also activates the app
+    } else {
+      NSApp.activate(ignoringOtherApps: true)
+      openWindow(id: WidgetModeCoordinator.mainWindowID)
     }
   }
 }

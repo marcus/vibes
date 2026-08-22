@@ -30,6 +30,56 @@ To run and verify UI changes against a disposable, fully configured instance
 (local relay, fake home, scripted screenshots/clicks), see
 [docs/ui-testing.md](ui-testing.md).
 
+## Demo Mode (DEBUG builds only)
+
+Debug builds accept two environment variables for unattended demos,
+screenshots, and side-by-side runs next to a production Vibes:
+
+```bash
+VIBES_DEMO_FEED=1   <built app>/Contents/MacOS/Vibes &   # sample-feed demo
+VIBES_DEMO_WIDGET=1 <built app>/Contents/MacOS/Vibes &   # auto-enter widget mode
+```
+
+Both variables can be combined. Both are compiled out of release builds
+(`#if DEBUG`). Strip-out point: delete `client/Vibes/SampleFeed.swift`, the
+`isDemoFeed` blocks in `AppModel.swift`, and the DEMO MODE blocks in
+`VibesApp.swift`.
+
+- **`VIBES_DEMO_FEED=1`** forces a configured-looking app seeded with the same
+  sample cast OrbitView's #Preview renders (`SampleFeed.feedResponse()`).
+- **`VIBES_DEMO_WIDGET=1`** calls the widget-mode coordinator's `enter()`
+  about two seconds after launch, so a script can capture widget-mode visuals
+  without UI interaction.
+
+Safety properties:
+
+- Never reads or writes `config.json` or the Keychain (the entire
+  `loadLocalState` path is skipped), and every relay path — scan, publish,
+  offline-on-quit publish — is an explicit no-op. The background 180-second
+  loop never starts.
+- The Sparkle updater is not instantiated in demo mode, so no update prompts
+  and no Sparkle preference writes.
+- The demo shares the production bundle identifier, so it shares the
+  UserDefaults domain. By design the only keys it writes are `widgetMode`
+  (via the coordinator's enter/exit — expected when `VIBES_DEMO_WIDGET=1` or
+  when toggling widget mode manually) and AppKit window-frame autosaves such
+  as `NSWindow Frame widget`. Interactive actions that mutate preferences
+  (feed-view toggle, presence mode buttons) behave normally and would write
+  their usual keys; unattended scripts that only launch and screenshot touch
+  nothing beyond the above.
+
+## Widget Mode Notes
+
+- The widget window has no titlebar chrome: traffic lights are hidden and the
+  titlebar hairline is removed by `WidgetWindowConfigurator` (reapplied on
+  every `updateNSView`, since AppKit resets window properties on style
+  changes).
+- Drag anywhere on the sky to reposition; the frame persists across relaunches
+  via the `NSWindow Frame widget` autosave.
+- ⌘W can still close a focused widget window (window-level close bypasses the
+  hidden buttons). This is safe: the next dock click or menu-bar restore runs
+  the exit transition, which reopens the main window and reconciles state.
+
 ## Core Features Implemented
 
 1. **First-Launch Setup Panel**: Create a new identity with just a display name, link to an existing account with a pairing code from another Mac ("Link this Mac", including `vibes://link/<code>?relay=…` deep links), continue one-click from an account found in iCloud Keychain ("Welcome back"), or use the Advanced paths (manual relay URL + token, JSON config import).
