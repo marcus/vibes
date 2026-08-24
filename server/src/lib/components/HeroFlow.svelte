@@ -18,34 +18,38 @@
       canvas.getContext('experimental-webgl', { alpha: true });
     if (!gl) return;
 
-    let prog;
-    try {
-      function compile(type, src) {
-        const s = gl.createShader(type);
-        gl.shaderSource(s, src);
-        gl.compileShader(s);
-        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-        return s;
+    let prog, U;
+    function initGL() {
+      try {
+        function compile(type, src) {
+          const s = gl.createShader(type);
+          gl.shaderSource(s, src);
+          gl.compileShader(s);
+          if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+          return s;
+        }
+        prog = gl.createProgram();
+        gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+        gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+      } catch (e) {
+        return false;
       }
-      prog = gl.createProgram();
-      gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
-      gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
-      gl.linkProgram(prog);
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-    } catch (e) {
-      return;
+      gl.useProgram(prog);
+
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      const aPos = gl.getAttribLocation(prog, 'aPos');
+      gl.enableVertexAttribArray(aPos);
+      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+      U = {};
+      ['uRes', 'uTime', 'uPar', 'uTurb', 'uGlow', 'uOp', 'uWarm', 'uSoft', 'uCount', 'uMT', 'uMB', 'uWMn', 'uWMx', 'uWB', 'uCore', 'uSeed', 'uLight'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+      return true;
     }
-    gl.useProgram(prog);
-
-    const buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const aPos = gl.getAttribLocation(prog, 'aPos');
-    gl.enableVertexAttribArray(aPos);
-    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-
-    const U = {};
-    ['uRes', 'uTime', 'uPar', 'uTurb', 'uGlow', 'uOp', 'uWarm', 'uSoft', 'uCount', 'uMT', 'uMB', 'uWMn', 'uWMx', 'uWB', 'uCore', 'uSeed', 'uLight'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+    if (!initGL()) return;
 
     const SCALES = [1, 0.85, 0.7, 0.55];
     let scaleIdx = 1;
@@ -65,7 +69,9 @@
       const dpr = Math.min(devicePixelRatio || 1, 2) * SCALES[scaleIdx];
       const w = Math.max(2, Math.round(canvas.clientWidth * dpr));
       const h = Math.max(2, Math.round(canvas.clientHeight * dpr));
-      if (w !== W || h !== H) { W = w; H = h; canvas.width = W; canvas.height = H; gl.viewport(0, 0, W, H); dirty = true; }
+      if (w !== W || h !== H) { W = w; H = h; canvas.width = W; canvas.height = H; }
+      gl.viewport(0, 0, W, H);
+      dirty = true;
     }
 
     function onPointerMove(e) {
@@ -91,7 +97,12 @@
     function onVisibility() { lastT = performance.now() / 1000; }
 
     let dprMq = matchMedia('(resolution: ' + devicePixelRatio + 'dppx)');
-    function onDprChange() { dprMq = matchMedia('(resolution: ' + devicePixelRatio + 'dppx)'); watchDpr(); resize(); }
+    function onDprChange() {
+      dprMq.removeEventListener ? dprMq.removeEventListener('change', onDprChange) : dprMq.removeListener(onDprChange);
+      dprMq = matchMedia('(resolution: ' + devicePixelRatio + 'dppx)');
+      watchDpr();
+      resize();
+    }
     function watchDpr() {
       dprMq.addEventListener ? dprMq.addEventListener('change', onDprChange) : dprMq.addListener(onDprChange);
     }
@@ -146,12 +157,26 @@
       drawFrame(tAnim);
     }
 
+    function onContextLost(e) {
+      e.preventDefault();
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+    function onContextRestored() {
+      if (!initGL()) return;
+      resize();
+      if (reduced) drawFrame(0);
+      else if (!raf) { lastT = performance.now() / 1000; raf = requestAnimationFrame(tick); }
+    }
+
     function start() {
       resize();
       watchDpr();
       addEventListener('resize', resize);
       addEventListener('pointermove', onPointerMove, { passive: true });
       document.addEventListener('visibilitychange', onVisibility);
+      canvas.addEventListener('webglcontextlost', onContextLost, false);
+      canvas.addEventListener('webglcontextrestored', onContextRestored, false);
       reducedMq.addEventListener ? reducedMq.addEventListener('change', onReducedChange) : reducedMq.addListener(onReducedChange);
       if (reduced) {
         drawFrame(0);
@@ -165,6 +190,8 @@
       removeEventListener('resize', resize);
       removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('visibilitychange', onVisibility);
+      canvas.removeEventListener('webglcontextlost', onContextLost);
+      canvas.removeEventListener('webglcontextrestored', onContextRestored);
       dprMq.removeEventListener ? dprMq.removeEventListener('change', onDprChange) : dprMq.removeListener(onDprChange);
       reducedMq.removeEventListener ? reducedMq.removeEventListener('change', onReducedChange) : reducedMq.removeListener(onReducedChange);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
