@@ -300,7 +300,7 @@ void main(){
     // Epsilon floors keep gaussians well-defined when uSoft reaches 0
     // (sharpest setting): thinnest possible cores, halos nearly gone.
     float coreW = max(coreBase * uCore, 1e-4);
-    float haloW = max(coreBase * mix(8.0, 13.0, dn) * mix(1.0, uSoft, 0.65), 1e-4);
+    float haloW = max(coreBase, 1e-4) * mix(8.0, 13.0, dn) * mix(1.0, uSoft, 0.65);
 
     float d = py - c;
     float gCore = exp(-d * d / (coreW * coreW));
@@ -471,7 +471,8 @@ void main(){
         + Math.abs(params.warm - curWarm) + Math.abs(params.soft - curSoft)
         + Math.abs(params.mtop - curMT) + Math.abs(params.mbot - curMB)
         + Math.abs(params.wmin - curWMn) + Math.abs(params.wmax - curWMx)
-        + Math.abs(params.wbias - curWB) + Math.abs(params.core - curCore);
+        + Math.abs(params.core - curCore)
+        + Math.abs(params.wbias - curWB);
       if (!dirty && settling < 0.001) { fpsEl.textContent = 'idle'; return; }
     }
 
