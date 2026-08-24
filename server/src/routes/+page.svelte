@@ -2,7 +2,7 @@
   import OrbitMockup from '$lib/components/OrbitMockup.svelte';
   import MarketingShell from '$lib/components/MarketingShell.svelte';
   import SocialMeta from '$lib/components/SocialMeta.svelte';
-  import HeroRibbons from '$lib/components/HeroRibbons.svelte';
+  import HeroFlow from '$lib/components/HeroFlow.svelte';
 
   const description =
     "See which friends are online and coding — private ambient presence for small groups of coders on macOS.";
@@ -19,8 +19,8 @@
   {#snippet children(theme)}
     <!-- ===================== HERO ===================== -->
     <section class="hero shell">
-      <!-- Option C2 · neon ribbons + fine density strands -->
-      <HeroRibbons />
+      <!-- Procedural WebGL hero flow (experiments/hero-flow, tuned settings baked in) -->
+      <HeroFlow {theme} />
 
       <div class="eyebrow"><span class="pip"></span> Right now · 3 friends in orbit</div>
       <h1>See who's <span class="spectrum-text">coding</span><br />right now.</h1>
