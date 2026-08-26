@@ -104,6 +104,27 @@ struct RepoConfig: Codable, Equatable, Identifiable {
   }
 }
 
+// Why a repo produced no activity. Transient scan output only: never encoded,
+// never persisted, and never sent to the relay — it can name a local path
+// problem or the machine-derived author email, which are the user's business
+// alone. `nonisolated` so GitScanner can produce it off the main actor.
+nonisolated enum RepoHealth: Equatable {
+  // Scanned successfully. Zero commits today is still `ok` — a quiet day is
+  // not a misconfiguration, and warning about it would train the user to
+  // ignore the badge.
+  case ok
+  case missingPath
+  case notARepo
+  // `git var GIT_AUTHOR_IDENT` failed, which in practice means
+  // user.useConfigOnly=true with no user.email: git itself refuses to name an
+  // author, so nothing can be attributed.
+  case noIdentity
+  // Commits exist inside today's window but none were authored by the
+  // identity git resolves here. Distinct from "no commits today" precisely
+  // because the user's work IS there and is being silently dropped.
+  case noMatchingAuthor(authorEmail: String)
+}
+
 struct SharingCardsConfig: Codable, Equatable {
   var gitStats: Bool
   var repoAliases: Bool

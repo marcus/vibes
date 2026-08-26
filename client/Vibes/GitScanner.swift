@@ -1,17 +1,33 @@
 import CryptoKit
 import Foundation
 
+// Aggregate stats plus why each repo produced what it did. Health is keyed by
+// repo id and stays on this machine — it exists so a repo that silently
+// contributes nothing (moved folder, unresolvable git identity, commits under
+// a different email) can say so in the UI instead of reading as a quiet day.
+nonisolated struct RepoScanOutcome {
+  var stats = DailyGitStats()
+  var health: [UUID: RepoHealth] = [:]
+}
+
 // `nonisolated` so the scan never runs on the main actor. The project builds
 // with default main-actor isolation (SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor),
 // which would otherwise pin these synchronous, blocking git calls to the main
 // thread and freeze the UI on a slow or large repo.
 nonisolated struct GitScanner {
-  func scan(repos: [RepoConfig], dayWindow: VibesDayWindow, now: Date = Date()) async -> DailyGitStats {
+  func scan(repos: [RepoConfig], dayWindow: VibesDayWindow, now: Date = Date()) async -> RepoScanOutcome {
+    var outcome = RepoScanOutcome()
     var total = DailyGitStats()
     var seenCommits = Set<String>()
+    // Hidden repos are skipped without a health entry: the user paused them on
+    // purpose, so a warning badge on one would be noise.
     for repo in repos where !repo.hidden {
-      guard FileManager.default.fileExists(atPath: repo.path) else { continue }
-      let stats = scanRepo(repo: repo, dayWindow: dayWindow, now: now)
+      guard FileManager.default.fileExists(atPath: repo.path) else {
+        outcome.health[repo.id] = .missingPath
+        continue
+      }
+      let (stats, health) = scanRepo(repo: repo, dayWindow: dayWindow, now: now)
+      outcome.health[repo.id] = health
       if stats.hasActivity {
         total.reposTouched += 1
         if repo.shareAlias {
@@ -31,17 +47,26 @@ nonisolated struct GitScanner {
       }
     }
     total.repoAliases.sort()
-    return total
+    outcome.stats = total
+    return outcome
   }
 
-  // Only committed work counts: commits authored by the repo's configured user
-  // email inside the day window. Uncommitted (staged/unstaged) diffs are ignored
+  // Only committed work counts: commits authored by the identity git resolves
+  // for this repo (see effectiveAuthorEmail) inside the day window.
+  // Uncommitted (staged/unstaged) diffs are ignored
   // — they carry no timestamp, so a stale dirty file would otherwise mark the
   // repo "worked on today" every day until committed or reverted.
-  private func scanRepo(repo: RepoConfig, dayWindow: VibesDayWindow, now: Date) -> DailyGitStats {
+  private func scanRepo(
+    repo: RepoConfig,
+    dayWindow: VibesDayWindow,
+    now: Date
+  ) -> (stats: DailyGitStats, health: RepoHealth) {
     var stats = DailyGitStats()
-    guard let authorEmail = configuredUserEmail(repo.path) else {
-      return stats
+    guard isGitRepo(repo.path) else {
+      return (stats, .notARepo)
+    }
+    guard let authorEmail = effectiveAuthorEmail(repo.path) else {
+      return (stats, .noIdentity)
     }
 
     let log = runGit([
@@ -55,6 +80,10 @@ nonisolated struct GitScanner {
     ])
     var includeCurrentCommit = false
     var currentCommit: GitCommitStats?
+    // Commit headers seen vs. kept, so "nothing happened today" can be told
+    // apart from "today's commits are all under some other email".
+    var commitsInWindow = 0
+    var commitsMatchingAuthor = 0
 
     func finishCurrentCommit() {
       guard includeCurrentCommit, let commit = currentCommit else { return }
@@ -74,6 +103,7 @@ nonisolated struct GitScanner {
         let fields = line
           .replacingOccurrences(of: "__VIBES_COMMIT__", with: "")
           .split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+        commitsInWindow += 1
         guard fields.count == 3 else {
           includeCurrentCommit = false
           currentCommit = nil
@@ -81,6 +111,7 @@ nonisolated struct GitScanner {
         }
         let email = String(fields[1])
         includeCurrentCommit = email.caseInsensitiveCompare(authorEmail) == .orderedSame
+        if includeCurrentCommit { commitsMatchingAuthor += 1 }
         currentCommit = includeCurrentCommit
           ? GitCommitStats(
             id: Self.commitFingerprint(String(fields[0])),
@@ -95,7 +126,10 @@ nonisolated struct GitScanner {
     }
     finishCurrentCommit()
 
-    return stats
+    let health: RepoHealth = (commitsInWindow > 0 && commitsMatchingAuthor == 0)
+      ? .noMatchingAuthor(authorEmail: authorEmail)
+      : .ok
+    return (stats, health)
   }
 
   private func parseNumstat(_ line: Substring, into commit: inout GitCommitStats?) {
@@ -118,6 +152,15 @@ nonisolated struct GitScanner {
   private static let gitTimeout: TimeInterval = 20
 
   private func runGit(_ arguments: [String]) -> String {
+    runGitChecked(arguments).output
+  }
+
+  // Health checks have to tell "git failed" from "git succeeded and printed
+  // nothing", which `runGit`'s "" cannot express: an unset user.email and a
+  // repo with no commits both look identical through it. That conflation is
+  // the original bug, so the distinguishing variant is the primitive and
+  // `runGit` is the lossy convenience over it.
+  private func runGitChecked(_ arguments: [String]) -> (succeeded: Bool, output: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = ["git"] + arguments
@@ -128,7 +171,7 @@ nonisolated struct GitScanner {
     do {
       try process.run()
     } catch {
-      return ""
+      return (false, "")
     }
 
     // Drain BOTH pipes concurrently. macOS pipe buffers are ~64KB: if we waited
@@ -161,12 +204,37 @@ nonisolated struct GitScanner {
     }
     outputGroup.wait()
 
-    guard exited, process.terminationStatus == 0 else { return "" }
-    return String(data: outputData, encoding: .utf8) ?? ""
+    guard exited, process.terminationStatus == 0 else { return (false, "") }
+    return (true, String(data: outputData, encoding: .utf8) ?? "")
   }
 
-  private func configuredUserEmail(_ path: String) -> String? {
-    let email = runGit(["-C", path, "config", "--get", "user.email"])
+  // Add-time validation entry point. `async` on a `nonisolated` type so the
+  // blocking `rev-parse` runs on the global executor instead of inheriting the
+  // caller's main actor — this is invoked straight from a UI action.
+  func validateIsGitRepo(_ path: String) async -> Bool {
+    isGitRepo(path)
+  }
+
+  // `git var GIT_AUTHOR_IDENT` succeeds outside a repo (it answers from global
+  // config), so it can't double as a validity check — repo-ness needs its own
+  // question.
+  private func isGitRepo(_ path: String) -> Bool {
+    runGitChecked(["-C", path, "rev-parse", "--show-toplevel"]).succeeded
+  }
+
+  // The email git will actually stamp on a commit here, which is NOT
+  // `config --get user.email`: with no configured identity git derives
+  // `user@host` and commits under it, while the config lookup exits 1 and
+  // returns nothing — the bug that made those repos scan as permanently idle.
+  // `git var` reports the resolved identity as `Name <email> ts tz`, and fails
+  // (rc 128) only when git genuinely refuses to invent one.
+  private func effectiveAuthorEmail(_ path: String) -> String? {
+    let result = runGitChecked(["-C", path, "var", "GIT_AUTHOR_IDENT"])
+    guard result.succeeded,
+          let open = result.output.firstIndex(of: "<"),
+          let close = result.output[open...].firstIndex(of: ">")
+    else { return nil }
+    let email = String(result.output[result.output.index(after: open)..<close])
       .trimmingCharacters(in: .whitespacesAndNewlines)
     return email.isEmpty ? nil : email
   }

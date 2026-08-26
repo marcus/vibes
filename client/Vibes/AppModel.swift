@@ -24,6 +24,10 @@ final class AppModel: ObservableObject {
   @Published var manualStatus: String = ""
   @Published var feed: FeedResponse?
   @Published var stats = DailyGitStats()
+  // Why each configured repo contributed what it did, keyed by repo id and
+  // replaced wholesale by every scan. Local-only: it never reaches the relay
+  // and is never written to config.json.
+  @Published private(set) var repoHealth: [UUID: RepoHealth] = [:]
   @Published var invites: [InviteSummary] = []
   @Published var latestInviteURL: URL?
   @Published var pendingInvite: PendingInvite?
@@ -683,8 +687,10 @@ final class AppModel: ObservableObject {
     // Refresh weather off to the side; this cycle publishes whatever's already
     // cached and the new reading is ready for the next one. Never awaited here.
     refreshWeatherInBackground()
-    let nextStats = await scanner.scan(repos: config.repos, dayWindow: dayWindow, now: now)
+    let outcome = await scanner.scan(repos: config.repos, dayWindow: dayWindow, now: now)
+    let nextStats = outcome.stats
     stats = nextStats
+    repoHealth = outcome.health
     do {
       let payload = StatusBuilder.payload(
         config: config,
@@ -740,12 +746,22 @@ final class AppModel: ObservableObject {
     panel.message = "Choose a local Git repository to scan."
     guard panel.runModal() == .OK, let url = panel.url else { return }
     let alias = url.lastPathComponent
-    mutateConfig { config in
-      if !config.repos.contains(where: { $0.path == url.path }) {
-        config.repos.append(RepoConfig(path: url.path, alias: alias))
+    Task {
+      // Validated before the row is written, and off the main actor (the git
+      // call blocks). A non-repository folder would otherwise be accepted and
+      // then report zero activity forever with nothing to explain why.
+      guard await scanner.validateIsGitRepo(url.path) else {
+        lastError = "\(alias) isn't a Git repository, so Vibes can't scan it. "
+          + "Pick the folder that contains the .git directory."
+        return
       }
+      mutateConfig { config in
+        if !config.repos.contains(where: { $0.path == url.path }) {
+          config.repos.append(RepoConfig(path: url.path, alias: alias))
+        }
+      }
+      await scanPublishAndFetch()
     }
-    Task { await scanPublishAndFetch() }
   }
 
   func removeRepo(_ repo: RepoConfig) {
@@ -1087,8 +1103,29 @@ final class AppModel: ObservableObject {
     Last sync: \(lastSyncedAt?.formatted(date: .numeric, time: .standard) ?? "never")
     Sharing cards: \(cards.isEmpty ? "none" : cards)
     Repos: \(config?.repos.count ?? 0) configured (paths redacted)
-    Token: stored in Keychain (redacted)
+    \(repoHealthLines())Token: stored in Keychain (redacted)
     """
+  }
+
+  // Per-repo health for the copyable summary. Aliases only — paths stay
+  // redacted, and the resolved author email is described but never printed:
+  // an auto-derived identity carries the machine's hostname, and this text is
+  // meant to be pasted into an agent chat.
+  private func repoHealthLines() -> String {
+    guard let repos = config?.repos, !repos.isEmpty else { return "" }
+    return repos.map { repo in
+      let state: String
+      switch repoHealth[repo.id] {
+      case .ok: state = "ok"
+      case .missingPath: state = "folder not found"
+      case .notARepo: state = "not a Git repository"
+      case .noIdentity: state = "git can't resolve an author identity (set user.email)"
+      case .noMatchingAuthor: state = "no matching author (today's commits are by someone else)"
+      case nil: state = repo.hidden ? "hidden (not scanned)" : "not scanned yet"
+      }
+      return "    \(repo.alias): \(state)\n"
+    }
+    .joined()
   }
 
   func publishOfflineForQuit() async {

@@ -1401,6 +1401,14 @@ private struct RepoRow: View {
     // clean line at any path length instead of wrapping.
     LabeledContent {
       HStack(spacing: 8) {
+        if let warning = healthWarning {
+          Image(systemName: "exclamationmark.triangle.fill")
+            .imageScale(.medium)
+            .foregroundStyle(.yellow)
+            .help(warning)
+            .accessibilityLabel(warning)
+        }
+
         TextField("", text: $repo.alias, prompt: Text("repo name"))
           .labelsHidden()
           .multilineTextAlignment(.trailing)
@@ -1438,6 +1446,27 @@ private struct RepoRow: View {
         .lineLimit(1)
         .truncationMode(.head)
         .opacity(repo.hidden ? 0.45 : 1)
+    }
+  }
+
+  // nil for `.ok` and for repos with no scan result yet, so the badge only
+  // appears when the repo really is contributing nothing and can say why.
+  // The resolved email is shown here (and only here): the user is looking at
+  // their own Mac, and it's the one fact that makes the mismatch actionable.
+  private var healthWarning: String? {
+    switch model.repoHealth[repo.id] {
+    case .ok, nil:
+      return nil
+    case .missingPath:
+      return "Folder not found. The repository may have been moved or deleted."
+    case .notARepo:
+      return "This folder isn't a Git repository."
+    case .noIdentity:
+      return "Git can't determine your author identity here. "
+        + "Run: git config --global user.email you@example.com"
+    case .noMatchingAuthor(let email):
+      return "Commits today weren't authored by \(email) (the identity git resolves on this Mac), "
+        + "so they don't count toward your activity. Check git config user.email in this repo."
     }
   }
 }
