@@ -48,7 +48,7 @@ const values = {
   SERVICE_NAME: process.env.SERVICE_NAME ?? process.env.APP_NAME ?? "vibes",
   SERVICE_HOST: process.env.SERVICE_HOST ?? "127.0.0.1",
   SERVICE_PORT: process.env.SERVICE_PORT ?? "3136",
-  SERVICE_USER: process.env.SERVICE_USER ?? process.env.DEPLOY_USER ?? "root",
+  SERVICE_USER: process.env.SERVICE_USER ?? process.env.APP_NAME ?? "vibes",
 };
 
 const outputDir = join(root, "deploy", "rendered");

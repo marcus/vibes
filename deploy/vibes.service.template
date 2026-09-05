@@ -7,6 +7,8 @@ StartLimitBurst=3
 [Service]
 Type=simple
 User=${SERVICE_USER}
+Group=${SERVICE_USER}
+UMask=0027
 WorkingDirectory=${DEPLOY_PATH}/server
 ExecStart=/usr/bin/node build
 Restart=on-failure

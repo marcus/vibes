@@ -129,7 +129,7 @@
 
         <div class="privacy">
           <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <span><b>Shares aggregate activity only.</b> No repo paths, branches, commit messages, filenames, editor activity, process history, or transcripts.</span>
+          <span><b>Shares the activity you choose.</b> No repo paths, branches, commit messages, filenames, editor activity, process history, or transcripts. <a href="/privacy">Privacy details →</a></span>
         </div>
       {/if}
     </section>

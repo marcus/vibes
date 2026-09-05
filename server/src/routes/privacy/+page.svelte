@@ -22,7 +22,7 @@
         Vibes is an ambient presence app for coding friends. Sharing activity is the point of
         the app, so this notice describes exactly what leaves your Mac and what does not.
       </p>
-      <p class="effective">Effective August 8, 2026</p>
+      <p class="effective">Effective September 5, 2026</p>
 
       <section>
         <h2>At a glance</h2>
