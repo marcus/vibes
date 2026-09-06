@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vibes hero — procedural flow experiment</title>
+<style>
+  :root {
+    --ink: #f4f7fa;
+    --ink-2: rgba(244, 247, 250, 0.72);
+    --ink-3: rgba(244, 247, 250, 0.45);
+    --panel-bg: rgba(16, 22, 32, 0.62);
+    --panel-border: rgba(255, 255, 255, 0.14);
+    --btn-bg: rgba(255, 255, 255, 0.1);
+    --btn-border: rgba(255, 255, 255, 0.18);
+  }
+  body.light {
+    --ink: #10151d;
+    --ink-2: rgba(16, 21, 29, 0.75);
+    --ink-3: rgba(16, 21, 29, 0.5);
+    --panel-bg: rgba(255, 255, 255, 0.66);
+    --panel-border: rgba(0, 0, 0, 0.1);
+    --btn-bg: rgba(0, 0, 0, 0.05);
+    --btn-border: rgba(0, 0, 0, 0.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    background: #061320;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  canvas#gl { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+
+  .sample {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; pointer-events: none; padding: 0 6vw;
+  }
+  .sample .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 22px;
+  }
+  .sample .pip { width: 7px; height: 7px; border-radius: 50%; background: #30d158; box-shadow: 0 0 10px #30d158; }
+  .sample h1 {
+    font-size: clamp(44px, 7.4vw, 84px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.02;
+  }
+  .sample h1 em { font-style: normal; }
+  .sample .sub { margin-top: 22px; max-width: 620px; font-size: clamp(17px, 2.2vw, 21px); color: var(--ink-2); line-height: 1.3; }
+  .sample .cta {
+    pointer-events: auto; margin-top: 34px;
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 13px 26px; border-radius: 999px; border: 1px solid var(--btn-border);
+    background: var(--btn-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer;
+    font-family: inherit;
+  }
+  .sample .cta svg { width: 17px; height: 17px; }
+  .sample .fine { margin-top: 14px; font-size: 12px; color: var(--ink-3); }
+
+  .panel {
+    position: fixed; left: 16px; bottom: 16px; z-index: 10;
+    min-width: 240px; padding: 14px 16px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    font-size: 12px; user-select: none;
+  }
+  .panel.hidden { display: none; }
+  .panel .row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .panel .title { font-weight: 700; letter-spacing: -0.01em; }
+  .panel .fps { font-variant-numeric: tabular-nums; color: var(--ink-3); }
+  .panel label { display: grid; grid-template-columns: 74px 1fr 34px; gap: 8px; align-items: center; margin-bottom: 7px; color: var(--ink-2); }
+  .panel input[type="range"] { width: 100%; accent-color: #a472ff; height: 18px; }
+  .panel .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+  .panel .btns { display: flex; gap: 6px; margin-top: 11px; }
+  .panel button {
+    flex: 1; padding: 7px 0; border-radius: 8px; border: 1px solid var(--btn-border);
+    background: var(--btn-bg); color: var(--ink); font-size: 12px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .panel button:hover { filter: brightness(1.15); }
+  .panel .hint { margin-top: 9px; font-size: 10.5px; color: var(--ink-3); }
+  .nogl {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    padding: 10px 18px; border-radius: 999px; background: rgba(120, 20, 30, 0.85);
+    color: #fff; font-size: 13px; display: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div class="sample">
+  <div class="eyebrow"><span class="pip"></span> Right now · 3 friends in orbit</div>
+  <h1>See who&rsquo;s <em>coding</em><br />right now.</h1>
+  <p class="sub">Vibes shows which friends are online and how much they&rsquo;ve coded today.</p>
+  <button class="cta" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+    Download for Mac
+  </button>
+  <p class="fine">For Apple Silicon · macOS 26</p>
+</div>
+
+<div class="panel" id="panel">
+  <div class="row"><span class="title">Hero flow</span><span class="fps" id="fps">— fps</span></div>
+  <label>Speed<input type="range" id="r-speed" min="0" max="200" value="5" /><span class="val" id="v-speed">0.05</span></label>
+  <label>Turbulence<input type="range" id="r-turb" min="0" max="200" value="36" /><span class="val" id="v-turb">0.36</span></label>
+  <label>Parallax<input type="range" id="r-par" min="0" max="200" value="57" /><span class="val" id="v-par">0.57</span></label>
+  <label>Glow<input type="range" id="r-glow" min="30" max="220" value="85" /><span class="val" id="v-glow">0.85</span></label>
+  <label>Opacity<input type="range" id="r-op" min="0" max="200" value="33" /><span class="val" id="v-op">0.33</span></label>
+  <label>Warmth<input type="range" id="r-warm" min="0" max="200" value="191" /><span class="val" id="v-warm">1.91</span></label>
+  <label>Edge soft<input type="range" id="r-soft" min="0" max="180" value="10" /><span class="val" id="v-soft">0.10</span></label>
+  <label>Bands<input type="range" id="r-count" min="1" max="14" step="1" value="5" /><span class="val" id="v-count">5</span></label>
+  <label>Mgn top<input type="range" id="r-mtop" min="0" max="45" value="45" /><span class="val" id="v-mtop">0.45</span></label>
+  <label>Mgn bot<input type="range" id="r-mbot" min="0" max="45" value="32" /><span class="val" id="v-mbot">0.32</span></label>
+  <label>Band min<input type="range" id="r-wmin" min="10" max="150" value="54" /><span class="val" id="v-wmin">0.54</span></label>
+  <label>Band max<input type="range" id="r-wmax" min="50" max="1500" value="1500" /><span class="val" id="v-wmax">15.00</span></label>
+  <label>Core width<input type="range" id="r-core" min="50" max="600" value="100" /><span class="val" id="v-core">1.00</span></label>
+  <label>Band curve<input type="range" id="r-wbias" min="20" max="300" value="76" /><span class="val" id="v-wbias">0.76</span></label>
+  <div class="btns">
+    <button type="button" id="b-theme">Theme</button>
+    <button type="button" id="b-seed">Reseed</button>
+    <button type="button" id="b-pause">Pause</button>
+  </div>
+  <div class="hint">H panel · Space pause · T theme · R reseed · move mouse for depth</div>
+</div>
+
+<div class="nogl" id="nogl">WebGL unavailable — this experiment needs GPU rendering.</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const qs = new URLSearchParams(location.search);
+  const store = (function () {
+    try {
+      const v = JSON.parse(localStorage.getItem('hero-flow'));
+      return v && typeof v === 'object' ? v : {};
+    } catch (e) { return {}; }
+  })();
+  const reducedQuery = matchMedia('(prefers-reduced-motion: reduce)');
+  let reduced = reducedQuery.matches;
+  reducedQuery.addEventListener ? reducedQuery.addEventListener('change', onReducedChange) : reducedQuery.addListener(onReducedChange);
+  function onReducedChange(e) { reduced = e.matches; dirty = true; }
+
+  const params = {
+    speed: num(store.speed, 0.05, 0, 2),
+    turb: num(store.turb, 0.36, 0, 2),
+    par: num(store.par, 0.57, 0, 2),
+    glow: num(store.glow, 0.85, 0.3, 2.2),
+    op: num(store.op, 0.33, 0, 2),
+    warm: num(store.warm, 1.91, 0, 2),
+    soft: num(store.soft, 0.10, 0, 1.8),
+    count: Math.round(num(store.count, 5, 1, 14)),
+    mtop: num(store.mtop, 0.45, 0, 0.45),
+    mbot: num(store.mbot, 0.32, 0, 0.45),
+    wmin: num(store.wmin, 0.54, 0.10, 1.50),
+    wmax: num(store.wmax, 15.00, 0.50, 15.00),
+    core: num(store.core, 1.00, 0.50, 6.00),
+    wbias: num(store.wbias, 0.76, 0.20, 3.00),
+    light: qs.has('theme') ? qs.get('theme').toLowerCase() === 'light' : (store.light === true),
+    paused: false,
+    seed: num(store.seed, 7.31, 0, 100),
+  };
+  function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+  function num(v, d, a, b) { const n = Number(v); return Number.isFinite(n) ? clamp(n, a, b) : d; }
+
+  const VERT = `
+attribute vec2 aPos;
+void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }
+`;
+
+  const FRAG = `
+precision highp float;
+
+uniform vec2 uRes;
+uniform float uTime;
+uniform vec2 uPar;
+uniform float uTurb;
+uniform float uGlow;
+uniform float uOp;
+uniform float uWarm;
+uniform float uSoft;
+uniform float uCount;
+uniform float uMT;
+uniform float uMB;
+uniform float uWMn;
+uniform float uWMx;
+uniform float uWB;
+uniform float uCore;
+uniform float uSeed;
+uniform float uLight;
+
+const int MAX_LAYERS = 14;
+
+float hash(vec2 p){
+  p = fract(p * vec2(127.1, 311.7) + uSeed);
+  p += dot(p, p + 34.23);
+  return fract(p.x * p.y);
+}
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+    mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+    u.y);
+}
+float fbm(vec2 p){
+  float s = 0.0, a = 0.55;
+  for (int i = 0; i < 4; i++) {
+    s += a * vnoise(p);
+    p = p * 2.07 + vec2(19.7, 7.3);
+    a *= 0.52;
+  }
+  return s;
+}
+
+vec3 palStop(float k){
+  vec3 c0 = vec3(0.643, 0.447, 1.000);
+  vec3 c1 = vec3(1.000, 0.302, 0.553);
+  vec3 c2 = vec3(1.000, 0.478, 0.239);
+  vec3 c3 = vec3(0.271, 0.831, 1.000);
+  vec3 c4 = vec3(0.435, 0.549, 1.000);
+  if (k < 0.5) return c0;
+  if (k < 1.5) return c1;
+  if (k < 2.5) return c2;
+  if (k < 3.5) return c3;
+  return c4;
+}
+vec3 spectrum(float u){
+  float seg = fract(u) * 4.0;
+  float i = floor(seg);
+  float f = smoothstep(0.0, 1.0, fract(seg));
+  return mix(palStop(i), palStop(min(i + 1.0, 4.0)), f);
+}
+
+float wavePhase(float x, float seed, float t, float k1, float k2){
+  return sin(x * k1 + t * 0.60 + seed * 12.9) + sin(x * k2 - t * 0.42 + seed * 27.3);
+}
+
+void main(){
+  vec2 frag = gl_FragCoord.xy;
+  vec2 p = (frag - 0.5 * uRes) / uRes.y;
+  float aspect = uRes.x / uRes.y;
+  float vfit = mix(0.78, 1.0, smoothstep(0.6, 1.4, aspect));
+
+  float t = uTime;
+
+  vec3 emissive = vec3(0.0);
+  vec3 wsum = vec3(0.0);
+  float cov = 0.0;
+
+  for (int li = 0; li < MAX_LAYERS; li++) {
+    if (float(li) >= uCount) break;
+    float fi = float(li);
+    float dn = fi / max(uCount - 1.0, 1.0);
+
+    float seed = fi * 0.618 + floor(uSeed) * 0.113;
+    float lt = t * mix(1.0, 0.42, dn);
+
+    float px = p.x + uPar.x * mix(0.085, 0.018, dn);
+    float py = p.y - uPar.y * mix(0.042, 0.009, dn);
+
+    // Vertical placement constrained to [yBot, yTop], i.e. a horizontal strip
+    // behind the hero copy instead of the full screen height.
+    float yTop = (0.5 - uMT) / max(vfit, 1e-3);
+    float yBot = -(0.5 - uMB) / max(vfit, 1e-3);
+    if (yBot > yTop) { float m = yBot; yBot = yTop; yTop = m; }
+
+    float b0 = fract(sin(fi * 12.9898 + floor(uSeed) * 78.233) * 43758.5453);
+    float baseY = mix(yBot, yTop, b0);
+
+    // Per-band width: random draw shaped by the curve exponent, then ranged
+    // between min and max. Curve < 1 biases draws toward the wide side,
+    // curve > 1 biases toward the narrow side.
+    float wr = fract(sin(fi * 7.77 + floor(uSeed) * 53.17) * 3157.83);
+    float wCurve = pow(clamp(wr, 0.0, 1.0), uWB);
+    float bandW = mix(uWMn, max(uWMx, uWMn), wCurve);
+
+    float k1 = mix(0.95, 1.55, fract(seed * 3.7));
+    float k2 = mix(0.36, 0.60, fract(seed * 5.1));
+    float ph = wavePhase(px, seed, lt, k1, k2);
+    float amp = mix(0.165, 0.115, dn) * (0.65 + 0.7 * uTurb);
+    float c = (baseY + ph * amp
+      + (fbm(vec2(px * 0.80 + seed * 7.0, lt * 0.26 + seed * 3.1)) - 0.5) * 2.0 * 0.17 * uTurb
+      + 0.028 * sin(lt * 0.16 + seed * 9.0)) * vfit;
+
+    float slope = cos(px * k1 + lt * 0.60 + seed * 12.9) * k1
+                - cos(px * k2 - lt * 0.42 + seed * 27.3) * k2;
+
+    float taper = 0.55 + 0.95 * vnoise(vec2(px * 1.7 + seed * 9.0, lt * 0.18));
+    // Core and halo share a base width so Edge soft keeps its meaning, but
+    // uCore scales only the bright center: thicker ribbon cores without the
+    // halo blooming along.
+    float coreBase = 0.0072 * bandW * mix(0.95, 1.65, dn) * taper * (0.7 + 0.6 * uTurb) * uSoft;
+    // Epsilon floors keep gaussians well-defined when uSoft reaches 0
+    // (sharpest setting): thinnest possible cores, halos nearly gone.
+    float coreW = max(coreBase * uCore, 1e-4);
+    float haloW = max(coreBase, 1e-4) * mix(8.0, 13.0, dn) * mix(1.0, uSoft, 0.65);
+
+    float d = py - c;
+    float gCore = exp(-d * d / (coreW * coreW));
+    float gHalo = exp(-d * d / (haloW * haloW));
+
+    float shimmer = 0.86 + 0.28 * fbm(vec2(px * 1.9 - lt * 0.30, seed * 3.0 + lt * 0.19));
+    float spec = clamp(0.74 + slope * 0.32, 0.5, 1.16);
+
+    float hu = px * 0.16 + seed * 0.83 + t * 0.010 + (d / haloW) * 0.09 + uWarm * 0.12;
+    vec3 rc = spectrum(hu);
+    float rl = dot(rc, vec3(0.299, 0.587, 0.114));
+    rc = mix(vec3(rl), rc, 1.0 + 0.6 * uWarm);
+
+    float edgeComp = pow(clamp(uSoft, 0.12, 1.8), -0.3);
+    float haloGain = mix(0.185, 0.068, dn) * edgeComp;
+    float coreGain = mix(0.80, 0.38, dn) * edgeComp;
+
+    vec3 haloCol = rc * gHalo * haloGain * shimmer * spec * uGlow;
+    vec3 coreCol = mix(rc, vec3(1.0), 0.24) * gCore * coreGain * shimmer * uGlow;
+
+    emissive += (haloCol + coreCol) * uOp;
+
+    float wgt = (gHalo * haloGain + gCore * coreGain) * uOp;
+    vec3 inkCol = mix(rc * mix(0.9, 0.55, dn), mix(rc, vec3(1.0), 0.35), gCore * 0.6);
+    wsum += inkCol * wgt * (shimmer * 0.6 + 0.5);
+    cov += wgt * mix(1.0, 0.8, dn);
+  }
+
+  vec2 q = p * vec2(0.82, 1.25);
+  float vig = exp(-dot(q, q) * 0.55);
+
+  vec3 darkBase = vec3(0.024, 0.075, 0.125);
+  float wxl = -min(aspect * 0.46, 0.98);
+  float wxr = min(aspect * 0.48, 1.02);
+  darkBase += vec3(0.55, 0.10, 0.28) * exp(-dot(p - vec2(wxl, 0.34), p - vec2(wxl, 0.34)) * 3.4) * 0.09;
+  darkBase += vec3(0.05, 0.30, 0.48) * exp(-dot(p - vec2(wxr, -0.30), p - vec2(wxr, -0.30)) * 3.6) * 0.085;
+
+  vec3 lightBase = vec3(0.973, 0.980, 0.988);
+  lightBase -= vec3(0.03, 0.045, 0.06) * (1.0 - vig);
+
+  vec3 e = 1.0 - exp(-emissive * 1.15);
+  vec3 darkCol = darkBase + e * mix(1.0, 0.72, 1.0 - vig);
+  vec3 lightCol = mix(lightBase, wsum / max(cov, 1e-4), clamp(cov * 1.5, 0.0, 0.92));
+  lightCol *= mix(1.0, 0.96, 1.0 - vig);
+
+  vec3 col = mix(darkCol, lightCol, uLight);
+
+  col += (hash(frag + fract(t) * 61.7) - 0.5) / 255.0 * 1.6;
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+  const canvas = document.getElementById('gl');
+  let gl = canvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' })
+        || canvas.getContext('experimental-webgl', { alpha: false });
+  if (!gl) { document.getElementById('nogl').style.display = 'block'; document.getElementById('panel').style.display = 'none'; return; }
+
+  const prog = gl.createProgram();
+  try {
+    function compile(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    }
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  } catch (e) {
+    document.getElementById('nogl').style.display = 'block';
+    document.getElementById('panel').style.display = 'none';
+    return;
+  }
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, 'aPos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const U = {};
+  ['uRes', 'uTime', 'uPar', 'uTurb', 'uGlow', 'uOp', 'uWarm', 'uSoft', 'uCount', 'uMT', 'uMB', 'uWMn', 'uWMx', 'uWB', 'uCore', 'uSeed', 'uLight'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+  const SCALES = [1, 0.85, 0.7, 0.55];
+  let scaleIdx = 1;
+  let W = 0, H = 0;
+
+  function resize() {
+    const dpr = Math.min(devicePixelRatio || 1, 2) * SCALES[scaleIdx];
+    const w = Math.max(2, Math.round(innerWidth * dpr));
+    const h = Math.max(2, Math.round(innerHeight * dpr));
+    if (w !== W || h !== H) { W = w; H = h; canvas.width = W; canvas.height = H; gl.viewport(0, 0, W, H); dirty = true; }
+  }
+  addEventListener('resize', resize);
+  let dprMq = matchMedia('(resolution: ' + devicePixelRatio + 'dppx)');
+  function watchDpr() {
+    dprMq.addEventListener ? dprMq.addEventListener('change', onDprChange) : dprMq.addListener(onDprChange);
+  }
+  function onDprChange() {
+    dprMq.removeEventListener ? dprMq.removeEventListener('change', onDprChange) : dprMq.removeListener(onDprChange);
+    dprMq = matchMedia('(resolution: ' + devicePixelRatio + 'dppx)');
+    watchDpr();
+    resize();
+  }
+  watchDpr();
+
+  let mx = 0, my = 0, tx = 0, ty = 0;
+  let lastPointerMove = -10;
+  addEventListener('pointermove', e => {
+    if (reduced) return;
+    tx = (e.clientX / innerWidth) * 2 - 1;
+    ty = -((e.clientY / innerHeight) * 2 - 1);
+    lastPointerMove = perfNow();
+    dirty = true;
+  });
+  function perfNow() { return performance.now() / 1000; }
+
+  let tAnim = 0, lastT = perfNow(), dirty = true, frame = 0;
+  let emaDt = 1 / 60, lastScaleChange = 0;
+  let curTurb = params.turb, curGlow = params.glow, curPar = params.par;
+  let curOp = params.op;
+  let curWarm = params.warm, curSoft = params.soft;
+  let curMT = params.mtop, curMB = params.mbot;
+  let curWMn = params.wmin, curWMx = params.wmax, curWB = params.wbias;
+  let curCore = params.core;
+
+  let fpsAccum = 0, fpsCount = 0;
+  const fpsEl = document.getElementById('fps');
+
+  function tick() {
+    requestAnimationFrame(tick);
+    const now = perfNow();
+    let dt = Math.min(now - lastT, 0.1);
+    lastT = now;
+    frame++;
+    if (!params.paused && !reduced) tAnim += dt * params.speed;
+
+    const ease = 1 - Math.exp(-dt * 3.2);
+    curTurb += (params.turb - curTurb) * ease;
+    curGlow += (params.glow - curGlow) * ease;
+    curOp += (params.op - curOp) * ease;
+    curPar += (params.par - curPar) * ease;
+    curWarm += (params.warm - curWarm) * ease;
+    curSoft += (params.soft - curSoft) * ease;
+    curMT += (params.mtop - curMT) * ease;
+    curMB += (params.mbot - curMB) * ease;
+    curWMn += (params.wmin - curWMn) * ease;
+    curWMx += (params.wmax - curWMx) * ease;
+    curWB += (params.wbias - curWB) * ease;
+    curCore += (params.core - curCore) * ease;
+
+    const idle = now - lastPointerMove > 4;
+    const ax = reduced ? 0 : (idle ? 0.42 * Math.sin(tAnim * 0.05 + 1.3) : tx);
+    const ay = reduced ? 0 : (idle ? 0.26 * Math.sin(tAnim * 0.037) : ty);
+    const me = 1 - Math.exp(-dt * 3.6);
+    mx += (ax - mx) * me;
+    my += (ay - my) * me;
+
+    if (reduced || params.paused) {
+      const settling = Math.abs(mx - ax) + Math.abs(my - ay)
+        + Math.abs(params.turb - curTurb) + Math.abs(params.glow - curGlow) + Math.abs(params.par - curPar)
+        + Math.abs(params.op - curOp)
+        + Math.abs(params.warm - curWarm) + Math.abs(params.soft - curSoft)
+        + Math.abs(params.mtop - curMT) + Math.abs(params.mbot - curMB)
+        + Math.abs(params.wmin - curWMn) + Math.abs(params.wmax - curWMx)
+        + Math.abs(params.core - curCore)
+        + Math.abs(params.wbias - curWB);
+      if (!dirty && settling < 0.001) { fpsEl.textContent = 'idle'; return; }
+    }
+
+    emaDt += (dt - emaDt) * 0.05;
+    if (!reduced && frame > 90 && now - lastScaleChange > 2.0) {
+      if (emaDt > 0.024 && scaleIdx < SCALES.length - 1) { scaleIdx++; resize(); lastScaleChange = now; }
+      else if (emaDt < 0.013 && scaleIdx > 0) { scaleIdx--; resize(); lastScaleChange = now; }
+    }
+
+    gl.uniform2f(U.uRes, W, H);
+    gl.uniform1f(U.uTime, tAnim);
+    gl.uniform2f(U.uPar, mx * curPar, my * curPar);
+    gl.uniform1f(U.uTurb, curTurb);
+    gl.uniform1f(U.uGlow, curGlow);
+    gl.uniform1f(U.uOp, curOp);
+    gl.uniform1f(U.uWarm, curWarm);
+    gl.uniform1f(U.uSoft, curSoft);
+    gl.uniform1f(U.uCount, params.count);
+    gl.uniform1f(U.uMT, curMT);
+    gl.uniform1f(U.uMB, curMB);
+    gl.uniform1f(U.uWMn, curWMn);
+    gl.uniform1f(U.uWMx, curWMx);
+    gl.uniform1f(U.uWB, curWB);
+    gl.uniform1f(U.uCore, curCore);
+    gl.uniform1f(U.uSeed, params.seed);
+    gl.uniform1f(U.uLight, params.light ? 1 : 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    dirty = false;
+
+    fpsAccum += dt; fpsCount++;
+    if (fpsAccum > 0.5) {
+      const f = fpsCount / fpsAccum;
+      fpsEl.textContent = Math.round(f) + ' fps' + (SCALES[scaleIdx] < 1 ? ' · res ' + Math.round(SCALES[scaleIdx] * 100) + '%' : '');
+      fpsAccum = 0; fpsCount = 0;
+    }
+  }
+
+  function applyThemeClass() {
+    document.body.classList.toggle('light', params.light);
+    dirty = true;
+  }
+
+  function bindSlider(id, valId, key, fmt) {
+    const r = document.getElementById('r-' + id), v = document.getElementById('v-' + id);
+    r.value = String(Math.round(params[key] * 100));
+    v.textContent = fmt(params[key]);
+    r.addEventListener('input', () => {
+      params[key] = parseInt(r.value, 10) / 100;
+      v.textContent = fmt(params[key]);
+      persist(); dirty = true;
+    });
+  }
+  const f2 = x => x.toFixed(2);
+  bindSlider('speed', 'v-speed', 'speed', f2);
+  bindSlider('turb', 'v-turb', 'turb', f2);
+  bindSlider('par', 'v-par', 'par', f2);
+  bindSlider('glow', 'v-glow', 'glow', f2);
+  bindSlider('op', 'v-op', 'op', f2);
+  bindSlider('warm', 'v-warm', 'warm', f2);
+  bindSlider('soft', 'v-soft', 'soft', f2);
+  (function () {
+    const r = document.getElementById('r-count'), v = document.getElementById('v-count');
+    r.value = String(params.count);
+    v.textContent = String(params.count);
+    r.addEventListener('input', () => {
+      const n = parseInt(r.value, 10);
+      if (Number.isFinite(n)) { params.count = clamp(n, 1, 14); v.textContent = String(params.count); persist(); dirty = true; }
+    });
+  })();
+  bindSlider('mtop', 'v-mtop', 'mtop', f2);
+  bindSlider('mbot', 'v-mbot', 'mbot', f2);
+  bindSlider('wmin', 'v-wmin', 'wmin', f2);
+  bindSlider('wmax', 'v-wmax', 'wmax', f2);
+  bindSlider('core', 'v-core', 'core', f2);
+  bindSlider('wbias', 'v-wbias', 'wbias', f2);
+
+  let persistTimer = 0;
+  function persist() {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(function () {
+      try { localStorage.setItem('hero-flow', JSON.stringify({ speed: params.speed, turb: params.turb, par: params.par, glow: params.glow, op: params.op, warm: params.warm, soft: params.soft, count: params.count, mtop: params.mtop, mbot: params.mbot, wmin: params.wmin, wmax: params.wmax, core: params.core, wbias: params.wbias, light: params.light, seed: params.seed })); } catch (e) {}
+    }, 250);
+  }
+
+  const pauseBtn = document.getElementById('b-pause');
+  function setPause(v) { params.paused = v; pauseBtn.textContent = v ? 'Play' : 'Pause'; dirty = true; }
+  pauseBtn.addEventListener('click', () => setPause(!params.paused));
+
+  document.getElementById('b-theme').addEventListener('click', () => {
+    params.light = !params.light; applyThemeClass(); persist();
+  });
+  document.getElementById('b-seed').addEventListener('click', () => {
+    params.seed = Math.random() * 100; persist(); dirty = true;
+  });
+
+  const panel = document.getElementById('panel');
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+    if (e.key === 'h' || e.key === 'H') panel.classList.toggle('hidden');
+    else if (e.code === 'Space') { e.preventDefault(); setPause(!params.paused); }
+    else if (e.key === 't' || e.key === 'T') { params.light = !params.light; applyThemeClass(); persist(); }
+    else if (e.key === 'r' || e.key === 'R') { params.seed = Math.random() * 100; persist(); dirty = true; }
+  });
+
+  document.addEventListener('visibilitychange', () => { lastT = perfNow(); });
+
+  canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); }, false);
+  canvas.addEventListener('webglcontextrestored', () => { location.reload(); }, false);
+
+  applyThemeClass();
+  resize();
+  tick();
+})();
+</script>
+</body>
+</html>
