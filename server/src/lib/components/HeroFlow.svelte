@@ -51,50 +51,77 @@
     }
     if (!initGL()) return;
 
-    const SCALES = [1, 0.85, 0.7, 0.55];
-    let scaleIdx = 1;
     let W = 0, H = 0;
 
     const reducedMq = matchMedia('(prefers-reduced-motion: reduce)');
     let reduced = reducedMq.matches;
 
     let mx = 0, my = 0, tx = 0, ty = 0;
+    let pointerX = 0, pointerY = 0, pointerPending = false;
+    let bounds = null;
     let lastPointerMove = -10;
-    let tAnim = 0, lastT = performance.now() / 1000, dirty = true, frame = 0;
-    let emaDt = 1 / 60, lastScaleChange = 0;
+    let tAnim = 0, lastT = performance.now() / 1000, lastDraw = -1, dirty = true;
     let raf = 0;
     let light = theme === 'light';
+    let inView = true;
+    let contextReady = true;
 
     function resize() {
-      const dpr = Math.min(devicePixelRatio || 1, 2) * SCALES[scaleIdx];
+      // This soft decorative field does not benefit visibly from full Retina
+      // resolution. 1.1 matches the previously observed adaptive floor on 2x
+      // displays while avoiding multi-million-pixel 2x frames.
+      const dpr = Math.min(devicePixelRatio || 1, 1.1);
       const w = Math.max(2, Math.round(canvas.clientWidth * dpr));
       const h = Math.max(2, Math.round(canvas.clientHeight * dpr));
       if (w !== W || h !== H) { W = w; H = h; canvas.width = W; canvas.height = H; }
       gl.viewport(0, 0, W, H);
+      bounds = null;
       dirty = true;
+      if (reduced) drawFrame(0);
     }
 
     function onPointerMove(e) {
       if (reduced) return;
-      const r = canvas.getBoundingClientRect();
-      tx = ((e.clientX - r.left) / r.width) * 2 - 1;
-      ty = -(((e.clientY - r.top) / r.height) * 2 - 1);
-      lastPointerMove = performance.now() / 1000;
-      dirty = true;
+      pointerX = e.clientX;
+      pointerY = e.clientY;
+      pointerPending = true;
+    }
+
+    function onScroll() { bounds = null; }
+
+    function shouldAnimate() {
+      return !reduced && inView && !document.hidden && contextReady;
+    }
+
+    function ensureRunning() {
+      if (!shouldAnimate() || raf) return;
+      lastT = performance.now() / 1000;
+      lastDraw = -1;
+      raf = requestAnimationFrame(tick);
+    }
+
+    function pause() {
+      cancelAnimationFrame(raf);
+      raf = 0;
     }
 
     function onReducedChange() {
       reduced = reducedMq.matches;
       if (reduced) {
-        cancelAnimationFrame(raf);
-        raf = 0;
+        pause();
         drawFrame(0);
-      } else if (!raf) {
-        lastT = performance.now() / 1000;
-        raf = requestAnimationFrame(tick);
-      }
+      } else ensureRunning();
     }
-    function onVisibility() { lastT = performance.now() / 1000; }
+    function onVisibility() {
+      if (document.hidden) pause();
+      else ensureRunning();
+    }
+
+    const visibilityObserver = new IntersectionObserver(([entry]) => {
+      inView = entry.isIntersecting;
+      if (inView) ensureRunning();
+      else pause();
+    }, { rootMargin: '100px 0px' });
 
     let dprMq = matchMedia('(resolution: ' + devicePixelRatio + 'dppx)');
     function onDprChange() {
@@ -128,6 +155,7 @@
     }
 
     function drawFrame(t) {
+      if (!contextReady) return;
       uploadUniforms(t);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       dirty = false;
@@ -138,8 +166,15 @@
       const now = performance.now() / 1000;
       const dt = Math.min(now - lastT, 0.1);
       lastT = now;
-      frame++;
       tAnim += dt * SETTINGS.speed;
+
+      if (pointerPending) {
+        bounds ??= canvas.getBoundingClientRect();
+        tx = ((pointerX - bounds.left) / bounds.width) * 2 - 1;
+        ty = -(((pointerY - bounds.top) / bounds.height) * 2 - 1);
+        lastPointerMove = now;
+        pointerPending = false;
+      }
 
       const idle = now - lastPointerMove > 4;
       const ax = idle ? 0.42 * Math.sin(tAnim * 0.05 + 1.3) : tx;
@@ -148,52 +183,56 @@
       mx += (ax - mx) * me;
       my += (ay - my) * me;
 
-      emaDt += (dt - emaDt) * 0.05;
-      if (frame > 90 && now - lastScaleChange > 2.0) {
-        if (emaDt > 0.024 && scaleIdx < SCALES.length - 1) { scaleIdx++; resize(); lastScaleChange = now; }
-        else if (emaDt < 0.013 && scaleIdx > 0) { scaleIdx--; resize(); lastScaleChange = now; }
-      }
-
+      const drawInterval = 1 / 30;
+      if (lastDraw >= 0 && now - lastDraw < drawInterval - 0.002) return;
+      // Keep the cadence anchored so small rAF timing differences do not turn
+      // a 30 fps target into one draw every three 60 Hz frames.
+      lastDraw = lastDraw < 0 || now - lastDraw > drawInterval * 2
+        ? now
+        : lastDraw + drawInterval;
       drawFrame(tAnim);
     }
 
     function onContextLost(e) {
       e.preventDefault();
-      cancelAnimationFrame(raf);
-      raf = 0;
+      contextReady = false;
+      pause();
     }
     function onContextRestored() {
       if (!initGL()) return;
+      contextReady = true;
       resize();
       if (reduced) drawFrame(0);
-      else if (!raf) { lastT = performance.now() / 1000; raf = requestAnimationFrame(tick); }
+      else ensureRunning();
     }
 
     function start() {
       resize();
       watchDpr();
       addEventListener('resize', resize);
+      addEventListener('scroll', onScroll, { passive: true });
       addEventListener('pointermove', onPointerMove, { passive: true });
       document.addEventListener('visibilitychange', onVisibility);
       canvas.addEventListener('webglcontextlost', onContextLost, false);
       canvas.addEventListener('webglcontextrestored', onContextRestored, false);
       reducedMq.addEventListener ? reducedMq.addEventListener('change', onReducedChange) : reducedMq.addListener(onReducedChange);
+      visibilityObserver.observe(canvas);
       if (reduced) {
         drawFrame(0);
-      } else {
-        raf = requestAnimationFrame(tick);
-      }
+      } else ensureRunning();
     }
 
     function stop() {
       cancelAnimationFrame(raf);
       removeEventListener('resize', resize);
+      removeEventListener('scroll', onScroll);
       removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('visibilitychange', onVisibility);
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', onContextRestored);
       dprMq.removeEventListener ? dprMq.removeEventListener('change', onDprChange) : dprMq.removeListener(onDprChange);
       reducedMq.removeEventListener ? reducedMq.removeEventListener('change', onReducedChange) : reducedMq.removeListener(onReducedChange);
+      visibilityObserver.disconnect();
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     }
 
