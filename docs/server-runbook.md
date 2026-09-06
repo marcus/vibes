@@ -67,6 +67,58 @@ DRY_RUN=1 make deploy
 
 The deploy script reads `.env.deploy` automatically when present.
 
+The deploy also creates an unprivileged `vibes` system user, installs the
+systemd unit with that identity, and restricts the SQLite data directory to the
+service account. Deployed source remains root-owned and readable by the service;
+nginx retains read access to public avatar files.
+
+## Encrypted Database Backups
+
+On the operator Mac, install the nightly backup after mounting Albatross:
+
+```bash
+scripts/install-vibes-backup.sh
+```
+
+The installer leaves the LaunchAgent inactive by default. macOS must allow the
+background shell to write, rename, and delete files on removable volumes. In
+System Settings, open Privacy & Security > Full Disk Access, add `/bin/bash`
+(use Command-Shift-G in the file picker), and enable it. Then activate the job:
+
+```bash
+scripts/install-vibes-backup.sh --activate
+```
+
+The LaunchAgent runs at 03:17 local time. It uses SQLite's online backup command
+on the relay, verifies the snapshot there, and streams only the database through
+`age` to a uniquely named temporary file on Albatross. It verifies the encrypted
+round trip against the remote SHA-256 before an atomic rename. Only after that
+success does it remove completed backups older than 30 days. The job fails if
+Albatross is not mounted and never falls back to a directory on the internal
+disk. Logs are kept at `~/Library/Logs/VibesBackup/backup.log` and trimmed.
+
+The dedicated identity is at `~/.config/vibes-backup/identity.txt`, with its
+directory mode `0700` and file mode `0600`. Keep a second copy of this key in a
+password manager; without it, the encrypted backups cannot be restored. Do not
+commit or print the identity.
+
+To run a backup immediately:
+
+```bash
+launchctl kickstart "gui/$(id -u)/com.opentangle.vibes-backup"
+```
+
+To test a restore, select the newest slot by modification time, decrypt it to a
+temporary path, and run an integrity check:
+
+```bash
+latest="$(ls -t /Volumes/Albatross/backups/vibes/vibes-db-????????T??????Z-*.sqlite.age | head -1)"
+age -d -i ~/.config/vibes-backup/identity.txt -o /tmp/vibes-restored.sqlite "$latest"
+sqlite3 /tmp/vibes-restored.sqlite 'PRAGMA quick_check;'
+```
+
+A good restore prints `ok`; remove the temporary plaintext database afterward.
+
 ## First-Time Bootstrap
 
 The host needs Node.js 20, 22, or 24 and npm. Node 26 is not currently supported
@@ -347,7 +399,7 @@ Implemented so far:
 - `GET /healthz`
 - `GET /invite/:code` — web signup page
 - `POST /invite/:code/accept` — accept an invite (creates user, token, mutual friendship)
-- `POST /api/users` — create a bootstrap user
+- `POST /api/register` — create an app account and first device token
 - `POST /api/invites`, `GET /api/invites`, `POST /api/invites/:id/revoke`
 - `POST /api/status`, `GET /api/feed`
 - `POST /api/friends/remove`, `POST /api/tokens/revoke`
@@ -358,6 +410,15 @@ Contract validation tests are located in [relay.test.js](file:///Users/marcusvor
 Still to build: broader admin tooling and packaged Mac app distribution.
 
 Bearer token auth for v1. Identities, friend links, invites, and latest status blobs live in SQLite; the schema and migrations are in `server/src/lib/server/db.js`.
+
+The public relay keeps practical storage and signup bounds: 120 registrations
+per rolling hour and 500 per rolling day across the service; 20 retained device
+statuses per account; 64 KiB status payloads; 300 distinct commit fingerprints
+per account/day; five avatar images per account; and 180 days of daily activity
+and commit-fingerprint history. Capacity failures use the normal JSON error shape
+with stable `registration_capacity`, `device_capacity`, or
+`daily_commit_capacity` codes. These limits preserve ordinary signup,
+second-device, presence, and avatar flows while bounding unattended growth.
 
 Git activity is still published as aggregate `git_stats`. The relay records one
 aggregate `daily_activity` row per `(user_id, device_id, client_day)` with

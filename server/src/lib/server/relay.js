@@ -4,12 +4,18 @@ import { getAvatarStore } from "./avatarStore.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_HANDLE_LENGTH = 32;
-export const MAX_STATUS_BYTES = 256 * 1024;
+export const MAX_STATUS_BYTES = 64 * 1024;
 // Avatar uploads are 512px PNGs; cap raw bytes and dimensions defensively.
 const MAX_AVATAR_BYTES = 1_500_000;
 const MAX_AVATAR_DIMENSION = 1024;
 const MAX_AVATAR_PROMPT_LENGTH = 240;
 const MAX_AVATAR_STYLE_LENGTH = 64;
+const MAX_AVATAR_HISTORY = 5;
+const MAX_STATUS_DEVICES = 20;
+const MAX_DAILY_COMMITS = 300;
+const ACTIVITY_RETENTION_DAYS = 180;
+const REGISTRATION_HOURLY_LIMIT = 120;
+const REGISTRATION_DAILY_LIMIT = 500;
 
 /**
  * Server-owned house-style template for client-side Apple Intelligence
@@ -275,6 +281,17 @@ export function registerUser(db, { displayName, deviceLabel = null, handle = nul
   const cleanTimezone = normalizeTimezone(timezone);
 
   return writeTx(db, () => {
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const dayAgo = new Date(Date.now() - DAY_MS).toISOString();
+    const hourly = db.prepare("SELECT COUNT(*) AS count FROM users WHERE created_at >= ?").get(hourAgo).count;
+    const daily = db.prepare("SELECT COUNT(*) AS count FROM users WHERE created_at >= ?").get(dayAgo).count;
+    if (hourly >= REGISTRATION_HOURLY_LIMIT || daily >= REGISTRATION_DAILY_LIMIT) {
+      throw new RelayError(
+        "registration_capacity",
+        "Registration is temporarily at capacity. Try again later.",
+        429,
+      );
+    }
     for (let attempt = 1; attempt <= 1000; attempt += 1) {
       try {
         const user = createUser(db, {
@@ -608,6 +625,14 @@ function normalizeStatusPayload(authUser, input, receivedAt) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(clientDay)) {
     throw new RelayError("invalid_client_day", "Client day must be YYYY-MM-DD.", 400);
   }
+  const clientDayMs = Date.parse(`${clientDay}T00:00:00.000Z`);
+  if (
+    Number.isNaN(clientDayMs) ||
+    new Date(clientDayMs).toISOString().slice(0, 10) !== clientDay ||
+    clientDayMs > Date.now() + 2 * DAY_MS
+  ) {
+    throw new RelayError("invalid_client_day", "Client day is not a valid current date.", 400);
+  }
 
   const updatedAt = String(input?.updated_at ?? receivedAt).trim();
   if (Number.isNaN(Date.parse(updatedAt))) {
@@ -727,6 +752,26 @@ export function upsertStatus(db, user, input) {
   }
 
   writeTx(db, () => {
+    const existingDevice = db
+      .prepare("SELECT 1 FROM statuses WHERE user_id = ? AND device_id = ?")
+      .get(user.id, deviceId);
+    if (!existingDevice) {
+      const staleBefore = new Date(Date.parse(receivedAt) - 30 * DAY_MS).toISOString();
+      db.prepare("DELETE FROM statuses WHERE user_id = ? AND server_received_at < ?").run(
+        user.id,
+        staleBefore,
+      );
+      const devices = db
+        .prepare("SELECT COUNT(*) AS count FROM statuses WHERE user_id = ?")
+        .get(user.id).count;
+      if (devices >= MAX_STATUS_DEVICES) {
+        throw new RelayError(
+          "device_capacity",
+          "This account has reached its retained device-status capacity.",
+          409,
+        );
+      }
+    }
     db.prepare(
       `INSERT INTO statuses (
          user_id, device_id, device_label, mode, client_day, payload_json,
@@ -752,10 +797,19 @@ export function upsertStatus(db, user, input) {
       receivedAt,
     );
     recordDailyActivity(db, user.id, deviceId, payload, receivedAt);
+    pruneActivityHistory(db, user.id, receivedAt);
     maybePersistMissingTimezone(db, user.id);
   });
 
   return { ok: true, server_received_at: receivedAt };
+}
+
+function pruneActivityHistory(db, userId, receivedAt) {
+  const cutoff = new Date(Date.parse(receivedAt) - ACTIVITY_RETENTION_DAYS * DAY_MS)
+    .toISOString()
+    .slice(0, 10);
+  db.prepare("DELETE FROM daily_commits WHERE user_id = ? AND client_day < ?").run(userId, cutoff);
+  db.prepare("DELETE FROM daily_activity WHERE user_id = ? AND client_day < ?").run(userId, cutoff);
 }
 
 /**
@@ -1023,6 +1077,20 @@ function commitDetails(card) {
 function recordDailyCommits(db, userId, clientDay, card, receivedAt) {
   const details = commitDetails(card);
   if (!details.length) return;
+  const existingIds = new Set(
+    db
+      .prepare("SELECT commit_id FROM daily_commits WHERE user_id = ? AND client_day = ?")
+      .all(userId, clientDay)
+      .map((row) => row.commit_id),
+  );
+  const newCount = new Set(details.map((commit) => commit.id).filter((id) => !existingIds.has(id))).size;
+  if (existingIds.size + newCount > MAX_DAILY_COMMITS) {
+    throw new RelayError(
+      "daily_commit_capacity",
+      "Daily commit detail capacity has been reached for this account.",
+      413,
+    );
+  }
   const insert = db.prepare(
     `INSERT INTO daily_commits (
        user_id, client_day, commit_id, files_changed, insertions, deletions,
@@ -1435,9 +1503,8 @@ export function newShortId(db, bytes = 9) {
 
 /**
  * Store a generated avatar for a user: mint a slug, write the bytes via the
- * storage adapter, record the row, and point users.avatar_id at it. The old
- * row/asset is kept as immutable history (no delete on regenerate), so the
- * minted URL is safe to cache `immutable`.
+ * storage adapter, record the row, and point users.avatar_id at it. The newest
+ * five images are retained; older immutable URLs may expire after regeneration.
  * @param {import('better-sqlite3').Database} db
  * @param {{ id: string }} user
  * @param {{ bytes: Buffer | Uint8Array, contentType: string, width: number, height: number, prompt?: string | null, style?: string | null }} input
@@ -1450,7 +1517,7 @@ export function setUserAvatar(db, user, { bytes, contentType, width, height, pro
   const cleanStyle =
     style == null ? null : String(style).trim().slice(0, MAX_AVATAR_STYLE_LENGTH) || null;
 
-  return writeTx(db, () => {
+  const result = writeTx(db, () => {
     const id = newShortId(db);
     // Write bytes first; if the row insert fails the orphaned file is harmless
     // (it is unreferenced and overwritten only by a future slug, which is unique).
@@ -1477,6 +1544,26 @@ export function setUserAvatar(db, user, { bytes, contentType, width, height, pro
     ).run(id, now(), user.id);
     return { id, avatar_url: store.urlFor(id) };
   });
+  const obsolete = db
+    .prepare(
+      `SELECT id FROM avatars
+       WHERE user_id = ? AND id <> ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT -1 OFFSET ?`,
+    )
+    .all(user.id, result.id, MAX_AVATAR_HISTORY - 1);
+  writeTx(db, () => {
+    const removeRow = db.prepare("DELETE FROM avatars WHERE id = ? AND user_id = ?");
+    for (const avatar of obsolete) removeRow.run(avatar.id, user.id);
+  });
+  for (const avatar of obsolete) {
+    try {
+      store.remove(avatar.id);
+    } catch (error) {
+      console.warn(`[avatarStore] could not remove obsolete avatar ${avatar.id}: ${error}`);
+    }
+  }
+  return result;
 }
 
 /**

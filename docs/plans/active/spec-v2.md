@@ -424,10 +424,10 @@ Errors use a single shape with an appropriate HTTP status:
 
 Endpoints:
 
-- `POST /api/users` — create a user during bootstrap.
-  - Request: `{ "handle": "marcus", "display_name": "Marcus" }`
-  - Response `201`: `{ "user": { "id": "...", "handle": "marcus", "display_name": "Marcus" } }`
-  - `409 handle_taken` if the handle exists.
+- `POST /api/register` — create an app account and first device token.
+  - Request: `{ "display_name": "Marcus", "device_label": "MacBook", "timezone": "America/Denver" }`
+  - Response `201`: `{ "user": { ... }, "token": "<raw token shown once>" }`
+  - `429 registration_capacity` when the durable relay-wide registration budget is full.
 - `POST /api/invites` (auth) — create an invite for the caller.
   - Request: `{}`
   - Response `201`: `{ "id": "...", "invite_url": "https://relay/invite/<code>", "expires_at": "..." }`
@@ -444,7 +444,8 @@ Endpoints:
 - `POST /api/status` (auth) — upsert the caller's status for one device.
   - Request: the status blob plus `device_id` and `device_label`.
   - Response `200`: `{ "ok": true, "server_received_at": "..." }`
-  - `413 payload_too_large` if the blob exceeds 32 KB.
+  - `413 payload_too_large` if the blob exceeds 64 KB.
+  - `409 device_capacity` when the account already retains statuses for 20 devices.
 - `GET /api/feed` (auth) — the caller's own merged status plus accepted friends' merged statuses.
   - Response `200`: `{ "you": { ...merged status... }, "friends": [ { ...merged status... } ] }`
 - `POST /api/friends/remove` (auth) — unfriend a user by handle.
@@ -454,7 +455,7 @@ Endpoints:
   - Request: `{ "token_id": "..." }`
   - Response `200`: `{ "ok": true }`
 
-Public endpoints (`POST /api/users`, `GET /invite/:code`, `POST /invite/:code/accept`) and `POST /api/status` are rate limited per IP. The limit is coarse and only needs to stop accidental loops and casual abuse for v1.
+Public endpoints (`POST /api/register`, `GET /invite/:code`, `POST /invite/:code/accept`) and `POST /api/status` are rate limited per IP. Registration also has durable relay-wide budgets of 120 accounts per rolling hour and 500 per rolling day.
 
 #### Keeping client and relay in sync
 
@@ -962,7 +963,7 @@ Complete the minimal API:
 
 - `POST /api/status`
 - `GET /api/feed`
-- `POST /api/users`
+- `POST /api/register`
 - `POST /api/invites`
 - `GET /api/invites`
 - `POST /api/invites/:id/revoke`

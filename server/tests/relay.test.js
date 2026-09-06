@@ -238,6 +238,17 @@ describe("users", () => {
     );
     expect(db.prepare("SELECT COUNT(*) AS n FROM users").get().n).toBe(0);
   });
+
+  it("enforces a durable service-wide hourly registration budget", () => {
+    for (let i = 0; i < 120; i += 1) {
+      createUser(db, { handle: `user-${i}`, displayName: `User ${i}` });
+    }
+    expectRelayError(
+      () => registerUser(db, { displayName: "One Too Many" }),
+      "registration_capacity",
+      429,
+    );
+  });
 });
 
 describe("auth", () => {
@@ -570,6 +581,19 @@ describe("statuses and feed", () => {
       "invalid_day_boundary",
       400,
     );
+  });
+
+  it("rejects invalid and far-future client days", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    for (const day of ["2026-99-99", "2999-01-01"]) {
+      expectRelayError(
+        () => upsertStatus(db, user, { ...fixture("status-online"), day }),
+        "invalid_client_day",
+        400,
+      );
+    }
+    expect(db.prepare("SELECT COUNT(*) AS n FROM daily_activity").get().n).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM daily_commits").get().n).toBe(0);
   });
 
   it("offline preserves the latest shared snapshot", () => {
@@ -908,6 +932,42 @@ describe("statuses and feed", () => {
       }),
     ).toThrow(RelayError);
   });
+
+  it("bounds retained status devices per account", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    for (let i = 0; i < 20; i += 1) {
+      upsertStatus(db, user, { ...fixture("status-online"), device_id: `device-${i}` });
+    }
+    expectRelayError(
+      () => upsertStatus(db, user, { ...fixture("status-online"), device_id: "device-20" }),
+      "device_capacity",
+      409,
+    );
+    expect(() =>
+      upsertStatus(db, user, { ...fixture("status-online"), device_id: "device-0" }),
+    ).not.toThrow();
+  });
+
+  it("bounds commit detail rows per account day", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const commits = Array.from({ length: 301 }, (_, i) => ({
+      id: i.toString(16).padStart(64, "0"),
+      committed_at: "2026-06-06T18:00:00.000Z",
+      files_changed: 1,
+      insertions: 1,
+      deletions: 0,
+    }));
+    expectRelayError(
+      () =>
+        upsertStatus(db, user, {
+          ...fixture("status-online"),
+          cards: [{ type: "git_stats", enabled: true, data: { commit_details: commits } }],
+        }),
+      "daily_commit_capacity",
+      413,
+    );
+    expect(db.prepare("SELECT COUNT(*) AS n FROM statuses").get().n).toBe(0);
+  });
 });
 
 describe("avatars", () => {
@@ -1006,6 +1066,25 @@ describe("avatars", () => {
 
     expect(avatarUrlFor({ avatar_id: result.id })).toBe(result.avatar_url);
     expect(avatarUrlFor({ avatar_id: null })).toBeNull();
+  });
+
+  it("keeps only the five newest avatar assets per account", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const ids = [];
+    for (let i = 0; i < 6; i += 1) {
+      ids.push(
+        setUserAvatar(db, user, {
+          bytes: fakePng(),
+          contentType: "image/png",
+          width: 512,
+          height: 512,
+          prompt: `avatar ${i}`,
+        }).id,
+      );
+    }
+    expect(db.prepare("SELECT COUNT(*) AS n FROM avatars WHERE user_id = ?").get(user.id).n).toBe(5);
+    expect(ids.filter((id) => existsSync(join(avatarDir, `${id}.png`)))).toHaveLength(5);
+    expect(existsSync(join(avatarDir, `${ids[5]}.png`))).toBe(true);
   });
 
   it("surfaces avatar_url for the viewer and friends in getFeed", () => {
@@ -1219,6 +1298,34 @@ describe("daily activity and typical churn", () => {
       ],
     });
   }
+
+  it("prunes account activity older than 180 days on publish", () => {
+    const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
+    const today = new Date().toISOString().slice(0, 10);
+    const day180 = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const day181 = new Date(Date.now() - 181 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    db.prepare(
+      `INSERT INTO daily_activity
+       (user_id, device_id, client_day, commits, insertions, deletions, updated_at)
+       VALUES (?, 'old-device', ?, 1, 1, 0, ?)`,
+    ).run(user.id, day181, `${day181}T12:00:00.000Z`);
+    db.prepare(
+      `INSERT INTO daily_commits
+       (user_id, client_day, commit_id, files_changed, insertions, deletions, committed_at, updated_at)
+       VALUES (?, ?, ?, 1, 1, 0, ?, ?)`,
+    ).run(user.id, day181, "a".repeat(64), `${day181}T12:00:00.000Z`, `${day181}T12:00:00.000Z`);
+    db.prepare(
+      `INSERT INTO daily_activity
+       (user_id, device_id, client_day, commits, insertions, deletions, updated_at)
+       VALUES (?, 'boundary-device', ?, 1, 1, 0, ?)`,
+    ).run(user.id, day180, `${day180}T12:00:00.000Z`);
+
+    postDay(user, today, { insertions: 2, deletions: 1 });
+
+    expect(db.prepare("SELECT COUNT(*) AS n FROM daily_activity WHERE client_day = ?").get(day181).n).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM daily_commits WHERE client_day = ?").get(day181).n).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM daily_activity WHERE client_day = ?").get(day180).n).toBe(1);
+  });
 
   it("accrues one row per user/device/day, replacing cumulative totals", () => {
     const user = createUser(db, { handle: "marcus", displayName: "Marcus" });
