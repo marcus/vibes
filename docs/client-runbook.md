@@ -70,15 +70,35 @@ Safety properties:
 
 ## Widget Mode Notes
 
-- The widget window has no titlebar chrome: traffic lights are hidden and the
-  titlebar hairline is removed by `WidgetWindowConfigurator` (reapplied on
-  every `updateNSView`, since AppKit resets window properties on style
-  changes).
+- The widget uses SwiftUI's plain window style, a clear window container,
+  desktop level, and background dragging. These scene settings keep macOS 27
+  from restoring a normal window background or traffic lights. The AppKit
+  configurator also runs when its view actually attaches to the window.
+- Relaunch explicitly opens the widget when the saved mode is on, even if
+  SwiftUI restores only the main scene.
 - Drag anywhere on the sky to reposition; the frame persists across relaunches
   via the `NSWindow Frame widget` autosave.
 - ⌘W can still close a focused widget window (window-level close bypasses the
   hidden buttons). This is safe: the next dock click or menu-bar restore runs
   the exit transition, which reopens the main window and reconciles state.
+
+## Profile Icon Generation
+
+Generation uses the native Image Playground sheet on macOS 26 and later.
+On macOS 27, the old `ImageCreator` API returns `notSupported` even when the
+system's image-generation UI is available. Capability detection therefore
+uses `ImagePlaygroundViewController.isAvailable`.
+
+The sheet receives the house-style prompt and one allowed on-device style
+(illustration, animation, or sketch). External-provider styles are excluded.
+Choosing Done returns a square PNG preview; only **Use this** uploads it.
+Cancelling leaves an existing preview intact.
+
+Run `scripts/check-avatar-generator.sh` for style-selection, prompt, PNG crop,
+and invalid-image checks. For native UI proof, launch the isolated demo with
+`VIBES_DEMO_FEED=1`, open Settings → Profile Icon, generate an image, choose
+Done, then regenerate and cancel. The demo supplies a house style without
+reading account data or fetching it from the relay.
 
 ## Core Features Implemented
 

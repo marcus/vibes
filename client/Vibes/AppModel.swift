@@ -55,7 +55,7 @@ final class AppModel: ObservableObject {
   @Published var lastSyncedAt: Date?
 
   // AI profile-icon state. `houseStyle` is the server-owned art-direction
-  // template cached from /api/me. `avatarSupported` is the on-device ImageCreator
+  // template cached from /api/me. `avatarSupported` is the on-device Image Playground
   // probe (nil = not yet checked). The rest drive the Settings → Profile Icon
   // pane's preview / progress / error display.
   @Published var houseStyle: HouseStyle?
@@ -63,13 +63,8 @@ final class AppModel: ObservableObject {
   @Published var avatarPreviewPNG: Data?
   @Published var avatarLastStyle: String?
   @Published var avatarLastPrompt: String = ""
-  @Published var isGeneratingAvatar = false
   @Published var isUploadingAvatar = false
   @Published var avatarError: String?
-  // Set when an AI generation fails with a likely "model still downloading"
-  // transient (`.creationFailed`), so the UI can offer an "Open Image Playground"
-  // button + clearer copy. Cleared on the next generate attempt.
-  @Published var avatarMaySetupNeeded = false
 
   // Gradient-fallback state for the Profile Icon pane: two picker selections that
   // default to the brand accent → a complementary teal. `setGradientAvatar()` PUTs
@@ -130,6 +125,12 @@ final class AppModel: ObservableObject {
       mode = .online
       #if DEBUG
       feed = SampleFeed.feedResponse()
+      houseStyle = HouseStyle(
+        promptPrefix: "A friendly minimalist icon of ",
+        promptSuffix: ", centered, simple solid background, soft palette",
+        styles: ["illustration", "animation", "sketch"],
+        imageSize: 512
+      )
       #endif
       return
     }
@@ -884,7 +885,7 @@ final class AppModel: ObservableObject {
 
   // MARK: - Profile icon (AI avatar)
 
-  // Probe on-device ImageCreator support and load the server house-style template
+  // Probe on-device Image Playground support and load the server house-style template
   // if it isn't cached yet. Called when the Profile Icon pane appears.
   func prepareAvatarSettings() async {
     // Seed the gradient pickers from the user's already-saved gradient so
@@ -895,10 +896,9 @@ final class AppModel: ObservableObject {
       gradientStart = start
       gradientEnd = end
     }
-    // Cheap synchronous eligibility gate shows/hides the AI path instantly;
-    // the async probe then refines it (it also catches a missing model).
+    // The system sheet handles model setup; ImageCreator is no longer a valid
+    // capability probe on macOS 27.
     avatarSupported = AvatarGenerator.isAvailableSync
-    avatarSupported = await AvatarGenerator.isSupported
     if houseStyle == nil {
       await refreshHouseStyle()
     }
@@ -917,51 +917,38 @@ final class AppModel: ObservableObject {
     }
   }
 
-  // Generate a preview PNG on device from the user's prompt + house style. Stores
-  // the bytes + chosen prompt/style for a subsequent `useGeneratedAvatar()`.
-  func generateAvatar(prompt rawPrompt: String) async {
+  // Validate and snapshot the request before opening the system generator. The
+  // same request supplies the style and output size when its image comes back.
+  func prepareAvatarGeneration(prompt rawPrompt: String) -> AvatarGenerationRequest? {
     let prompt = rawPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !prompt.isEmpty else {
       avatarError = "Enter a short prompt first."
-      return
+      return nil
     }
     guard let house = houseStyle else {
       avatarError = "Couldn't load the house style. Try again."
-      return
+      return nil
     }
     guard avatarSupported == true else {
       avatarError = "Profile-icon generation isn't available on this Mac."
-      return
+      return nil
     }
-
     avatarError = nil
-    avatarMaySetupNeeded = false
-    isGeneratingAvatar = true
-    do {
-      let generated = try await AvatarGenerator().generate(prompt: prompt, house: house)
-      avatarPreviewPNG = generated.data
-      avatarLastPrompt = prompt
-      // Record the style the creator actually used (it may fall back from the
-      // server's first preference) so the upload header reflects what was used.
-      avatarLastStyle = generated.style
-    } catch let error as AvatarGenerationError {
-      avatarPreviewPNG = nil
-      avatarError = error.localizedDescription
-      // `.failed` is ambiguous: ImageCreator returns the same `creationFailed`
-      // for a guardrail-rejected prompt (e.g. wording that implies a person)
-      // and for a model that's still downloading. The UI copy covers both and
-      // offers the Image Playground affordance for the latter.
-      avatarMaySetupNeeded = (error == .failed)
-    } catch {
-      avatarPreviewPNG = nil
-      avatarError = error.localizedDescription
-    }
-    isGeneratingAvatar = false
+    return AvatarGenerator.request(prompt: prompt, house: house)
   }
 
-  // Open the system Image Playground app (surfaces/primes the model download).
-  func openImagePlayground() {
-    AvatarGenerator.openImagePlayground()
+  // A completed generation is only a local preview. The user must still choose
+  // "Use this" before anything is uploaded. Cancelling leaves any prior preview.
+  func previewGeneratedAvatar(at url: URL, request: AvatarGenerationRequest) {
+    do {
+      let generated = try AvatarGenerator().prepareImage(at: url, request: request)
+      avatarPreviewPNG = generated.data
+      avatarLastPrompt = request.prompt
+      avatarLastStyle = generated.style
+      avatarError = nil
+    } catch {
+      avatarError = error.localizedDescription
+    }
   }
 
   // Patch the locally-displayed "you" avatar fields from an authoritative server
@@ -1034,7 +1021,6 @@ final class AppModel: ObservableObject {
   func removeAvatar() async {
     guard let config, isConfigured else { return }
     avatarError = nil
-    avatarMaySetupNeeded = false
     isUploadingAvatar = true
     do {
       try await client(for: config).deleteAvatar()

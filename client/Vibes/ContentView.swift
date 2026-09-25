@@ -1,4 +1,5 @@
 import SwiftUI
+import ImagePlayground
 
 struct ContentView: View {
   @EnvironmentObject private var model: AppModel
@@ -30,6 +31,9 @@ struct ContentView: View {
       // window materializing while widget mode is stored-on/active (relaunch,
       // a stray reopen) removes itself before it can stack over the widget.
       if widgetModes.isActive {
+        // Explicitly restore the destination. SwiftUI may restore only the
+        // main scene after an OS upgrade or when window restoration is off.
+        openWindow(id: WidgetModeCoordinator.widgetWindowID)
         dismiss()
       } else if widgetModes.pendingExit {
         // A pending-exit recovery just landed here: main being open IS the
@@ -732,12 +736,14 @@ private struct RepositoriesSettingsPane: View {
 }
 
 // Settings → Profile Icon. Generates a personal avatar from a short prompt using
-// on-device Apple Intelligence (ImageCreator), previews it, and uploads via
+// on-device Image Playground, previews it, and uploads via
 // `uploadAvatar` (or clears via DELETE). When the device can't generate, the
 // controls are disabled with an explanation — never a crash.
 private struct ProfileIconSettingsPane: View {
   @EnvironmentObject private var model: AppModel
   @State private var prompt = ""
+  @State private var generationRequest: AvatarGenerationRequest?
+  @State private var showImagePlayground = false
 
   private let previewDiameter: CGFloat = 96
 
@@ -791,36 +797,30 @@ private struct ProfileIconSettingsPane: View {
           }
         }
 
-        if let status = workingStatus {
-          Text(status)
-            .font(.callout)
-            .foregroundStyle(.secondary)
-        }
-
         if let error = model.avatarError {
-          if model.avatarMaySetupNeeded {
-            Text("Couldn't generate that icon. Try rewording the prompt — Apple Intelligence declines some subjects, like real people. If it's still setting up, open Image Playground once to finish the download, then try again.")
-              .font(.callout)
-              .foregroundStyle(.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-            Button {
-              model.openImagePlayground()
-            } label: {
-              Label("Open Image Playground", systemImage: "arrow.up.forward.app")
-            }
-            .buttonStyle(.bordered)
-          } else {
-            Text(error)
-              .font(.callout)
-              .foregroundStyle(.red)
-              .fixedSize(horizontal: false, vertical: true)
-          }
+          Text(error)
+            .font(.callout)
+            .foregroundStyle(.red)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
 
       gradientSection
     }
     .formStyle(.grouped)
+    .imagePlaygroundSheet(
+      isPresented: $showImagePlayground,
+      concepts: generationRequest.map { [.text($0.fullPrompt)] } ?? []
+    ) { url in
+      guard let request = generationRequest else { return }
+      model.previewGeneratedAvatar(at: url, request: request)
+    }
+    // A single allowed style preserves the house style and keeps external
+    // providers out of this on-device generation flow.
+    .imagePlaygroundGenerationStyle(
+      generationRequest?.style ?? .illustration,
+      in: [generationRequest?.style ?? .illustration]
+    )
     .task {
       await model.prepareAvatarSettings()
     }
@@ -909,7 +909,7 @@ private struct ProfileIconSettingsPane: View {
   }
 
   private var unavailableNote: some View {
-    Text("On-device image generation isn't available on this Mac. It requires an Apple-Intelligence-capable Mac on the latest macOS, with the models downloaded. You can still remove an existing icon.")
+    Text("On-device image generation requires Apple Intelligence to be enabled on a supported Mac. You can still choose a gradient or remove an existing icon.")
       .font(.subheadline)
       .foregroundStyle(Color.secondary)
       .fixedSize(horizontal: false, vertical: true)
@@ -924,7 +924,7 @@ private struct ProfileIconSettingsPane: View {
   }
 
   private var isWorking: Bool {
-    model.isGeneratingAvatar || model.isUploadingAvatar
+    showImagePlayground || model.isUploadingAvatar
   }
 
   private var hasCurrentAvatar: Bool {
@@ -934,18 +934,15 @@ private struct ProfileIconSettingsPane: View {
     return false
   }
 
-  private var workingStatus: String? {
-    if model.isGeneratingAvatar { return "Generating on device..." }
-    return nil
-  }
-
   private var gradientPreviewInitial: String {
     let handle = model.feed?.you.user.handle ?? ""
     return (handle.first.map(String.init) ?? "?").uppercased()
   }
 
   private func generate() {
-    Task { await model.generateAvatar(prompt: prompt) }
+    guard !isWorking, let request = model.prepareAvatarGeneration(prompt: prompt) else { return }
+    generationRequest = request
+    showImagePlayground = true
   }
 }
 

@@ -482,7 +482,7 @@ struct UserSummary: Codable, Equatable, Identifiable {
 // Server-owned art-direction template for AI profile-icon generation, fetched as
 // part of `/api/me` (`house_style`). The client composes
 // `promptPrefix + userPrompt + promptSuffix`, picks the first `styles` entry that
-// the on-device ImageCreator actually offers, and renders a square
+// the on-device Image Playground sheet supports, and renders a square
 // `imageSize`×`imageSize` PNG. Tunable server-side without an app release.
 struct HouseStyle: Codable, Equatable {
   var promptPrefix: String

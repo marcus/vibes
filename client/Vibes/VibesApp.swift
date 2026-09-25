@@ -267,8 +267,14 @@ struct VibesApp: App {
       WidgetSkyView()
         .environmentObject(model)
         .environmentObject(widgetModes)
+        .containerBackground(.clear, for: .window)
     }
-    .windowStyle(.hiddenTitleBar)
+    // A hidden title bar still gets a system window surface on macOS 27.
+    // Plain windows opt out of both that surface and the window controls.
+    .windowStyle(.plain)
+    .windowLevel(.desktop)
+    .windowBackgroundDragBehavior(.enabled)
+    .defaultLaunchBehavior(.suppressed)
     // First appearance matches the main window's default proportions, centered
     // by the system; the frame is then remembered via setFrameAutosaveName
     // ("widget") in WidgetWindowConfigurator.

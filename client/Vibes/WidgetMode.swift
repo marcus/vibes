@@ -238,18 +238,25 @@ struct WidgetSkyView: View {
 }
 
 /// Configures the backing NSWindow as a clear, shadowless, draggable-anywhere
-/// desktop layer just above the desktop icons (below every normal window).
+/// desktop layer (below every normal window).
 /// Sibling pattern of TrafficLightAligner; properties are set in makeNSView
 /// AND updateNSView since AppKit resets them on style changes.
 private struct WidgetWindowConfigurator: NSViewRepresentable {
   func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    DispatchQueue.main.async { Self.configure(view.window) }
-    return view
+    WindowAttachmentView()
   }
 
   func updateNSView(_ nsView: NSView, context: Context) {
     DispatchQueue.main.async { Self.configure(nsView.window) }
+  }
+
+  // A queued makeNSView callback can run before SwiftUI attaches the view
+  // to its window. Configure at the actual attachment boundary as well.
+  private final class WindowAttachmentView: NSView {
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      WidgetWindowConfigurator.configure(window)
+    }
   }
 
   static func configure(_ window: NSWindow?) {
@@ -276,10 +283,8 @@ private struct WidgetWindowConfigurator: NSViewRepresentable {
     // hover/tooltip affordances install no mouse-down handlers — so the whole
     // window can act as its own drag handle.
     window.isMovableByWindowBackground = true
-    // Just above the desktop icons, below .normal — plan option 2, less
-    // brittle across Spaces/fullscreen than the true desktop layer.
-    window.level = NSWindow.Level(
-      rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+    // The scene owns the desktop level and drag behavior declaratively, so
+    // SwiftUI cannot reset them while applying its window style.
     window.collectionBehavior = [.canJoinAllSpaces, .stationary]
     // Frame persistence: the autosave name is the only writer that works.
     // Verified empirically (temporary DEBUG harness, isolated bundle id):
