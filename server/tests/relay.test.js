@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -1018,6 +1019,23 @@ describe("avatars", () => {
     expect(store.urlFor("abc123")).toBe("https://vibes.test/avatars/abc123.png");
     store.remove("abc123");
     expect(existsSync(join(avatarDir, "abc123.png"))).toBe(false);
+  });
+
+  it("keeps public avatar PNGs readable with the production private-data umask", () => {
+    // umask is process-wide and cannot be changed in a Vitest worker thread.
+    // Exercise the real adapter in a child with the production service mask.
+    const adapter = new URL("../src/lib/server/avatarStore.js", import.meta.url).href;
+    execFileSync(process.execPath, ["--input-type=module", "-e", `
+      import { FilesystemAvatarStore } from ${JSON.stringify(adapter)};
+      process.umask(0o027);
+      const store = new FilesystemAvatarStore({
+        dir: ${JSON.stringify(avatarDir)}, baseUrl: "https://vibes.test/avatars"
+      });
+      store.put("public-icon", Buffer.from("test PNG bytes"), "image/png");
+    `]);
+    const path = join(avatarDir, "public-icon.png");
+    expect(statSync(path).mode & 0o777).toBe(0o644);
+    expect(readFileSync(path).toString()).toBe("test PNG bytes");
   });
 
   it("validatePng accepts a PNG and reads dimensions; rejects non-PNG and oversized", () => {

@@ -107,6 +107,11 @@ ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "systemctl daemon-reload"
 echo "Restarting ${SERVICE_NAME}.service..."
 ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "systemctl restart '${SERVICE_NAME}.service'"
 
+# Repair public avatars only after the old writer has stopped, so uploads made
+# during the build cannot leave more unreadable PNGs behind. The new writer
+# explicitly publishes readable PNGs while private database permissions stay put.
+ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "find '${DEPLOY_PATH}/avatars' -maxdepth 1 -type f -name '*.png' -exec chmod 644 {} +"
+
 echo "Checking ${DEPLOY_URL}..."
 SMOKE_FILE="$(mktemp -t vibes-deploy-smoke.XXXXXX)"
 trap 'rm -f "${SMOKE_FILE}"' EXIT

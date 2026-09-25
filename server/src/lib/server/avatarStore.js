@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { RelayError } from "./relay.js";
 
@@ -47,7 +47,12 @@ export class FilesystemAvatarStore {
         500,
       );
     }
-    writeFileSync(join(this.dir, `${id}.png`), bytes);
+    const path = join(this.dir, `${id}.png`);
+    writeFileSync(path, bytes);
+    // These PNGs are public assets served by nginx under a different user.
+    // Apply permissions after writing: a creation mode alone is still masked
+    // by the relay's private-data UMask=0027 (which would leave files at 0640).
+    chmodSync(path, 0o644);
   }
 
   /** @param {string} id */
